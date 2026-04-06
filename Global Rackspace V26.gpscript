@@ -70,7 +70,7 @@ Var
    // --- String Definitions ---
    HumanRoutingMap : String Array = ["1", "1", "1", "1", "1", "1", "1", "1", "9", "10", "2", "2", "3", "4", "5,6", "7,8"]
    SECTION_KEYWORDS : String Array = ["Intro", "Verse", "Chorus", "Bridge", "Solo", "Outro", "Interlude", "Pre-Chorus", "Instrumental", "Coda", "Hook", "Refrain", "Break"]
-   SyncModeNames : String Array = ["ISOLATED", "GENOS LEADS", "GP LEADS", "FULL SYNC", "INITIAL LATCH"]
+   SyncModeNames : String Array = ["ISOLATED", "ARRANGER LEADS", "GP LEADS", "FULL SYNC", "INITIAL LATCH"]
    UsageCategories : String Array = ["Free", "Upper", "Lower", "Multi Pad 1", "Multi Pad 2", "Multi Pad 3", "Multi Pad 4", "Drums 1", "Drums 2", "Bass", "Chord 1", "Chord 2", "Pad", "Phrase 1", "Phrase 2", "Strings 1", "Strings 2", "Piano", "Lead 1", "Lead 2", "PolySynth 1", "PolySynth 2", "Brass 1", "Brass 2", "Woodwind", "Choir 1", "Choir 2", "Bells 1", "Bells 2", "Accordion", "Organ 1", "Organ 2"] 
    NoteNamesSharp : String Array = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
    NoteNamesFlat  : String Array = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
@@ -324,8 +324,8 @@ Var
    Ctrl_OverlayMsg, VST_OverlayMsg, Rec_OverlayMsg : String = ""
    
    // --- System Parameters ---
-   P_GENOS_FLAGS_START : Integer = 16 
-   P_GENOS_CROSSFADER : Integer = 32 
+   P_ARRANGER_FLAGS_START : Integer = 16 
+   P_ARRANGER_CROSSFADER : Integer = 32 
    P_STYLE_START_STOP : Integer = 1   
    P_STYLE_HW_START   : Integer = 29  
    Mixer_Vol_Params : Integer Array = [0, 7, 14, 21, 28, 35, 42, 49, 56, 63]
@@ -977,7 +977,7 @@ Function StartMacroAnimation(macroID : Integer, targetVal : Double, durMS : Doub
    var mIdx : Integer = macroID - 1 
    
    if mIdx >= 0 and mIdx <= 15 then
-       Anim_Start[mIdx] = GetParameter(Genos2_Control, mIdx)
+       Anim_Start[mIdx] = GetParameter(ExternalArranger, mIdx)
        Anim_Target[mIdx] = targetVal
        Anim_Duration[mIdx] = durMS
        Anim_StartTime[mIdx] = TimeSinceStartup()
@@ -2172,8 +2172,8 @@ Function TraceHardwarePrediction()
       elsif s == 6 then hwLabel = "Unbelegt"
       else hwLabel = "Slider " + (s-6) end // s=7 -> Slider 1
 
-      // 2. Aktuellen Wert aus dem Genos2_Control Block holen
-      faderVal = GetParameter(Genos2_Control, s)
+      // 2. Aktuellen Wert aus dem ExternalArranger Block holen
+      faderVal = GetParameter(ExternalArranger, s)
       midiVal = Round(faderVal * 127.0)
 
       // 3. Herausfinden, was der Regler in dieser Map gerade macht
@@ -2789,7 +2789,7 @@ End
 
 // CROSSFADER LOGIC 
 Function UpdateCFConfigLabel()
-    var vstPart, genosPart : String
+    var vstPart, arrangerPart : String
     var activeCount : Integer
     var i : Integer
     
@@ -2814,23 +2814,23 @@ Function UpdateCFConfigLabel()
     // 2. GENOS NAMEN GENERIEREN
     activeCount = 0
     For i = 0; i < 16; i = i + 1 Do
-        if GetWidgetValue(W_CF_Genos[i]) > 0.5 then activeCount = activeCount + 1 end
+        if GetWidgetValue(W_CF_Arranger[i]) > 0.5 then activeCount = activeCount + 1 end
     End
     
-    if activeCount == 16 then genosPart = "Genos_All"
-    elsif activeCount == 0 then genosPart = "Genos_None"
+    if activeCount == 16 then arrangerPart = "Arranger_All"
+    elsif activeCount == 0 then arrangerPart = "Arranger_None"
     else
-        genosPart = "Genos_"
+        arrangerPart = "Arranger_"
         for i = 0; i < 16; i = i + 1 do
-            if GetWidgetValue(W_CF_Genos[i]) > 0.5 then 
-                genosPart = genosPart + (i+1) + ","
+            if GetWidgetValue(W_CF_Arranger[i]) > 0.5 then 
+                arrangerPart = arrangerPart + (i+1) + ","
             end
         end
-        if Length(genosPart) > 6 then genosPart = CopySubstring(genosPart, 0, Length(genosPart)-1) end
+        if Length(arrangerPart) > 6 then arrangerPart = CopySubstring(arrangerPart, 0, Length(arrangerPart)-1) end
     end
     
     // 3. UPDATE LABEL
-    LBL_CrossFaderConfig.SetWidgetLabel(vstPart + " | " + genosPart)
+    LBL_CrossFaderConfig.SetWidgetLabel(vstPart + " | " + arrangerPart)
 End
 
 
@@ -3399,7 +3399,7 @@ Function CycleEditScope(dir : Integer)
        
        // Hardware-Slider Position ans Morph-Widget senden (nur für Genos Fader 1-16)
        if CurrentEditScope > -1 and CurrentEditScope <= 15 then
-           SetWidgetValue(SLD_Morph, GetParameter(Genos2_Control, CurrentEditScope))
+           SetWidgetValue(SLD_Morph, GetParameter(ExternalArranger, CurrentEditScope))
        else
            SetWidgetValue(SLD_Morph, 0.0)
        end
@@ -3666,7 +3666,7 @@ Function ApplyEditorTest(val : Double)
     else
         // ---> DER TÜRSTEHER <---
         if CurrentEditScope >= 0 and CurrentEditScope <= 15 then
-            SetParameter(Genos2_Control, CurrentEditScope, val)
+            SetParameter(ExternalArranger, CurrentEditScope, val)
         end
         
         For i = 0; i < Link_Count; i = i + 1 Do
@@ -4016,9 +4016,9 @@ Function LoadControllerMap(mapName : String)
                    MapMismatch = false
                end
                
-               if VST_SCOPE_MacroIdx >= 0 and VST_SCOPE_MacroIdx <= 15 then SetParameter(Genos2_Control, VST_SCOPE_MacroIdx, 0.5) end
-               if VST_BROWSE_MacroIdx >= 0 and VST_BROWSE_MacroIdx <= 15 then SetParameter(Genos2_Control, VST_BROWSE_MacroIdx, 0.5) end
-               if REC_SONGPART_MacroIdx >= 0 and REC_SONGPART_MacroIdx <= 15 then SetParameter(Genos2_Control, REC_SONGPART_MacroIdx, 0.5) end
+               if VST_SCOPE_MacroIdx >= 0 and VST_SCOPE_MacroIdx <= 15 then SetParameter(ExternalArranger, VST_SCOPE_MacroIdx, 0.5) end
+               if VST_BROWSE_MacroIdx >= 0 and VST_BROWSE_MacroIdx <= 15 then SetParameter(ExternalArranger, VST_BROWSE_MacroIdx, 0.5) end
+               if REC_SONGPART_MacroIdx >= 0 and REC_SONGPART_MacroIdx <= 15 then SetParameter(ExternalArranger, REC_SONGPART_MacroIdx, 0.5) end
                
                UpdateControllerInfoDisplay()
            end
@@ -4202,7 +4202,7 @@ End
 // CONTROLLER MAP LOADER & BROWSER --> HARDWARE SYNC (WITH BYPASS LOGIC)
 // ---------------------------------------------------------------------
 
-Function SyncGenosToCurrentMap()
+Function SyncArrangerToCurrentMap()
    var i, hwIdx : Integer
    var currentVal : Double = 0.0; var range : Double = 0.0; var faderVal : Double = 0.0
    
@@ -4250,7 +4250,7 @@ Function SyncGenosToCurrentMap()
            if not Link_SourceIsCC[i] then
                // ---> DER TÜRSTEHER <---
                if hwIdx >= 0 and hwIdx <= 15 then
-                   SetParameter(Genos2_Control, hwIdx, faderVal)
+                   SetParameter(ExternalArranger, hwIdx, faderVal)
                    Mem_Fader_Buffer[hwIdx] = faderVal
                    if DebugMode then Trace("     [HARDWARE] Türsteher PASSIERT! Genos Motorfader " + (hwIdx+1) + " fährt auf " + faderVal) end
                else
@@ -4279,7 +4279,7 @@ Function AutoSwitchMapOnBypass()
     end
     
     // Danach immer die Hardware syncen
-    SyncGenosToCurrentMap()
+    SyncArrangerToCurrentMap()
 End
 
 // ---------------------------------------------------------
@@ -4332,7 +4332,7 @@ Function CaptureSmartRanges(isMin : Boolean)
        end
    End
    if isMin then Trace("Editor: Captured MIN (A) values for " + count + " links.") else Trace("Editor: Captured MAX (B) values for " + count + " links.") end
-   SyncGenosToCurrentMap()
+   SyncArrangerToCurrentMap()
    UpdateControllerInfoDisplay()
 End
 
@@ -5494,7 +5494,7 @@ Function InjectLooperEvent(ch : Integer, msg : MidiMessage)
     end
 
     if Mem_Loop_OutMode[ch] == 1 and not forceLocal then
-        SendNow(MainMidiIn, msg) // GLOBAL MODE (Feuert in die RECH-Matrix)
+        SendNow(DeviceIn_0, msg) // GLOBAL MODE (Feuert in die RECH-Matrix)
     else
         SendNow(BLK_MidiIn[ch], msg) // CHANNEL MODE (Feuert direkt ins VST)
     end
@@ -5901,13 +5901,13 @@ Function TriggerStyleAction(styleId : Integer)
        if DebugMode then Trace("STYLE: Triggering ID " + styleId) end
        
        // Elektronischer Tastendruck (Note On)
-       SetParameter(BLK_GenosStyle, styleId, 1.0)
+       SetParameter(BLK_ArrangerSync, styleId, 1.0)
        
        // 50ms warten, damit das Scriptlet reagiert
        Wait(50.0) 
        
        // Taster wieder loslassen (Note Off)
-       SetParameter(BLK_GenosStyle, styleId, 0.0)
+       SetParameter(BLK_ArrangerSync, styleId, 0.0)
    else
        if DebugMode then Trace("STYLE ERROR: Ungültige ID (" + styleId + ") ignoriert! Max ist 28.") end
    end
@@ -6029,7 +6029,7 @@ Function UpdatePrompter(moveSlider : Boolean)
        ScrubberTaubTimer = TimeSinceStartup() + 1000.0 
        
        if SCRUB_MacroIdx >= 0 and SCRUB_MacroIdx <= 15 then
-           SetParameter(Genos2_Control, SCRUB_MacroIdx, sliderPos)
+           SetParameter(ExternalArranger, SCRUB_MacroIdx, sliderPos)
        end
    End
    
@@ -6299,7 +6299,7 @@ Function TriggerSongTextLoad(songName : String)
    Trace("TRIGGER: Song Text Load scheduled for '" + songName + "'")
 End
 
-Function DecodeSysExName(sysExString : String) Returns String
+Function DecodeDeviceSysExName(sysExString : String) Returns String
    var parts : String Array = SplitString(sysExString, " ")
    var decoded : String = ""
    var i, val : Integer
@@ -7180,7 +7180,7 @@ Function ExecuteScrub(newValue : Double, fromOSC : Boolean)
                    IsPerformanceActive = false 
                    EnablePlayhead(false) 
                    
-                   SetParameter(BLK_GenosStyle, P_STYLE_START_STOP, 1.0)
+                   SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
                    StyleTriggerResetTimer = TimeSinceStartup() + 60.0
                end
            end
@@ -7208,8 +7208,8 @@ End
 // ---------------------------------------------------------
 // HELPER: GENOS ECHO SENDER (Die Waffe)
 // ---------------------------------------------------------
-Function FireGenosTransportEcho()
-    SetParameter(BLK_GenosStyle, P_STYLE_START_STOP, 1.0)
+Function FireArrangerTransportEcho()
+    SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
     StyleTriggerResetTimer = TimeSinceStartup() + 60.0
 End
 
@@ -7280,14 +7280,14 @@ Function EvaluateTransportSync()
         IsPerformanceActive = playing
         if not isHW then
             Trace("ETS: [OK] GP LEADS: GUI Aktion. Sende Befehl an Genos...")
-            SetParameter(BLK_GenosStyle, P_STYLE_START_STOP, 1.0)
+            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
             StyleTriggerResetTimer = TimeSinceStartup() + 60.0
             LastHardwarePulseTime = TimeSinceStartup() + 1000.0
         else
             // VERBOTEN: Genos hat GP nativ gestartet! Wir killen sofort beide!
             Trace("ETS: [X] GP LEADS: Genos hat illegal gestartet! Stoppe beide...")
             IsCorrectingPlayhead = true; EnablePlayhead(false)
-            SetParameter(BLK_GenosStyle, P_STYLE_START_STOP, 1.0)
+            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
             StyleTriggerResetTimer = TimeSinceStartup() + 60.0
         end
 
@@ -7297,7 +7297,7 @@ Function EvaluateTransportSync()
         if not isHW then
             // Es war ein reiner Maus-Klick! Wir müssen den Genos nachziehen!
             Trace("ETS: [OK] FULL SYNC: GUI Aktion. Sende Befehl an Genos...")
-            SetParameter(BLK_GenosStyle, P_STYLE_START_STOP, 1.0)
+            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
             StyleTriggerResetTimer = TimeSinceStartup() + 60.0
             
             // WICHTIG: Setze den Puls künstlich in die Zukunft, damit das 
@@ -7317,7 +7317,7 @@ Function EvaluateTransportSync()
                 end
             else
                 IsPerformanceActive = true; UpdateSyncLabel()
-                SetParameter(BLK_GenosStyle, P_STYLE_START_STOP, 1.0)
+                SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
                 StyleTriggerResetTimer = TimeSinceStartup() + 60.0
                 LastHardwarePulseTime = TimeSinceStartup() + 1000.0
             end
@@ -7344,7 +7344,7 @@ End
 // ---------------------------------------------------------
 // DER DIREKTE GENOS-TRIGGER (Nativ MIDI FA / FC)
 // ---------------------------------------------------------
-Function FireDirectGenosTransport()
+Function FireDirectArrangerTransport()
     // Feuert Note 14 direkt an das physische MIDI Out, ohne Loopback-Gefahr!
     // (Kanal 16 = 0x9F / 0x8F, da GP Kanäle 0-basiert zählt)
     
@@ -7385,9 +7385,9 @@ Function ParkFadersForVST(vstIdx : Integer)
                 
                 // Wir parken nur Genos-Fader (Index 0-15)
                 if s >= 0 and s <= 15 then
-                    Trace("PARK: Found Match! Link " + i + " is on Slider " + s + ". Current Val: " + GetParameter(Genos2_Control, s))
-                    Mem_Fader_Buffer[s] = GetParameter(Genos2_Control, s)
-                    SetParameter(Genos2_Control, s, 0.0)
+                    Trace("PARK: Found Match! Link " + i + " is on Slider " + s + ". Current Val: " + GetParameter(ExternalArranger, s))
+                    Mem_Fader_Buffer[s] = GetParameter(ExternalArranger, s)
+                    SetParameter(ExternalArranger, s, 0.0)
                     count = count + 1
                 end
             end
@@ -7431,7 +7431,7 @@ Function RestoreFadersForVST(vstIdx : Integer)
                     end
                     
                     if faderVal < 0.0 then faderVal = 0.0 elsif faderVal > 1.0 then faderVal = 1.0 end
-                    SetParameter(Genos2_Control, s, faderVal)
+                    SetParameter(ExternalArranger, s, faderVal)
                     count = count + 1
                 end
             end
@@ -7565,7 +7565,7 @@ Function ResetHardwareFadersForVST(vstIdx : Integer)
                if faderVal < 0.0 then faderVal = 0.0 elsif faderVal > 1.0 then faderVal = 1.0 end
                
                if s >= 0 and s <= 15 then
-                   SetParameter(Genos2_Control, s, faderVal)
+                   SetParameter(ExternalArranger, s, faderVal)
                end
            end
        End 
@@ -8438,8 +8438,8 @@ Function SyncMatrixToScriptlet()
     var paramIdx : Integer
     
     For i = 0; i < 16; i = i + 1 Do
-        paramIdx = P_GENOS_FLAGS_START + i
-        SetParameter(Genos2_Control, paramIdx, GetWidgetValue(W_CF_Genos[i]))
+        paramIdx = P_ARRANGER_FLAGS_START + i
+        SetParameter(ExternalArranger, paramIdx, GetWidgetValue(W_CF_Arranger[i]))
     End
 End
 
@@ -8465,7 +8465,7 @@ Function ApplyCrossfade(x_val : Double)
       end
    End
    
-   SetParameter(Genos2_Control, P_GENOS_CROSSFADER, x_val)
+   SetParameter(ExternalArranger, P_ARRANGER_CROSSFADER, x_val)
 End
 
 // ---------------------------------------------------------
@@ -9013,7 +9013,7 @@ Function CycleScopeSection(direction : Integer)
     
     // UI Update (Hardware-Regler Stellung abholen)
     if CurrentEditScope > -1 and CurrentEditScope <= 15 then
-        SetWidgetValue(SLD_Morph, GetParameter(Genos2_Control, CurrentEditScope))
+        SetWidgetValue(SLD_Morph, GetParameter(ExternalArranger, CurrentEditScope))
     else
         SetWidgetValue(SLD_Morph, 0.0)
     end
@@ -9167,7 +9167,7 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
                Last_RecPart_Val = val
                
                // Auto-Center für Knobs/Fader senden
-               SetParameter(Genos2_Control, matchedMacro, 0.5)
+               SetParameter(ExternalArranger, matchedMacro, 0.5)
                Last_RecPart_Val = 0.5 // Neue Mittelstellung merken!
            elsif val < Last_RecPart_Val - 0.05 then 
                Last_RecPart_Val = val
@@ -9204,7 +9204,7 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
     
    // --- GENOS MOTORS (Macro 1-16) ---
    elsif matchedMacro >= 0 and matchedMacro <= 15 then
-       SetParameter(Genos2_Control, matchedMacro, val)
+       SetParameter(ExternalArranger, matchedMacro, val)
          
    // =========================================================
    // --- 1-BUTTON TRIGGERS (Looper, Solo, Mute) ---
@@ -9557,7 +9557,7 @@ Function PerformSystemReset()
    // 2. KANÄLE & GENOS RESET
    // Wir nutzen unser mächtiges DeactivateChannel (macht Reset, Bypass & Usage=Free)
    For i = 0; i < 16; i = i + 1 Do DeactivateChannel(i) End
-   For j = 0; j < 16; j = j + 1 Do SetParameter(Genos2_Control, P_GENOS_FLAGS_START + j, 0.0) End
+   For j = 0; j < 16; j = j + 1 Do SetParameter(ExternalArranger, P_ARRANGER_FLAGS_START + j, 0.0) End
 
    // 3. VST RESIDENT RESET (VST 1 & 2)
    SafeLoadPreset(BLK_VST[0], "Standard"); LoadedPresets[0] = "Standard"
@@ -9588,7 +9588,7 @@ Function PerformSystemReset()
    PreSoloMapName = ""
    
    For i = 0; i < 8; i = i + 1 Do SetWidgetValue(W_CF_Audio[i], 1.0) End
-   For i = 0; i < 16; i = i + 1 Do SetWidgetValue(W_CF_Genos[i], 1.0) End
+   For i = 0; i < 16; i = i + 1 Do SetWidgetValue(W_CF_Arranger[i], 1.0) End
    
    For i=0; i<MAX_VSTS; i=i+1 Do Mem_ManualVSTBypass[i] = false End
 
@@ -10156,7 +10156,7 @@ Function SaveSongSnapshot()
        content = content + NEW_LINE + "; --- CROSSFADE SETTINGS ---" + NEW_LINE
        content = content + "Global_Crossfade=" + GetWidgetValue(SLD_Crossfader) + NEW_LINE
        For i = 0; i < 8; i = i + 1 Do content = content + "CF_Audio_" + i + "=" + GetWidgetValue(W_CF_Audio[i]) + NEW_LINE End
-       For i = 0; i < 16; i = i + 1 Do content = content + "CF_Genos_" + i + "=" + GetWidgetValue(W_CF_Genos[i]) + NEW_LINE End
+       For i = 0; i < 16; i = i + 1 Do content = content + "CF_Genos_" + i + "=" + GetWidgetValue(W_CF_Arranger[i]) + NEW_LINE End
 
        // 3. VST
        content = content + NEW_LINE + "; --- VST ---" + NEW_LINE
@@ -10439,7 +10439,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
        For i = 0; i < 16; i = i + 1 Do ResetChannelToStandard(i) End
        
        // 3. Genos Flags resetten
-       For j = 0; j < 16; j = j + 1 Do SetParameter(Genos2_Control, P_GENOS_FLAGS_START + j, 0.0) End
+       For j = 0; j < 16; j = j + 1 Do SetParameter(ExternalArranger, P_ARRANGER_FLAGS_START + j, 0.0) End
        
        fileContent = LoadStringFromTextFile(filePath)
        IsUpdatingMatrix = true
@@ -10606,7 +10606,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
         End
         
         For i = 0; i < 8; i = i + 1 Do SetWidgetValue(W_CF_Audio[i], targetCF_Audio[i]) End
-        For i = 0; i < 16; i = i + 1 Do SetWidgetValue(W_CF_Genos[i], targetCF_Genos[i]) End
+        For i = 0; i < 16; i = i + 1 Do SetWidgetValue(W_CF_Arranger[i], targetCF_Genos[i]) End
         SetWidgetValue(SLD_Crossfader, targetCrossfade)
         SetWidgetValue(BTN_Autopilot, targetOptAuto)
         SetWidgetValue(BTN_TimeJump, targetOptJump)
@@ -11119,7 +11119,7 @@ Initialization
    
    DEF_CF_Audio = [1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
    
-   DEF_CF_Genos = [0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 
+   DEF_CF_Arranger = [0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 
                    0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
    // --- RECH MATRIX (Standard Routing) ---
@@ -11163,7 +11163,7 @@ Initialization
    W_Out_Layer_Gr = [BTN_Ch1_Out_Gr, BTN_Ch2_Out_Gr, BTN_Ch3_Out_Gr, BTN_Ch4_Out_Gr, BTN_Ch5_Out_Gr, BTN_Ch6_Out_Gr, BTN_Ch7_Out_Gr, BTN_Ch8_Out_Gr, BTN_Ch9_Out_Gr, BTN_Ch10_Out_Gr, BTN_Ch11_Out_Gr, BTN_Ch12_Out_Gr, BTN_Ch13_Out_Gr, BTN_Ch14_Out_Gr, BTN_Ch15_Out_Gr, BTN_Ch16_Out_Gr]
    W_Out_Layer_Bl = [BTN_Ch1_Out_Bl, BTN_Ch2_Out_Bl, BTN_Ch3_Out_Bl, BTN_Ch4_Out_Bl, BTN_Ch5_Out_Bl, BTN_Ch6_Out_Bl, BTN_Ch7_Out_Bl, BTN_Ch8_Out_Bl, BTN_Ch9_Out_Bl, BTN_Ch10_Out_Bl, BTN_Ch11_Out_Bl, BTN_Ch12_Out_Bl, BTN_Ch13_Out_Bl, BTN_Ch14_Out_Bl, BTN_Ch15_Out_Bl, BTN_Ch16_Out_Bl]
    W_CF_Audio = [BTN_CFAM_1_2, BTN_CFAM_3_4, BTN_CFAM_5_6, BTN_CFAM_7_8, BTN_CFAM_9_10, BTN_CFAM_11_12, BTN_CFAM_13_14, BTN_CFAM_15_16]
-   W_CF_Genos = [BTN_CFCE_Ch1, BTN_CFCE_Ch2, BTN_CFCE_Ch3, BTN_CFCE_Ch4, BTN_CFCE_Ch5, BTN_CFCE_Ch6, BTN_CFCE_Ch7, BTN_CFCE_Ch8, BTN_CFCE_Ch9, BTN_CFCE_Ch10, BTN_CFCE_Ch11, BTN_CFCE_Ch12, BTN_CFCE_Ch13, BTN_CFCE_Ch14, BTN_CFCE_Ch15, BTN_CFCE_Ch16]
+   W_CF_Arranger = [BTN_CFCE_Ch1, BTN_CFCE_Ch2, BTN_CFCE_Ch3, BTN_CFCE_Ch4, BTN_CFCE_Ch5, BTN_CFCE_Ch6, BTN_CFCE_Ch7, BTN_CFCE_Ch8, BTN_CFCE_Ch9, BTN_CFCE_Ch10, BTN_CFCE_Ch11, BTN_CFCE_Ch12, BTN_CFCE_Ch13, BTN_CFCE_Ch14, BTN_CFCE_Ch15, BTN_CFCE_Ch16]
 
    W_OpenCloseVST = [BTN_OpenCloseVST1, BTN_OpenCloseVST2, BTN_OpenCloseVST3, BTN_OpenCloseVST4, BTN_OpenCloseVST5, BTN_OpenCloseVST6, BTN_OpenCloseVST7, BTN_OpenCloseVST8, BTN_OpenCloseVST9, BTN_OpenCloseVST10]
    W_Inject_Bypass = [BTN_Inject_Bypass_1, BTN_Inject_Bypass_2, BTN_Inject_Bypass_3]
@@ -11563,7 +11563,7 @@ On WidgetValueChanged(val : Double) from BTN_VSTPreset_Prev
             activeSlot = GetActiveMapSlot()
             CyclePluginPreset(activeSlot, -1) 
             SetWidgetLabel(LBL_VSTPreset, LoadedPresets[activeSlot])
-            UpdateVstInfoDisplay(); Wait(250.0); SyncGenosToCurrentMap()
+            UpdateVstInfoDisplay(); Wait(250.0); SyncArrangerToCurrentMap()
         end
         SetWidgetValue(BTN_VSTPreset_Prev, 0.0)
     end
@@ -11576,7 +11576,7 @@ On WidgetValueChanged(val : Double) from BTN_VSTPreset_Next
             activeSlot = GetActiveMapSlot()
             CyclePluginPreset(activeSlot, 1)
             SetWidgetLabel(LBL_VSTPreset, LoadedPresets[activeSlot])
-            UpdateVstInfoDisplay(); Wait(250.0); SyncGenosToCurrentMap()
+            UpdateVstInfoDisplay(); Wait(250.0); SyncArrangerToCurrentMap()
         end
         SetWidgetValue(BTN_VSTPreset_Next, 0.0)
     end
@@ -12237,7 +12237,7 @@ End
 // HARDWARE FEEDBACK & CONTROLLER ROUTER
 // ----------------------------------------------------
 
-On ParameterValueChanged(paramIdx : Integer, newVal : Double) from Genos2_Control
+On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArranger
    var i, targetChannel : Integer
    var scaledVal : Double = 0.0
    var midiVal : Integer
@@ -12343,7 +12343,7 @@ End
 // HARDWARE-EMPFÄNGER (Vom Scriptlet)
 // ---------------------------------------------------------
 
-On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_GenosStyle
+On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerSync
 
     if CurrentSyncMode == 1 or CurrentSyncMode == 4 or CurrentSyncMode == 5 then
         // P_STYLE_HW_START = 29 (Hardware Start Flag vom Scriptlet)
@@ -12358,7 +12358,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_GenosStyl
             // der Genos aber eigenmächtig startet, feuern wir ein sofortiges STOP Echo!
             if CurrentSyncMode == 2 and IsPlayheadEnabled() == false then
                 Trace("   [X] GENOS_STYLE (2): Genos isoliert gestartet! Abbruch-Echo wird gesendet...")
-                SetParameter(BLK_GenosStyle, P_STYLE_START_STOP, 1.0)
+                SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
                 StyleTriggerResetTimer = TimeSinceStartup() + 60.0
             end
         end
@@ -12395,7 +12395,7 @@ End
 // MIDI EVENTS
 // ----------------------------------------------------
 
-On PitchBendEvent(m : PitchBendMessage) from MainMidiIn
+On PitchBendEvent(m : PitchBendMessage) from DeviceIn_0
     var pbVal : Integer = GetPitchBendValue(m)
     if SystemModeActive then
         if pbVal > GENOS_JOY_X_RIGHT and Joy_PB_Fired != 1 then
@@ -12406,11 +12406,11 @@ On PitchBendEvent(m : PitchBendMessage) from MainMidiIn
             Joy_PB_Fired = 0 
         end
     else
-        SendNow(MainMidiIn, m)
+        SendNow(DeviceIn_0, m)
     end
 End
 
-On ControlChangeEvent(m : ControlChangeMessage) from MainMidiIn
+On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
     var cc : Integer = GetCCNumber(m)
     var val : Integer = GetCCValue(m)
 
@@ -12426,11 +12426,11 @@ On ControlChangeEvent(m : ControlChangeMessage) from MainMidiIn
             elsif val < 20 then Joy_CC16_Fired = false end
         end
     else
-        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(MainMidiIn, m) 
+        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_0, m) 
     end
 End
 
-On ControlChangeEvent(m : ControlChangeMessage) from MiniLab3
+On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1
     var cc : Integer = GetCCNumber(m)
     var val : Integer = GetCCValue(m)
     var ch : Integer = GetChannel(m)
@@ -12459,14 +12459,14 @@ On ControlChangeEvent(m : ControlChangeMessage) from MiniLab3
     
     // 3. NORMALE VERARBEITUNG (Pads, Fader, etc.)
     else
-        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(MiniLab3, m) 
+        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_1, m) 
     end
 End
 
 // ====================================================
 // EVENT 1: GENOS (MAIN MIDI IN)
 // ====================================================
-On NoteEvent(m : NoteMessage) from MainMidiIn
+On NoteEvent(m : NoteMessage) from DeviceIn_0
     var chan : Integer = GetChannel(m)
     
     // 1. Zentrale HAL-Logik für Macros aufrufen
@@ -12484,7 +12484,7 @@ On NoteEvent(m : NoteMessage) from MainMidiIn
              end
              if StopWatchdogTimer > 0.0 and not IsPlayheadEnabled() then
                  Trace(">>> ON NOTE: Genos spielt noch (Ch " + chan + ")! Schieße Stop nach.")
-                 FireDirectGenosTransport()
+                 FireDirectArrangerTransport()
                  StopWatchdogTimer = 0.0 
              else
                  LastHardwarePulseTime = TimeSinceStartup()
@@ -12499,13 +12499,13 @@ On NoteEvent(m : NoteMessage) from MainMidiIn
     FeedLooper_Note(m)
     
     // 5. Note an den Block weiterreichen
-    SendNow(MainMidiIn, m)
+    SendNow(DeviceIn_0, m)
 End
 
 // ====================================================
 // EVENT 2: MINILAB 3
 // ====================================================
-On NoteEvent(m : NoteMessage) from MiniLab3
+On NoteEvent(m : NoteMessage) from DeviceIn_1
     // 1. Zentrale HAL-Logik für Macros aufrufen
     ProcessHardwareNote(m)
     
@@ -12516,7 +12516,7 @@ On NoteEvent(m : NoteMessage) from MiniLab3
     FeedLooper_Note(m)
     
     // 4. Note an den Block weiterreichen
-    SendNow(MiniLab3, m)
+    SendNow(DeviceIn_1, m)
 End
 
 // ----------------------------------------------------
@@ -12668,7 +12668,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
 
                     if not isGenosPush then
                         Trace(">>> [FULL SYNC]: TRANSPORT: GP STOPP (GUI). Sende Befehl an Genos...")
-                        FireDirectGenosTransport()
+                        FireDirectArrangerTransport()
                     else
                         Trace(">>> [FULL SYNC]: TRANSPORT: GP STOPP (Genos). Kein Befehl an Genos...")
                     end
@@ -12874,7 +12874,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
    end
 End
 
-On SysexEvent(m : SysexMessage) From MainMidiIn
+On SysexEvent(m : SysexMessage) From DeviceIn_0
    var byte1, byte2, byte3, byte5, msgSize : Integer; val4, val5, val6, val7 : Integer
    var regButtonIndex, i, microSecs : Integer
    var newBPM : Double = 0.0; var incomingHex : String; var switchOk : Boolean 
@@ -12894,7 +12894,7 @@ On SysexEvent(m : SysexMessage) From MainMidiIn
       
       // 1. BPM SYNC
       if byte1 == 0x43 and byte2 == 0x7E and byte3 == 0x01 Then
-          IncomingFromGenos = true; LoopSafetyTimer = TimeSinceStartup()
+          IncomingFromArranger = true; LoopSafetyTimer = TimeSinceStartup()
          if msgSize >= 9 Then
             val4 = SM_GetValue(m, 4); val5 = SM_GetValue(m, 5); val6 = SM_GetValue(m, 6); val7 = SM_GetValue(m, 7)
             microSecs = (val4 * 2097152) + (val5 * 16384) + (val6 * 128) + val7
@@ -12928,7 +12928,7 @@ On SysexEvent(m : SysexMessage) From MainMidiIn
                    
                    if not foundMatch Then
                        Trace("GENOS: Unknown SysEx. Trying Auto-Match...")
-                       regNameDecoded = DecodeSysExName(incomingHex); regNameSlug = SanitizeAndSlugify(regNameDecoded) 
+                       regNameDecoded = DecodeDeviceSysExName(incomingHex); regNameSlug = SanitizeAndSlugify(regNameDecoded) 
                        
                        // ---> DIE ZWEITE SICHERE WHILE-SCHLEIFE <---
                        i = 0
@@ -13165,7 +13165,7 @@ On TimerTick(ms : Double)
         else
             SyncLockTimer = TimeSinceStartup() + 800.0
             Trace(">>> ECHO SENDER: Sende START/STOP an Genos2.")
-            SetParameter(BLK_GenosStyle, P_STYLE_START_STOP, 1.0)
+            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
             StyleTriggerResetTimer = TimeSinceStartup() + 60.0
         end
      end
@@ -13245,7 +13245,7 @@ On TimerTick(ms : Double)
                        // HOST SYNC [ON]: Master-Transport zünden!
                        if not IsPlayheadEnabled() then
                            if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
-                               FireDirectGenosTransport()
+                               FireDirectArrangerTransport()
                                LastHardwarePulseTime = TimeSinceStartup() + 1000.0 // Echo-Schutz
                            else
                                IsPerformanceActive = true
@@ -13370,7 +13370,7 @@ On TimerTick(ms : Double)
                 end
                 
                 a_val = Anim_Start[a_idx] + ((Anim_Target[a_idx] - Anim_Start[a_idx]) * t_progress)
-                SetParameter(Genos2_Control, a_idx, a_val)
+                SetParameter(ExternalArranger, a_idx, a_val)
                 Mem_Fader_Buffer[a_idx] = a_val
             end
         End
@@ -13394,7 +13394,7 @@ On TimerTick(ms : Double)
 
         // --- Elektronische Taste am Scriptlet wieder loslassen ---
         if StyleTriggerResetTimer > 0.0 and TimeSinceStartup() > StyleTriggerResetTimer then
-            SetParameter(BLK_GenosStyle, P_STYLE_START_STOP, 0.0)
+            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 0.0)
             StyleTriggerResetTimer = 0.0
         end  
         
@@ -13404,7 +13404,7 @@ On TimerTick(ms : Double)
         
         if HardwareSyncTimer > 0.0 and TimeSinceStartup() > HardwareSyncTimer then
             Trace("TIMER: Executing Delayed Hardware Sync now.")
-            SyncGenosToCurrentMap(); HardwareSyncTimer = 0.0
+            SyncArrangerToCurrentMap(); HardwareSyncTimer = 0.0
             TraceHardwarePrediction()
             HardwareSyncTimer = 0.0
         end    
@@ -13428,7 +13428,7 @@ On TimerTick(ms : Double)
           LastGlobalTranspose = tr; RecalculateTextDisplay() 
         End
 
-        if IncomingFromGenos and (TimeSinceStartup() - LoopSafetyTimer > 1500.0) then IncomingFromGenos = false end    
+        if IncomingFromArranger and (TimeSinceStartup() - LoopSafetyTimer > 1500.0) then IncomingFromArranger = false end    
         
         if DelayedSongSwitchTimer > 0.0 then
            if TimeSinceStartup() > DelayedSongSwitchTimer then
@@ -13446,7 +13446,7 @@ On TimerTick(ms : Double)
                 if Arr_TL_Bar[tl_idx] == CurrentBar and Arr_TL_Fired[tl_idx] == false then
                     if msSinceBarStart >= IntToFloat(Arr_TL_Offset[tl_idx]) then
                         
-                        if Arr_TL_Type[tl_idx] == "Macro" then SetParameter(Genos2_Control, Arr_TL_Val[tl_idx], 1.0) end
+                        if Arr_TL_Type[tl_idx] == "Macro" then SetParameter(ExternalArranger, Arr_TL_Val[tl_idx], 1.0) end
                         
                         if Arr_TL_Type[tl_idx] == "Map" then
                             if Arr_TL_Val[tl_idx] >= 0 and Arr_TL_Val[tl_idx] < Size(CtrlMapList) then
@@ -13492,8 +13492,8 @@ On TimerTick(ms : Double)
             if StartWatchdogTimer > 0.0 and TimeSinceStartup() > StartWatchdogTimer then
                 StartWatchdogTimer = 0.0
                 Trace(">>> TRANSPORT: Genos ist stumm. Sende Start-Befehl (Note 14)!")
-                FireDirectGenosTransport()
-                SetParameter(BLK_GenosStyle, 1, 1.0)
+                FireDirectArrangerTransport()
+                SetParameter(BLK_ArrangerSync, 1, 1.0)
             end
         end
         
