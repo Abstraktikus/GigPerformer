@@ -11104,7 +11104,7 @@ Initialization
    
    
    // ====================================================================================
-   // 0. ABSOLUTER SYSTEM-LOCK (Verhindert "Geister-Aufnahmen" beim Booten)
+   // PHASE 0: SAFETY LOCK
    // ====================================================================================
    
    FaderSafetyTimer = TimeSinceStartup() + 5000.0
@@ -11115,7 +11115,7 @@ Initialization
    Arr_Rec_Bar = []; Arr_Rec_Type = []; Arr_Rec_Val = []; Arr_Rec_Offset = []
    
    // ====================================================================================
-   // 1. HARDCODED SYSTEM STANDARDS (Ersatz für System_Standard.ini)
+   // PHASE 1: PATHS
    // ====================================================================================
    
    // --- GLOBALS ---
@@ -11137,22 +11137,46 @@ Initialization
    DEF_RECH[196] = 1.0; DEF_RECH[213] = 1.0; DEF_RECH[230] = 1.0; DEF_RECH[247] = 1.0;
    
    // ====================================================================================
-   // 2. PFADE DEFINIEREN
+   // PHASE 1b: PATHS
    // ====================================================================================
-   UserSnapshotPath = ReplaceString(UserChordProPath, "Chords", "Snapshots", false)         
-   
-   if IndexOfSubstring(UserSnapshotPath, "\\", false) > -1 Then 
+   UserSnapshotPath = ReplaceString(UserChordProPath, "Chords", "Snapshots", false)
+
+   if IndexOfSubstring(UserSnapshotPath, "\\", false) > -1 Then
        ControllerMapFilePath = UserSnapshotPath + "\\ControllerMaps.txt"
        HardwareMapFilePath = UserSnapshotPath + "\\HardwareMap.txt"
-       VstDatabaseFilePath = UserSnapshotPath + "\\VstDatabase.txt" 
-   Else 
+       VstDatabaseFilePath = UserSnapshotPath + "\\VstDatabase.txt"
+       DeviceConfigFilePath = UserSnapshotPath + "\\DeviceConfig.txt"
+   Else
        ControllerMapFilePath = UserSnapshotPath + "/ControllerMaps.txt"
        HardwareMapFilePath = UserSnapshotPath + "/HardwareMap.txt"
-       VstDatabaseFilePath = UserSnapshotPath + "/VstDatabase.txt" 
+       VstDatabaseFilePath = UserSnapshotPath + "/VstDatabase.txt"
+       DeviceConfigFilePath = UserSnapshotPath + "/DeviceConfig.txt"
    End
 
    // ====================================================================================
-   // 3. FUNDAMENT BAUEN: ARRAYS & DATENBANKEN
+   // PHASE 2: HAL BOOTSTRAP
+   // ====================================================================================
+   ParseDeviceConfig()
+   MapDevicesToBlocks()
+
+   arrangerDevIdx = -1
+   controllerDevIdx = -1
+   var d : Integer
+   For d = 0; d < MAX_DEVICES; d = d + 1 Do
+      if DEV_Active[d] then
+         if arrangerDevIdx < 0 and DeviceHasCap(d, CAP_TRANSPORT_SYNC) then arrangerDevIdx = d end
+         if controllerDevIdx < 0 and DeviceHasCap(d, CAP_SYSEX_COMMANDS) then controllerDevIdx = d end
+         if IsDeviceConnected(d) then
+            Trace("HAL: Device " + DEV_Name[d] + " connected via " + DEV_MidiOut[d])
+         else
+            Trace("HAL: Device " + DEV_Name[d] + " not found. Features disabled.")
+         end
+      end
+   End
+   Trace("HAL: arrangerDevIdx=" + IntToString(arrangerDevIdx) + " controllerDevIdx=" + IntToString(controllerDevIdx))
+
+   // ====================================================================================
+   // PHASE 3: SYSTEM DEFAULTS
    // ====================================================================================
    
    // A. Plugin Blöcke & Widgets (MUSS als allererstes existieren!)
@@ -11180,7 +11204,7 @@ Initialization
    BuildFilteredVstList()
 
    // ====================================================================================
-   // 4. ROUTING & REPLACEABLE SLOTS (Auto-Detector)
+   // PHASE 4: ARRAYS & ROUTING
    // ====================================================================================
    RoutingMatrix = []; For i_init = 0; i_init < 160; i_init = i_init + 1 Do RoutingMatrix <-- false End
    
@@ -11203,7 +11227,7 @@ Initialization
    if Size(ReplaceableSlots) == 0 then ReplaceableSlots = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] end
 
    // ====================================================================================
-   // 5. IST-WERTE FÜR SYSTEM-STANDARD LESEN
+   // PHASE 5: DATABASE LOADING
    // ====================================================================================
    Loaded_RECH_State = []; For i = 0; i < 256; i = i + 1 Do Loaded_RECH_State <-- 0.0 End
    Diag_Lines = []; For i = 0; i < 48; i = i + 1 Do Diag_Lines <-- "" End
@@ -11274,7 +11298,7 @@ Initialization
    LastHardwarePulseTime = -99999.0
 
    // =========================================================
-   // PHASE 1: STATE RECOVERY (Das Gedächtnis wiederherstellen)
+   // PHASE 6: STATE RECOVERY
    // =========================================================
    queueStr = GetWidgetLabel(MEM_ReplaceState)
    isManualReboot = false
@@ -11302,7 +11326,7 @@ Initialization
    Trace("BOOTLOADER: System online. State Recovery complete.")
    
    // =========================================================
-   // PHASE 2: QUEUE PROCESSING & BOOT RECOVERY
+   // PHASE 7: UI SYNC & QUEUE PROCESSING
    // =========================================================
    GlobalReplaceQueue = GetWidgetLabel(MEM_ReplaceState)
    ScanGlobalInstruments()
