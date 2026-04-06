@@ -3344,10 +3344,10 @@ Function RefreshCtrlMapList()
                CtrlMapList <-- mapName
                Trace("RefreshList: Found Map -> " + mapName)
                
-               // Schneide den verarbeiteten Teil ab
+               // Cut the processed portion
                tempContent = CopySubstring(tempContent, closePos, Length(tempContent) - closePos)
            else
-               tempContent = "" // Fallback Notausgang
+               tempContent = "" // Fallback emergency exit
            end
            
            // Find the next map
@@ -3381,32 +3381,32 @@ Function SyncArrangerToCurrentMap()
                faderVal = 0.5 
                if DebugMode then Trace("     [IS CC] One-way control detected! Setting faderVal to 0.5 (50%)") end
            else
-               // WENN ES EIN VST-PARAMETER IST: Frage den Host nach dem echten Wert!
+               // IF IT IS A VST PARAMETER: Ask the host for the actual value!
                if Link_Type[i] == 0 then 
                    currentVal = GetParameter(BLK_VST[Link_BlockIdx[i]], Link_TargetParam[i])
-                   if DebugMode then Trace("     [IS VST] Type 0 (Plugin " + (Link_BlockIdx[i]+1) + " | Param " + Link_TargetParam[i] + "). Gelesener Wert: " + currentVal) end
+                   if DebugMode then Trace("     [IS VST] Type 0 (Plugin " + (Link_BlockIdx[i]+1) + " | Param " + Link_TargetParam[i] + "). Read value: " + currentVal) end
                elsif Link_Type[i] == 1 then 
                    currentVal = GetParameter(BLK_NoteProcessor[Link_BlockIdx[i]], Link_TargetParam[i])
-                   if DebugMode then Trace("     [IS NP] Type 1. Gelesener Wert: " + currentVal) end
-               elsif Link_Type[i] == 2 then 
+                   if DebugMode then Trace("     [IS NP] Type 1. Read value: " + currentVal) end
+               elsif Link_Type[i] == 2 then
                    currentVal = GetParameter(AudioMixer, Link_TargetParam[i])
-                   if DebugMode then Trace("     [IS MIXER] Type 2. Gelesener Wert: " + currentVal) end
+                   if DebugMode then Trace("     [IS MIXER] Type 2. Read value: " + currentVal) end
                end
                
                range = Link_MaxVal[i] - Link_MinVal[i]
                if Abs(range) > 0.0001 then 
                    faderVal = (currentVal - Link_MinVal[i]) / range 
-                   if DebugMode then Trace("     [MATH] Skaliere: (" + currentVal + " - " + Link_MinVal[i] + ") / " + range + " = " + faderVal) end
+                   if DebugMode then Trace("     [MATH] Scale: (" + currentVal + " - " + Link_MinVal[i] + ") / " + range + " = " + faderVal) end
                else 
                    faderVal = 0.0 
-                   if DebugMode then Trace("     [MATH] WARNUNG: Range ist 0! Setze faderVal auf 0.0") end
+                   if DebugMode then Trace("     [MATH] WARNING: Range is 0! Setting faderVal to 0.0") end
                end
            end
            
-           // Sicherheits-Begrenzung
+           // Safety clamping
            if faderVal < 0.0 then faderVal = 0.0 elsif faderVal > 1.0 then faderVal = 1.0 end
            
-           // An die Hardware senden (Nur wenn der Sender ein Genos-Macro ist)
+           // Send to hardware (only if the source is an arranger macro)
            if not Link_SourceIsCC[i] then
                // ---> GUARD <---
                if hwIdx >= 0 and hwIdx <= 15 then
@@ -3417,7 +3417,7 @@ Function SyncArrangerToCurrentMap()
                    if DebugMode then Trace("     [HARDWARE] Guard BLOCKED! Index " + hwIdx + " is not a physical arranger fader (0-15).") end
                end
            else
-               if DebugMode then Trace("     [HARDWARE] Ignoriert. Quelle ist selbst ein CC, kein physikalischer Genos-Fader.") end
+               if DebugMode then Trace("     [HARDWARE] Ignored. Source is a CC, not a physical arranger fader.") end
            end
        end
    End
@@ -3440,7 +3440,7 @@ Function MorphSend(sliderIdx : Integer, val : Double)
     End
 End
 
-// Werte direkt aus dem Plugin holen
+// Read values directly from the plugin
 Function CaptureSmartRanges(isMin : Boolean)
    var i, sIdx, count : Integer = 0
    var currentVal, diff : Double = 0.0
@@ -3496,18 +3496,18 @@ Function ExportSmartConfig()
        // 1. NEUEN BLOCK BAUEN (RAM)
        newBlock = "[Map:" + CurrentCtrlMapName + "]" + NEW_LINE
 
-       // Wir scannen alles: Macros (0) und CCs (1)
+       // Scan everything: Macros (0) and CCs (1)
        For typeLoop = 0; typeLoop <= 1; typeLoop = typeLoop + 1 Do
            isCC = (typeLoop == 1)
            
-           For s = 0; s < 256; s = s + 1 Do // Scanne bis zum neuen MAX_MACROS
+           For s = 0; s < 256; s = s + 1 Do // Scan up to new MAX_MACROS
                line = ""
                linkFound = false
                
                if isCC then line = "CC" + s
                else line = "Macro" + (s + 1) end
 
-               // --- SONDERFUNKTIONEN (SINGLE MACROS) ---
+               // --- SPECIAL FUNCTIONS (SINGLE MACROS) ---
                if (not isCC and s == CF_MacroIdx) or (isCC and s == CF_CCIdx) then
                    newBlock = newBlock + line + " = CROSSFADER" + NEW_LINE
                elsif (not isCC and s == SCRUB_MacroIdx) or (isCC and s == SCRUB_CCIdx) then
@@ -3549,7 +3549,7 @@ Function ExportSmartConfig()
                        if (not isCC and s == SUSTAIN_MacroIdx[chIdx]) or (isCC and s == SUSTAIN_CCIdx[chIdx]) then susChFound = chIdx end
                    End
                    
-                   // Treffer auswerten (Nur speichern, wenn es KEIN Standard-Macro ist, oder wenn es ein CC ist)
+                   // Evaluate matches (only save if it is NOT a default macro, or if it is a CC)
                    if looperChFound > -1 then
                        if isCC or s != DEF_LOOPER_CH_MacroIdx[looperChFound] then newBlock = newBlock + line + " = LOOPER_CH" + (looperChFound + 1) + NEW_LINE end
                    elsif strictSoloChFound > -1 then
@@ -3559,7 +3559,7 @@ Function ExportSmartConfig()
                    elsif userMuteChFound > -1 then
                        if isCC or s != DEF_USER_MUTE_MacroIdx[userMuteChFound] then newBlock = newBlock + line + " = USER_MUTE_CH" + (userMuteChFound + 1) + NEW_LINE end
                    
-                   // V7.4 Features auswerten
+                   // V7.4 Features evaluate
                    elsif velRangeChFound > -1 then
                        if isCC or s != DEF_VELRANGE_MacroIdx[velRangeChFound] then newBlock = newBlock + line + " = VELRANGE_CH" + (velRangeChFound + 1) + NEW_LINE end
                    elsif rootChFound > -1 then
@@ -3583,7 +3583,7 @@ Function ExportSmartConfig()
                                pID = Link_TargetParam[lnk]
                                realName = ""
                                
-                               // Name ermitteln
+                               // Determine name
                                if Link_IsCC[lnk] then 
                                    if Length(Link_ExpectedName[lnk]) > 0 then realName = Link_ExpectedName[lnk] else realName = "CC " + pID end
                                else
@@ -3593,7 +3593,7 @@ Function ExportSmartConfig()
                                    end
                                end
                                
-                               // Zeile zusammenbauen (inkl. Min/Max)
+                               // Assemble line (incl. Min/Max)
                                line = line + Link_BlockName[lnk] + ":" 
                                if Link_IsCC[lnk] then line = line + "CC" end 
                                line = line + pID
@@ -3612,7 +3612,7 @@ Function ExportSmartConfig()
            End
        End
 
-       // 2. DATEI EINLESEN UND ALTEN BLOCK ERSETZEN
+       // 2. READ FILE AND REPLACE OLD BLOCK
        finalContent = ""
        inTargetSection = false
        replaced = false
@@ -3623,7 +3623,7 @@ Function ExportSmartConfig()
            For s = 0; s < Size(lines); s = s + 1 Do
                currentLine = TrimString(lines[s])
                
-               // Schauen ob wir bei einer [Map:...] Sektion ankommen
+               // Check if we arrive at a [Map:...] section
                if IndexOfSubstring(currentLine, "[Map:", false) == 0 then
                    if currentLine == "[Map:" + CurrentCtrlMapName + "]" then
                        inTargetSection = true
@@ -3634,7 +3634,7 @@ Function ExportSmartConfig()
                        finalContent = finalContent + lines[s] + NEW_LINE
                    end
                else
-                   // Zeilen kopieren, AUSSER wir befinden uns im alten Bereich unserer Map
+                   // Copy lines, EXCEPT when inside the old section of our map
                    if not inTargetSection then
                        finalContent = finalContent + lines[s] + NEW_LINE
                    end
@@ -3642,7 +3642,7 @@ Function ExportSmartConfig()
            End
        end
        
-       // Falls die Map ganz neu ist und noch nie in der Datei stand:
+       // If the map is completely new and never existed in the file:
        if not replaced then
            finalContent = finalContent + NEW_LINE + newBlock
        end
@@ -3682,7 +3682,7 @@ Function PreviewActiveControllerMaps(direction : Integer)
         end
     End
     
-    // 3. Duplikate filtern
+    // 3. Filter duplicates
    For i = 0; i < Size(validMaps); i = i + 1 Do
        isDup = false
        j = 0
@@ -3706,10 +3706,10 @@ Function PreviewActiveControllerMaps(direction : Integer)
     if currIdx >= Size(uniqueMaps) then currIdx = 0
     elsif currIdx < 0 then currIdx = Size(uniqueMaps) - 1 end
     
-    // 5. NUR VORSCHAU: Wir speichern nur den Namen!
+    // 5. PREVIEW ONLY: Just store the name!
     PendingMapName = uniqueMaps[currIdx]
     
-    // Sofortiges visuelles Feedback
+    // Immediate visual feedback
     OSC_SendStringSpecific("/UI/SetMacroFeedback", ">> SELECT: " + PendingMapName + " <<", Local_IP, Local_PORT)
     MacroFeedbackTimer = TimeSinceStartup() + 3000.0 // Show longer while cycling
 End
@@ -3746,7 +3746,7 @@ Function GetLoopStopName(val : Integer) Returns String
 End
 
 Function RefreshLooperInfoDisplay()
-   var visibleCount : Integer = 10 // WIE VIELE ZEILEN PASSEN IN DEIN LABEL? (Ggf. anpassen auf 9 oder 11)
+   var visibleCount : Integer = 10 // How many lines fit in the label? (adjust to 9 or 11 if needed)
    var totalLines : Integer = Size(LooperInfo_Lines)
    var maxScroll, startIdx, i : Integer
    var dispTxt : String = "--- LOOPER CONFIGURATION ---" + NEW_LINE
@@ -3755,7 +3755,7 @@ Function RefreshLooperInfoDisplay()
        startIdx = 0
    else
        maxScroll = totalLines - visibleCount
-       // Slider 1.0 (oben) = Index 0 | Slider 0.0 (unten) = Max Scroll
+       // Slider 1.0 (top) = Index 0 | Slider 0.0 (bottom) = Max Scroll
        startIdx = Round((1.0 - GetWidgetValue(SLD_LooperConfiguration)) * IntToFloat(maxScroll))
        if startIdx < 0 then startIdx = 0 end
        if startIdx > maxScroll then startIdx = maxScroll end
@@ -3779,17 +3779,17 @@ Function TraceLooperDiagnostic(chIdx : Integer, actionName : String)
     if chIdx == -1 then
         Trace("DIAGNOSTIC [" + actionName + "]: Failed - No active Looper Channel in Scope!")
     else
-        // 1. Settings auslesen
+        // 1. Read settings
         actStr = GetLoopActionName(Mem_Loop_Action[chIdx])
         lenStr = GetLoopLengthName(Mem_Loop_Length[chIdx])
         if Mem_Loop_Target[chIdx] == -1 then tgtStr = "STAY" else tgtStr = "CH " + IntToString(Mem_Loop_Target[chIdx] + 1) end
         stopStr = GetLoopStopName(Mem_Loop_StopMode[chIdx])
 
-        // 2. Globale Schalter auslesen
+        // 2. Read global switches
         if GetWidgetValue(BTN_Loop_HostSync) > 0.5 then syncStr = "ON" else syncStr = "OFF" end
         if GetWidgetValue(BTN_Loop_CountIn) > 0.5 then countInStr = "ON" else countInStr = "OFF" end
 
-        // 3. Aktueller Status
+        // 3. Current state
         stateStr = IntToString(Mem_Loop_State[chIdx])
 
         // 4. Bar Counters & Sync Mode
@@ -3797,14 +3797,14 @@ Function TraceLooperDiagnostic(chIdx : Integer, actionName : String)
                   " | SONG: " + CurrentBar + "." + CurrentBeat +
                   " | SYNC-MODE: " + SyncModeNames[CurrentSyncMode]
 
-        // 5. LED Blink Status (Was sagt die Variable und was machen die echten Widgets?)
+        // 5. LED Blink Status (variable value vs. actual widget states)
         blinkStr = "Var=" + Global_BlinkState + 
                    " (LED1=" + GetWidgetValue(LBL_Subbar_1) +
                    ", LED2=" + GetWidgetValue(LBL_Subbar_2) +
                    ", LED3=" + GetWidgetValue(LBL_Subbar_3) +
                    ", LED4=" + GetWidgetValue(LBL_Subbar_4) + ")"
 
-        // --- AUSGABE ---
+        // --- OUTPUT ---
         Trace("=== X-RAY DIAGNOSTIC: " + actionName + " (CH " + (chIdx+1) + ") ===")
         Trace("  SETTINGS : Length=[" + lenStr + "] Action=[" + actStr + "] Target=[" + tgtStr + "] Stop=[" + stopStr + "]")
         Trace("  SWITCHES : HostSync=[" + syncStr + "] CountIn=[" + countInStr + "]")
@@ -3816,13 +3816,13 @@ Function TraceLooperDiagnostic(chIdx : Integer, actionName : String)
 End
 
 // ---------------------------------------------------------
-// LOOPER: DISPLAY RENDERER (Bauen die UI auf)
+// LOOPER: DISPLAY RENDERER (builds the UI)
 // ---------------------------------------------------------
 
 Function RefreshLooperConfigDisplay()
    var scrollVal : Double = GetWidgetValue(SLD_LooperConfiguration)
    var totalLines : Integer = Size(LooperConfig_Lines)
-   var displayLines : Integer = 12 // Anpassen an dein GUI
+   var displayLines : Integer = 12 // Adjust to your GUI
    var maxStart : Integer = totalLines - displayLines
    var startIdx, i : Integer
    var finalText : String = "--- LOOPER CONFIGURATION ---" + NEW_LINE // + NEW_LINE
@@ -3950,14 +3950,14 @@ Function BuildLooperConfigLines()
    var lenStr, actStr, targetStr, stateStr, outStr, stopStr : String
    var scrollPos : Double = 0.0
    
-   LooperInfo_Lines = [] // Array leeren!
+   LooperInfo_Lines = [] // Clear array!
    focusCh = GetFirstActiveScope()
    
    focusLineIdx = 0
-   visibleCount = 10 // Muss identisch mit der Zahl in RefreshLooperInfoDisplay sein!
+   visibleCount = 10 // Must match the number in RefreshLooperInfoDisplay!
    
    For i = 0; i < 16; i = i + 1 Do
-      // Merken, ab welchem Array-Index unser aktiver Kanal beginnt
+      // Remember at which array index our active channel starts
       if i == focusCh then focusLineIdx = Size(LooperInfo_Lines) end
       
       if not IsChannelActiveForLooper(i) then
@@ -3986,7 +3986,7 @@ Function BuildLooperConfigLines()
       end
    End
    
-   // --- AUTO-SCROLL BERECHNUNG ---
+   // --- AUTO-SCROLL CALCULATION ---
    totalLines = Size(LooperInfo_Lines)
    if totalLines > visibleCount then
        scrollPos = 1.0 - (IntToFloat(focusLineIdx) / IntToFloat(totalLines - visibleCount))
@@ -3998,7 +3998,7 @@ Function BuildLooperConfigLines()
        SetWidgetValue(SLD_LooperConfiguration, 1.0) 
    end
    
-   // Bild neu zeichnen!
+   // Redraw!
    RefreshLooperInfoDisplay()
 End
 
@@ -4356,11 +4356,11 @@ Function ValidateLooperScopeConfig(testTarget : Integer, testOut : Integer) Retu
    
    // 2. REGELWERK ANWENDEN
    if scopeCount > 1 then
-       // Bei Multi-Kanal-Scope ist Auto-Jump (Target != -1) strengstens verboten!
+       // Auto-jump (Target != -1) is strictly forbidden in multi-channel scope!
        // (Verhindert zerrissene Scopes und Chaos beim Punch-Out)
        if testTarget != -1 then isAllowed = false end
        
-       // Bei Multi-Kanal-Scope ist Loop Out = GLOBAL (1) strengstens verboten!
+       // Loop Out = GLOBAL (1) is strictly forbidden in multi-channel scope!
        // (Would otherwise cause exponential MIDI loopback in the RECH matrix)
        if testOut == 1 then isAllowed = false end
    end
@@ -4521,13 +4521,13 @@ Function RecordLoopEvent(chIdx : Integer, m : MidiMessage)
    var timeOff : Double = 0.0
    var currentState : Integer = Mem_Loop_State[chIdx]
    
-   // Wir nehmen NUR auf, wenn der Kanal auf REC (1) oder OVERDUB (3) steht
+   // Only record when the channel is in REC (1) or OVERDUB (3) state
    if currentState == 1 or currentState == 3 then
       
-      // Zeitstempel berechnen
+      // Calculate timestamp
       timeOff = TimeSinceStartup() - LoopStartTime[chIdx]
       
-      // In die parallelen Puffer einsortieren
+      // Insert into the parallel buffers
       Select
          chIdx == 0  Do LoopTime_Ch1 <-- timeOff;  LoopMsg_Ch1 <-- m
          chIdx == 1  Do LoopTime_Ch2 <-- timeOff;  LoopMsg_Ch2 <-- m
@@ -4556,18 +4556,18 @@ End
 Function InjectLooperEvent(ch : Integer, msg : MidiMessage)
     var forceLocal : Boolean = false
     
-    // ---> DER PLAYBACK OVERRIDE <---
-    // Wenn der Kanal im aktiven Scope liegt UND irgendein Solo-Modus an ist,
-    // zwingen wir die Ausgabe auf LOCAL. Das verhindert, dass der Looper 
-    // would otherwise fire the entire RECH matrix while we want solo playback!
+    // ---> PLAYBACK OVERRIDE <---
+    // If the channel is in the active scope AND any solo mode is on,
+    // force the output to LOCAL. This prevents the looper from
+    // firing the entire RECH matrix while we want solo playback!
     if OutputScope[ch] and Mem_SoloStrict[ch] == 1 or Mem_SoloSmart[ch] == 1 then
         forceLocal = true
     end
 
     if Mem_Loop_OutMode[ch] == 1 and not forceLocal then
-        SendNow(DeviceIn_0, msg) // GLOBAL MODE (Feuert in die RECH-Matrix)
+        SendNow(DeviceIn_0, msg) // GLOBAL MODE (fires into the RECH matrix)
     else
-        SendNow(BLK_MidiIn[ch], msg) // CHANNEL MODE (Feuert direkt ins VST)
+        SendNow(BLK_MidiIn[ch], msg) // CHANNEL MODE (fires directly into VST)
     end
 End
 
@@ -4585,7 +4585,7 @@ Function ProcessLooperPlayback()
 
          While needsWrap Do
             currentTimeInLoop = TimeSinceStartup() - LoopStartTime[ch]
-            lastTime = LoopPlayheadMS[ch] // Wo standen wir beim letzten Tick?
+            lastTime = LoopPlayheadMS[ch] // Where were we at the last tick?
             sz = LoopNextEventIdx[ch]     // The sentinel (hides overdubs until next bar)
 
             // Check all old notes: does their time fall within our window?
@@ -4710,12 +4710,12 @@ Function FeedLooper_Note(m : NoteMessage)
    if hwChan >= 0 and hwChan <= 15 then
       For outCh = 0; outCh < 16; outCh = outCh + 1 Do
          
-         // 1. Check: Ist das physikalische Keyboard auf diesen Rackspace-Kanal geroutet?
+         // 1. Check: Is the physical keyboard routed to this rackspace channel?
          if GetParameter(RECH, (hwChan * 16) + outCh) > 0.5 then
             currentState = Mem_Loop_State[outCh]
             
             // 2. GUARD: Process the MIDI event for the looper ONLY
-            // wenn der Looper auch wirklich im Aufnahme-Modus ist! (Ghost-Mode)
+            // only when the looper is actually in record mode! (Ghost mode)
             if currentState == 1 or currentState == 3 then
                
                if IsNoteOn(m) then statusByte = 144 + outCh
@@ -4775,10 +4775,10 @@ Function TraceTimeDomains()
     var gpStr, songStr, loopStr : String
     var ch, activeLoopers : Integer
     
-    // 1. Schicht 1: GP Absolute (Der Motor)
+    // 1. Layer 1: GP Absolute (the engine)
     gpStr = "GP: " + Global_CurrentBar + "." + Global_CurrentBeat + "." + PadInt(Global_CurrentTick, 3)
-    
-    // 2. Schicht 2: Virtual Song Time (Der Playhead)
+
+    // 2. Layer 2: Virtual Song Time (the playhead)
     songStr = "SONG: " + CurrentBar + "." + CurrentBeat + " (Offset: " + GlobalBarOffset + " Bars)"
     
     // 3. Layer 3: Looper status (quick scan for active loopers)
@@ -4794,7 +4794,7 @@ Function TraceTimeDomains()
     
     if activeLoopers == 0 then loopStr = loopStr + "Idle" end
     
-    // Ausgabe
+    // Output
     Trace("TIME SYNC | " + gpStr + " | " + songStr + " | " + loopStr)
 End
 
@@ -4808,7 +4808,7 @@ Function BuildRecDisplayLines()
     
     RecDisplayLines = []
 
-    // 1. BESTEHENDE TIMELINE ANZEIGEN (Immer sichtbar!)
+    // 1. SHOW EXISTING TIMELINE (always visible!)
     if Size(Arr_TL_Bar) == 0 and Size(Arr_Rec_Bar) == 0 then
         RecDisplayLines <-- "(Timeline is empty)"
     else
@@ -4871,7 +4871,7 @@ End
 
 Function RefreshRecDisplay(scrollVal : Double)
     var totalLines : Integer = Size(RecDisplayLines)
-    var displayLines : Integer = 15 // Checke kurz, wie viele exakt in dein Label passen
+    var displayLines : Integer = 15 // Check how many lines fit in the label
     var maxStart : Integer = totalLines - displayLines
     var startIdx, i : Integer
     var finalText, stateHeader : String = ""
@@ -4883,7 +4883,7 @@ Function RefreshRecDisplay(scrollVal : Double)
         finalText = finalText + "  >>> " + Rec_OverlayMsg + " <<<"
         SetWidgetLabel(LBL_CurrentState, finalText)
     else
-        // 2. NORMALER MODUS (Listen-Ansicht)
+        // 2. NORMAL MODE (list view)
         if RecordMode == 0 then
             stateHeader = "--- TIMELINE (PLAY MODE) ---"
         elsif RecordMode == 1 then
@@ -4941,12 +4941,12 @@ Function ScrollToCurrentTimelineEvent()
         i = i + 1
     End
     
-    // Fallback: Wenn wir am Ende des Songs sind und gerade aufnehmen, scrolle zu den neuen Events
+    // Fallback: If at end of song and recording, scroll to new events
     if targetLine == -1 then
         if Size(Arr_Rec_Bar) > 0 then
-            targetLine = Size(Arr_TL_Bar) + 1 // +1 wegen der "--- NEW EVENTS ---" Trennzeile
+            targetLine = Size(Arr_TL_Bar) + 1 // +1 for the "--- NEW EVENTS ---" separator line
         else
-            targetLine = totalLines // Ganz nach unten
+            targetLine = totalLines // All the way down
         end
     end
 
@@ -4957,7 +4957,7 @@ Function ScrollToCurrentTimelineEvent()
         scrollVal = 1.0 - (IntToFloat(targetLine) / IntToFloat(maxStart))
     end
 
-    // Slider bewegen und UI neu zeichnen
+    // Move slider and redraw UI
     SetWidgetValue(SLD_CurrentState, scrollVal)
     RefreshRecDisplay(scrollVal)
 End
@@ -4984,13 +4984,13 @@ Function TriggerStyleAction(styleId : Integer)
    if styleId >= 0 and styleId <= 28 then
        if DebugMode then Trace("STYLE: Triggering ID " + styleId) end
        
-       // Elektronischer Tastendruck (Note On)
+       // Electronic key press (Note On)
        SetParameter(BLK_ArrangerSync, styleId, 1.0)
        
-       // 50ms warten, damit das Scriptlet reagiert
+       // Wait 50ms for the scriptlet to respond
        Wait(50.0) 
        
-       // Taster wieder loslassen (Note Off)
+       // Release the button (Note Off)
        SetParameter(BLK_ArrangerSync, styleId, 0.0)
    else
        if DebugMode then Trace("STYLE ERROR: Invalid ID (" + styleId + ") ignored! Max is 28.") end
@@ -5018,7 +5018,7 @@ Function UpdatePrompter(moveSlider : Boolean)
        End
    End
    
-   // --- STRINGS BAUEN UND ANS DISPLAY SENDEN ---
+   // --- BUILD STRINGS AND SEND TO DISPLAY ---
    If IsEmptyMode == true Then
        headerStr = ""; footerStr = ""
        If CurrentState == 9 Then
@@ -5057,7 +5057,7 @@ Function UpdatePrompter(moveSlider : Boolean)
    OSC_SendStringSpecific("/UI/SetHeader", headerStr, Local_IP, Local_PORT)
    OSC_SendStringSpecific("/UI/SetFooter", footerStr, Local_IP, Local_PORT)
    
-// 1. Zeit und Taktart abfragen 
+// 1. Query time and time signature
    num = GetTimeSigNumerator()
    if num <= 0 then num = 4 end 
    
@@ -5070,16 +5070,16 @@ Function UpdatePrompter(moveSlider : Boolean)
    tSec = totalSecs % 60
    timeStr = IntToString(tMin) + ":" + PadInt(tSec, 2) 
 
-   // 3. Aktuelle Position berechnen
+   // 3. Calculate current position
    currentBeats = ((CurrentBar - 1) * num) + (CurrentBeat - 1)
    if currentBeats < 0 then currentBeats = 0 end 
    
    displayBeat = CurrentBeat
    
-   // === DER OPTISCHE CHEAT OHNE NEBENWIRKUNGEN ===
+   // === COSMETIC CHEAT WITHOUT SIDE EFFECTS ===
    if CurrentBar >= SongDurationBars and not IsPerformanceActive then
-       displayBeat = num        // Zeigt kosmetisch den letzten Schlag an (z.B. .4)
-       curSecs = totalSecs      // Zwingt die linke Zeit exakt auf die rechte Zeit
+       displayBeat = num        // Cosmetically shows the last beat (e.g. .4)
+       curSecs = totalSecs      // Forces the left time to exactly match the right time
    else
        curSecs = Round((IntToFloat(currentBeats) * 60.0) / currentBPM)
    end
@@ -5088,17 +5088,17 @@ Function UpdatePrompter(moveSlider : Boolean)
    cSec = curSecs % 60
    curTimeStr = IntToString(cMin) + ":" + PadInt(cSec, 2)
 
-   // 4. Bar-String formatieren (z.B. "071.4")
+   // 4. Format bar string (e.g. "071.4")
    barStr = PadInt(CurrentBar, 3) + "." + IntToString(displayBeat)
 
-   // 5. Anzeige zusammenbauen (DAW Style)
+   // 5. Assemble display (DAW style)
    if isWrite Then 
        finalCountStr = "REC: " + barStr + " / " + IntToString(SongDurationBars) + " | " + curTimeStr + " / " + timeStr
    Else 
        finalCountStr = "Bar: " + barStr + " / " + IntToString(SongDurationBars) + " | " + curTimeStr + " / " + timeStr
    End
 
-   // An den Monitor senden!
+   // Send to monitor!
    OSC_SendStringSpecific("/UI/SetBarCount", finalCountStr, Local_IP, Local_PORT)
    // ========================================================
    
@@ -5119,14 +5119,14 @@ Function UpdatePrompter(moveSlider : Boolean)
    
    // --- TIMELINE TRIGGER (MACROS & STYLES) ---
    if not isWrite and CurrentBar != LastFiredBar then
-       // 1. MACROS DIREKT STARTEN
+       // 1. FIRE MACROS DIRECTLY
        for a = 0; a < Size(Arr_Anim_Bar); a = a + 1 do
            if Arr_Anim_Bar[a] == CurrentBar then
                StartMacroAnimation(Arr_Anim_MacroIdx[a], Arr_Anim_Target[a], Arr_Anim_DurMS[a])
            end
        end
        
-       // 2. STYLE TRIGGERS DIREKT STARTEN
+       // 2. FIRE STYLE TRIGGERS DIRECTLY
        for a = 0; a < Size(Arr_Style_Bar); a = a + 1 do
            if Arr_Style_Bar[a] == CurrentBar then
                TriggerStyleAction(Arr_Style_ID[a])
@@ -5269,7 +5269,7 @@ Function BuildZebraBlocks()
                // Interleave assembly
                finalBlockChords = finalBlockChords + tempChordLine + NEW_LINE + " " + NEW_LINE
                
-               // FIX: Wir zwingen Lyric-Zeilen IMMER zu Inhalten (Leerzeichen), 
+               // FIX: Force lyric lines to ALWAYS contain content (spaces),
                // so that old "LOADING..." text gets replaced.
                if hasLyrics Then 
                    finalBlockLyrics = finalBlockLyrics + " " + NEW_LINE + tempLyricLine + NEW_LINE 
@@ -5281,8 +5281,8 @@ Function BuildZebraBlocks()
             End 
          End
          
-         // Falls der ganze Block (z.B. Intro) gar keine Lyrics hat, 
-         // stellen wir sicher, dass er nicht komplett leer ist.
+         // If the entire block (e.g. Intro) has no lyrics,
+         // ensure it is not completely empty.
          if finalBlockLyrics == "" Then finalBlockLyrics = " " End
          
          Arr_Text_Chords <-- finalBlockChords
@@ -5304,7 +5304,7 @@ Function RecordTimelineEvent(eventType : String, eventVal : Integer)
     if RecordMode > 0 and IsPerformanceActive then 
         recBar = CurrentBar
 
-        // Offset berechnen
+        // Calculate offset
         if LastBarStartTime > 0.0 then 
             currentOffsetMS = Round(TimeSinceStartup() - LastBarStartTime)
         else 
@@ -5317,7 +5317,7 @@ Function RecordTimelineEvent(eventType : String, eventVal : Integer)
             recBar = recBar + 1
         end
 
-        // In den RAM-Puffer schreiben
+        // Write to the RAM buffer
         Arr_Rec_Bar <-- recBar
         Arr_Rec_Type <-- eventType
         Arr_Rec_Val <-- eventVal
@@ -5339,9 +5339,9 @@ Function RecalculateTextDisplay()
    if IsEmptyMode Then
        UpdatePrompter(false)
    Else
-       Trace("PROMPTER: Starte Zebra Render Engine...")
-       BuildZebraBlocks() 
-       Trace("PROMPTER: Zebra Rendering beendet. Sende an Display...")
+       Trace("PROMPTER: Starting Zebra Render Engine...")
+       BuildZebraBlocks()
+       Trace("PROMPTER: Zebra rendering complete. Sending to display...")
        UpdatePrompter(false)
    End
 End
@@ -5363,21 +5363,21 @@ Function TriggerNextSongPart()
             RecalculateTextDisplay()
             
         else
-            Trace("PROMPTER: Alle Parts markiert!")
+            Trace("PROMPTER: All parts marked!")
             OSC_SendStringSpecific("/UI/SetHeader", ">>> ALL PARTS MARKED <<<", Local_IP, Local_PORT)
         end
     else
-        // Zeigt an, dass wir den Button ignoriert haben (weil Playhead steht)
-        Trace("PROMPTER: Marker Taster ignoriert (Transport steht oder REC ist aus)")
+        // Indicates the button was ignored (because playhead is stopped)
+        Trace("PROMPTER: Marker button ignored (transport stopped or REC is off)")
     end
 End
 
 // ---------------------------------------------------------
-// INTERNAL TRIGGERS & FILE ACTIONS (Ersetzt die alten OSC Sender)
+// INTERNAL TRIGGERS & FILE ACTIONS (replaces the old OSC senders)
 // ---------------------------------------------------------
 
 Function TriggerSongTextLoad(songName : String)
-   // Wir speichern den Namen und setzen den Timer auf 200ms in die Zukunft
+   // Store the name and set the timer 200ms into the future
    PendingSongName = songName
    DelayedSongSwitchTimer = TimeSinceStartup() + 200.0 
    Trace("TRIGGER: Song Text Load scheduled for '" + songName + "'")
@@ -5387,9 +5387,9 @@ Function DecodeDeviceSysExName(sysExString : String) Returns String
    var parts : String Array = SplitString(sysExString, " ")
    var decoded : String = ""
    var i, val : Integer
-   var isDone : Boolean = false // ---> NEU: Unser sauberes Abbruch-Flag <---
-   
-   i = 10 // Wir starten wie bisher bei Index 10
+   var isDone : Boolean = false // ---> NEW: Clean exit flag <---
+
+   i = 10 // Start at index 10 as before
    While i < Size(parts) and not isDone Do
       val = (HexCharToInt(CopySubstring(parts[i],0,1)) * 16) + HexCharToInt(CopySubstring(parts[i],1,1))
       
@@ -5412,7 +5412,7 @@ Function SanitizeAndSlugify(rawName : String) Returns String
     var alphaUpper : String = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     var alphaLower : String = "abcdefghijklmnopqrstuvwxyz"
     
-    // 1. PFAD ENTFERNEN (Alles vor dem letzten / oder \)
+    // 1. REMOVE PATH (everything before the last / or \)
     lastSlash = -1
     for i = 0; i < Length(rawName); i=i+1 do
        charToCheck = CopySubstring(rawName, i, 1)
@@ -5421,13 +5421,13 @@ Function SanitizeAndSlugify(rawName : String) Returns String
     if lastSlash > -1 then processed = CopySubstring(rawName, lastSlash+1, Length(rawName)-lastSlash-1)
     else processed = rawName end
 
-    // 2. ENDUNG .RGT ENTFERNEN (Case Insensitive)
+    // 2. REMOVE .RGT EXTENSION (case insensitive)
     dotIndex = IndexOfSubstring(processed, ".rgt", false) 
     if dotIndex > -1 then 
         processed = CopySubstring(processed, 0, dotIndex) 
     end
     
-    // 3. GENOS ID ENTFERNEN (.T589, .S038, etc.)
+    // 3. REMOVE GENOS ID (.T589, .S038, etc.)
     dotIndex = -1
     for i = 0; i < Length(processed); i=i+1 do
        if CopySubstring(processed, i, 1) == "." then dotIndex = i end
@@ -5437,7 +5437,7 @@ Function SanitizeAndSlugify(rawName : String) Returns String
          processed = CopySubstring(processed, 0, dotIndex)
     end
 
-    // 4. SLUGIFY (Nur Buchstaben behalten)
+    // 4. SLUGIFY (keep only letters)
     finalSlug = ""
     for i = 0; i < Length(processed); i=i+1 do
        charToCheck = CopySubstring(processed, i, 1)
@@ -5536,19 +5536,19 @@ Function GetDynamicStandardMap() Returns String
     
     // Count active VSTs directly via plugin status
     For i = 0; i < MAX_VSTS; i = i + 1 Do
-        // IsPluginBypassed == false bedeutet: Plugin ist AN!
+        // IsPluginBypassed == false means: Plugin is ON!
         if IsPluginBypassed(BLK_VST[i]) == false then
             activeCount = activeCount + 1
             lastActiveIdx = i
         end
     End
     
-    // Entscheidung Logik
+    // Decision logic
     if activeCount == 1 then
-        // Nur ein VST ist aktiv -> Lade Map: Standard_VSTx
+        // Only one VST is active -> Load Map: Standard_VSTx
         result = "Standard_VST" + IntToString(lastActiveIdx + 1)
     else
-        // Mehrere oder keine aktiv -> Lade Map: Standard
+        // Multiple or none active -> Load Map: Standard
         result = "Standard"
     end
     
@@ -5579,7 +5579,7 @@ Function ValidateMapping() Returns Boolean
              elsif Link_Type[i] == 2 then realName = GetParameterName(AudioMixer, Link_TargetParam[i])
              end
              
-             // Vergleich (Case Insensitive)
+             // Comparison (case insensitive)
              if realName != "" and TrimString(realName) != TrimString(Link_ExpectedName[i]) then
                  linkOk = false
                  isValid = false
@@ -5587,7 +5587,7 @@ Function ValidateMapping() Returns Boolean
              end
          end
          
-         // Not-Aus bei Fehler
+         // Emergency stop on error
          if linkOk == false then
              Link_Active[i] = false
              Trace("SAFETY CUT: Link " + i + " disabled!")
@@ -5633,7 +5633,7 @@ Function LoadControllerMap(mapName : String)
    Trace("LoadMap: Requesting '" + mapName + "'")
 
    // ---------------------------------------------------------
-   // 1. ENGINE RESET (Alle Arrays leeren)
+   // 1. ENGINE RESET (clear all arrays)
    // ---------------------------------------------------------
    Link_Count = 0
    Link_Active = []; Link_SourceIdx = []; Link_Type = []; Link_BlockIdx = []; 
@@ -5646,7 +5646,7 @@ Function LoadControllerMap(mapName : String)
    Last_VST_Browse_Val = -1.0
    SYSTEM_TOGGLE_MacroIdx = -1; SYSTEM_TOGGLE_CCIdx = -1
    
-   // ---> BUGFIX: ALLE FEHLENDEN SYSTEM-MACROS RESETTEN! <---
+   // ---> BUGFIX: RESET ALL MISSING SYSTEM MACROS! <---
    VST_SCOPE_MacroIdx = -1; VST_SCOPE_CCIdx = -1
    VST_SCOPE_PREV_MacroIdx = -1; VST_SCOPE_PREV_CCIdx = -1
    VST_SCOPE_NEXT_MacroIdx = -1; VST_SCOPE_NEXT_CCIdx = -1
@@ -5672,7 +5672,7 @@ Function LoadControllerMap(mapName : String)
    CurrentEditScope = -1
 
    // ---------------------------------------------------------
-   // 2. LOGIC SPLIT (Leer vs. Laden)
+   // 2. LOGIC SPLIT (empty vs. load)
    // ---------------------------------------------------------
    if mapName == "-" or mapName == "None" or mapName == "" then
        UpdateEditScopeDisplay()
@@ -5686,35 +5686,35 @@ Function LoadControllerMap(mapName : String)
            content = LoadStringFromTextFile(ControllerMapFilePath)
            header = "[Map:" + mapName + "]"
            
-           // HIGH-SPEED SCAN: Wir suchen nur den Header!
+           // HIGH-SPEED SCAN: Only search for the header!
            startPos = IndexOfSubstring(content, header, false)
            
            if startPos > -1 then
                sectionFound = true
                Trace("LoadMap: --- FOUND SECTION: " + header + " ---")
                
-               // 1. Schneide alles VOR und INKLUSIVE dem Header ab
+               // 1. Cut everything BEFORE and INCLUDING the header
                remainingContent = CopySubstring(content, startPos + Length(header), Length(content) - (startPos + Length(header)))
                
                // 2. Find the start of the NEXT map
                endPos = IndexOfSubstring(remainingContent, "[Map:", false)
                
                if endPos > -1 then
-                   // Schneide genau unseren Block heraus
+                   // Cut out exactly our block
                    sectionContent = CopySubstring(remainingContent, 0, endPos)
                else
-                   // Es war die letzte Map im File
+                   // It was the last map in the file
                    sectionContent = remainingContent
                end
                
-               // JETZT ERST SPLITTEN! (Geht blitzschnell, da nur ~40 Zeilen)
+               // NOW SPLIT! (lightning-fast since only ~40 lines)
                lines = SplitString(sectionContent, NEW_LINE)
                
                // FAST LOOP OVER SHORT BLOCK
                For i = 0; i < Size(lines); i = i + 1 Do
                    line = TrimString(lines[i])
                    
-                   // ZEILE PARSEN
+                   // PARSE LINE
                    if Length(line) > 0 and IndexOfSubstring(line, ";", false) != 0 and IndexOfSubstring(line, "=", false) > -1 then
                        parts = SplitString(line, "=")
                        
@@ -5733,7 +5733,7 @@ Function LoadControllerMap(mapName : String)
                            end
                            
                            if sliderIdx >= 0 and sliderIdx <= 127 then
-                               // --- SONDERFUNKTIONEN ---
+                               // --- SPECIAL FUNCTIONS ---
                                if valuePart == "CROSSFADER" then
                                    if isSrcCC then CF_CCIdx = sliderIdx else CF_MacroIdx = sliderIdx end
                                elsif valuePart == "VST_PREV" then
@@ -5755,7 +5755,7 @@ Function LoadControllerMap(mapName : String)
                                elsif valuePart == "SCRUBBER" then
                                    if isSrcCC then SCRUB_CCIdx = sliderIdx else SCRUB_MacroIdx = sliderIdx end
                                    
-                               // --- GRUPPEN MAKROS ---
+                               // --- GROUP MACROS ---
                                 elsif IndexOfSubstring(valuePart, "LOOPER_CH", false) == 0 then
                                     chNum = StringToInt(ReplaceString(valuePart, "LOOPER_CH", "", false)) - 1
                                     if chNum >= 0 and chNum < 16 then
@@ -5808,7 +5808,7 @@ Function LoadControllerMap(mapName : String)
                                         if isSrcCC then SUSTAIN_CCIdx[chNum] = sliderIdx else SUSTAIN_MacroIdx[chNum] = sliderIdx end
                                     end
                                
-                               // --- NORMALE LINKS ---
+                               // --- NORMAL LINKS ---
                                else
                                    groupParts = SplitString(valuePart, "|")
                                    For j = 0; j < Size(groupParts); j = j + 1 Do
@@ -5905,20 +5905,20 @@ Function EvaluateSmartAdapt()
             end
         End
 
-        // 3. ISOLATION AKTIV: Exakt EIN VST ist wach! (Egal durch welchen Modus)
+        // 3. ISOLATION ACTIVE: Exactly ONE VST is awake! (regardless of mode)
         if activeVSTs == 1 then
             targetMap = "Standard_VST" + IntToString(targetVstIdx + 1)
             
-            // Nur wechseln, wenn wir nicht sowieso schon auf dieser Map sind
+            // Only switch if we are not already on this map
             if CurrentCtrlMapName != targetMap then
                 
-                // Aktuelle Map sichern (aber nur, wenn wir gerade erst ins Solo gehen!)
+                // Save current map (but only if we are just entering solo!)
                 if not IsAutoSoloMapActive then
                     PreSoloMapName = CurrentCtrlMapName
                     IsAutoSoloMapActive = true
                 end
                 
-                Trace("SMART ADAPT: VST " + (targetVstIdx + 1) + " spielt alleine. Lade " + targetMap)
+                Trace("SMART ADAPT: VST " + (targetVstIdx + 1) + " playing solo. Loading " + targetMap)
                 LoadControllerMap(targetMap)
                 
                 // Slightly delay hardware sync (debounce 400ms)
@@ -5991,16 +5991,16 @@ End
 // ---------------------------------------------------------
 
 // Checks whether we are in default mode
-// und passt die Map sofort an den neuen VST-Status an.
+// and immediately adjusts the map to the new VST status.
 Function AutoSwitchMapOnBypass()
-    // Wir schalten nur automatisch um, wenn die aktuelle Map 
-    // entweder "Standard" ist oder bereits eine der dynamischen VST-Maps.
+    // Only auto-switch if the current map
+    // is either "Standard" or already one of the dynamic VST maps.
     // Prevents a specifically loaded song map from being overwritten.
     if CurrentCtrlMapName == "Standard" or IndexOfSubstring(CurrentCtrlMapName, "Standard_VST", false) == 0 then
         LoadControllerMap(GetDynamicStandardMap())
     end
     
-    // Danach immer die Hardware syncen
+    // Always sync hardware afterwards
     SyncArrangerToCurrentMap()
 End
 
@@ -6010,10 +6010,10 @@ End
 // ============================================================================
 
 // =========================================================================
-// DER ULTIMATE GUITAR WEAVER (Auto-Converter)
+// THE ULTIMATE GUITAR WEAVER (Auto-Converter)
 // =========================================================================
 
-// Erkennt Titelzeilen
+// Detects header lines
 Function IsHeaderLine(line : String) Returns Boolean
     var tLine : String = TrimString(line)
     var isH : Boolean = false
@@ -6076,14 +6076,14 @@ Function IsChordLine(line : String) Returns Boolean
         if wordCount == 0 then isChord = false end 
         
         // ---> THE TRAP TRIGGERS HERE:
-        // Waren da nur 'x4' oder 'X' in der Zeile, aber kein A-G? -> Dann ist es nur Text!
+        // Were there only 'x4' or 'X' in the line, but no A-G? -> Then it is just text!
         if not hasRealChord then isChord = false end
     end
     
     result = isChord
 End
 
-// Entfernt Inline-Kommentare wie (single notes: E G A B) 
+// Removes inline comments like (single notes: E G A B)
 Function RemoveInlineComments(line : String) Returns String
     var openPos, closePos : Integer
     var res : String = line
@@ -6100,7 +6100,7 @@ Function RemoveInlineComments(line : String) Returns String
     result = res
 End
 
-// AUTO-TAGGER (Setzt fehlende [Parts] und [Intros] vollautomatisch)
+// AUTO-TAGGER (automatically inserts missing [Parts] and [Intros])
 Function AutoTagSections(lines : String Array) Returns String Array
     var i, partCounter : Integer = 1
     var res : String Array = []
@@ -6123,10 +6123,10 @@ Function AutoTagSections(lines : String Array) Returns String Array
                 // Ein neuer Block beginnt!
                 inBlock = true
                 
-                // Nur eingreifen, wenn der Block nicht sowieso schon einen Header hat
+                // Only intervene if the block does not already have a header
                 if not IsHeaderLine(line) then
                     if not hasAnyHeader then
-                        // KEINE Header im ganzen Song? Alles durch-taggen!
+                        // NO headers in the entire song? Tag everything!
                         if not firstBlockFound and IsChordLine(RemoveInlineComments(line)) then
                             res <-- "[Intro]"
                         else
@@ -6134,7 +6134,7 @@ Function AutoTagSections(lines : String Array) Returns String Array
                             partCounter = partCounter + 1
                         end
                     else
-                        // Song HAT Header, aber hier oben fehlt einer!
+                        // Song HAS headers, but one is missing at the top!
                         if not firstBlockFound and IsChordLine(RemoveInlineComments(line)) then
                             res <-- "[Intro]"
                         end
@@ -6144,9 +6144,9 @@ Function AutoTagSections(lines : String Array) Returns String Array
             end
             res <-- line
         else
-            // Leerzeile -> Block zu Ende
+            // Empty line -> end of block
             if inBlock then
-                res <-- "" // Trenner behalten
+                res <-- "" // Keep separator
                 inBlock = false
             end
         end
@@ -6155,7 +6155,7 @@ Function AutoTagSections(lines : String Array) Returns String Array
     result = res
 End
 
-// --- FILTER: Erkennt spezifisch Tabulatur-Zeichnungen ---
+// --- FILTER: Specifically detects tablature drawings ---
 Function IsTabLine(line : String) Returns Boolean
     var tLine : String = TrimString(line)
     var isTab : Boolean = false
@@ -6176,7 +6176,7 @@ Function IsJunkLine(line : String) Returns Boolean
     var tLine : String = TrimString(line)
     var junk : Boolean = false
     
-    // Tabulatur-Linien
+    // Tablature lines
     if IsTabLine(line) then junk = true
     
     // UG metadata & web junk
@@ -6185,7 +6185,7 @@ Function IsJunkLine(line : String) Returns Boolean
     elsif IndexOfSubstring(tLine, "Capo", false) == 0 then junk = true 
     elsif IndexOfSubstring(tLine, "http", false) > -1 then junk = true
     
-    // Alternates & Akkord-Mapping am Ende
+    // Alternates & chord mapping at the end
     elsif IndexOfSubstring(tLine, "Alternates:", false) > -1 then junk = true
     elsif IndexOfSubstring(tLine, " = ", false) > -1 then junk = true
     
@@ -6196,11 +6196,11 @@ Function IsJunkLine(line : String) Returns Boolean
     elsif IndexOfSubstring(tLine, "↓", false) > -1 then junk = true
     elsif IndexOfSubstring(tLine, "↑", false) > -1 then junk = true
     
-    // ---> DER NEUE, SCHLAUE KLAMMER-FILTER <---
+    // ---> NEW SMART PARENTHESIS FILTER <---
     elsif IndexOfSubstring(tLine, "(", false) == 0 then 
         // Only delete the line if it contains typical instruction words,
-        // ODER wenn es ein ganz kurzer Multiplikator wie (x4) ist.
-        // (Ho!) und (Hey!) Lyrics bleiben damit am Leben!
+        // OR if it is a very short multiplier like (x4).
+        // (Ho!) and (Hey!) lyrics stay alive this way!
         if IndexOfSubstring(tLine, "note", true) > -1 then junk = true
         elsif IndexOfSubstring(tLine, "strum", true) > -1 then junk = true
         elsif IndexOfSubstring(tLine, "repeat", true) > -1 then junk = true
@@ -6213,7 +6213,7 @@ Function IsJunkLine(line : String) Returns Boolean
     result = junk
 End
 
-// Reinigung des Akkord-Namens
+// Clean up chord name
 Function CleanChordName(raw : String) Returns String
     var res : String = ""
     var i : Integer
@@ -6230,7 +6230,7 @@ Function CleanChordName(raw : String) Returns String
     result = res
 End
 
-// Der Reissverschluss: Webt Akkorde in den Text ein (WELTMEISTER-VERSION)
+// The zipper: weaves chords into the text (championship edition)
 Function WeaveChords(chordLine : String, lyricLine : String) Returns String
     var woven : String = ""
     var cNames : String Array = []
@@ -6238,7 +6238,7 @@ Function WeaveChords(chordLine : String, lyricLine : String) Returns String
     var pos, startIdx, i, lastPos : Integer
     var char, currentName, safeLyric : String
     
-    // Akkorde extrahieren
+    // Extract chords
     pos = 0
     While pos < Length(chordLine) Do
         char = CopySubstring(chordLine, pos, 1)
@@ -6257,14 +6257,14 @@ Function WeaveChords(chordLine : String, lyricLine : String) Returns String
         end
     End
     
-    // Instrumental-Zeilen heimlich mit '§' stempeln ---
+    // Silently stamp instrumental lines with '§' ---
     if Size(cNames) > 0 and Length(TrimString(lyricLine)) == 0 then
         safeLyric = "§"
     else
         safeLyric = lyricLine
     end
     
-    // B) Einweben
+    // B) Weave in
     lastPos = 0
     For i = 0; i < Size(cNames); i = i + 1 Do
         pos = cPos[i]
@@ -6296,13 +6296,13 @@ End
 // Virtual ruler (measures ACTUAL width after merging)
 Function GetEffectiveLength(cLine : String, lLine : String) Returns Integer
     var woven : String = WeaveChords(cLine, lLine)
-    // Wir ziehen die Klammern ab, da Gig Performer diese nicht anzeigt!
+    // Subtract brackets since Gig Performer does not display them!
     woven = ReplaceString(woven, "[", "", false)
     woven = ReplaceString(woven, "]", "", false)
     result = Length(woven)
 End
 
-//  Der intelligente Scanner (Testet, ob der Schnitt auf den Screen passt)
+// Smart scanner (tests whether the cut fits on screen)
 Function GetSmartWrapIndex(cLine : String, lLine : String, maxLen : Integer) Returns Integer
     var idx : Integer
     var loopMax : Integer
@@ -6317,14 +6317,14 @@ Function GetSmartWrapIndex(cLine : String, lLine : String, maxLen : Integer) Ret
         safeInLyric = false
         safeInChord = false
         
-        // 1. Ist der Schnitt im Text physisch sicher?
+        // 1. Is the cut physically safe in the text?
         if idx >= Length(lLine) then safeInLyric = true
         else
             lChar = CopySubstring(lLine, idx, 1)
             if lChar == " " or lChar == "	" or lChar == "-" then safeInLyric = true end
         end
         
-        // 2. Ist der Schnitt bei den Akkorden physisch sicher?
+        // 2. Is the cut physically safe at the chords?
         if idx >= Length(cLine) then safeInChord = true
         else
             cChar = CopySubstring(cLine, idx, 1)
@@ -6332,12 +6332,12 @@ Function GetSmartWrapIndex(cLine : String, lLine : String, maxLen : Integer) Ret
             elsif idx > 0 and CopySubstring(cLine, idx - 1, 1) == " " then safeInChord = true end
         end
         
-        // 3. Wenn physisch sicher -> Passt das fertige Resultat auf den Screen?
+        // 3. If physically safe -> does the finished result fit on screen?
         if safeInLyric and safeInChord then
             leftC = CopySubstring(cLine, 0, idx)
             leftL = CopySubstring(lLine, 0, idx)
             
-            // Wir weben virtuell zur Probe!
+            // Virtual test weave!
             if GetEffectiveLength(leftC, leftL) <= maxLen then
                 bestIdx = idx // Perfekter Schnitt gefunden! Loop bricht ab.
             end
@@ -6346,7 +6346,7 @@ Function GetSmartWrapIndex(cLine : String, lLine : String, maxLen : Integer) Ret
         if bestIdx == -1 then idx = idx - 1 end // Continue searching backwards
     End
     
-    // Notfall-Fallback (falls ein Wort allein schon zu lang ist)
+    // Emergency fallback (if a single word is already too long)
     if bestIdx == -1 then
         if loopMax > maxLen then bestIdx = maxLen
         else bestIdx = loopMax end
@@ -6367,7 +6367,7 @@ Function FlushSection(secName : String, secLines : String Array) Returns String 
     var pLine : String
     var tempLines : String Array
 
-    // 1. LEERE ZEILEN AM ENDE WEGSCHNEIDEN
+    // 1. TRIM EMPTY LINES AT THE END
     keepTrimming = true
     While validLen > 0 and keepTrimming Do
         if Length(TrimString(secLines[validLen-1])) == 0 then
@@ -6377,7 +6377,7 @@ Function FlushSection(secName : String, secLines : String Array) Returns String 
         end
     End
 
-    // 2. LEERE ZEILEN AM ANFANG WEGSCHNEIDEN (Top-Trimmer!)
+    // 2. TRIM EMPTY LINES AT THE TOP (Top-Trimmer!)
     keepTrimming = true
     While readStart < validLen and keepTrimming Do
         if Length(TrimString(secLines[readStart])) == 0 then
@@ -6393,7 +6393,7 @@ Function FlushSection(secName : String, secLines : String Array) Returns String 
         
         While pageStart < validLen Do
             
-            // Passt der Rest komplett auf eine (oder die letzte) Seite?
+            // Does the rest fit completely on one (or the last) page?
             if (validLen - pageStart) <= (maxL + 1) and pageStart == readStart then
                 pageEnd = validLen
                 if Length(secName) > 0 then res <-- secName end
@@ -6401,7 +6401,7 @@ Function FlushSection(secName : String, secLines : String Array) Returns String 
                 pageEnd = validLen
                 if Length(secName) > 0 then res <-- secName + " (Pt " + pageNum + ")" end
             else
-                // Seite muss geschnitten werden!
+                // Page must be cut!
                 currentMaxL = maxL
                 pageEnd = pageStart + currentMaxL
                 
@@ -6428,13 +6428,13 @@ Function FlushSection(secName : String, secLines : String Array) Returns String 
                 
                 if IndexOfSubstring(pLine, "§", false) > -1 then
                     if textBelowOnPage then
-                        pLine = ReplaceString(pLine, "§", "_", false) // Anker setzen!
+                        pLine = ReplaceString(pLine, "§", "_", false) // Set anchor!
                     else
                         pLine = ReplaceString(pLine, "§", "", false)  // Remove without trace
                     end
                 else
                     if Length(TrimString(pLine)) > 0 then
-                        textBelowOnPage = true // Text gefunden!
+                        textBelowOnPage = true // Text found!
                     end
                 end
                 
@@ -6442,7 +6442,7 @@ Function FlushSection(secName : String, secLines : String Array) Returns String 
                 i = i - 1
             End
             
-            // TempLines umdrehen und final in die Seite schreiben
+            // Reverse tempLines and write final to the page
             i = Size(tempLines) - 1
             While i >= 0 Do
                 res <-- tempLines[i]
@@ -6485,7 +6485,7 @@ Function WashClipboardText(rawText : String) Returns String
     rawLines = SplitString(cleanRaw, NEW_LINE)
     
     // =================================================================
-    // 1. SCHREDDER (Junk Filter & Legenden-Killer)
+    // 1. SHREDDER (junk filter & legend killer)
     // =================================================================
     lines = []
     for i = 0; i < Size(rawLines); i = i + 1 do
@@ -6518,14 +6518,14 @@ Function WashClipboardText(rawText : String) Returns String
     end
 
     // =================================================================
-    // 2. STRUKTURELLER TOP-TRIMMER (MIT INTRO-KILLER!)
+    // 2. STRUCTURAL TOP-TRIMMER (WITH INTRO-KILLER!)
     // =================================================================
     cleanLines = []
     startOfSongIdx = -1
     firstHeaderIdx = -1
     isIntroFirst = false
     
-    // A) Finde den ALLERERSTEN Titel im bereinigten Text
+    // A) Find the very FIRST header in the cleaned text
     for i = 0; i < Size(lines); i = i + 1 do
         if firstHeaderIdx == -1 and IsHeaderLine(lines[i]) then
             firstHeaderIdx = i
@@ -6536,12 +6536,12 @@ Function WashClipboardText(rawText : String) Returns String
         end
     end
     
-    // B) Start-Index festlegen
+    // B) Determine start index
     if isIntroFirst then
-        // DIE SONDERREGEL: [Intro] ist der Boss. ALLES davor wird eliminiert!
+        // SPECIAL RULE: [Intro] is the boss. EVERYTHING before it gets eliminated!
         startOfSongIdx = firstHeaderIdx
     else
-        // FALLBACK: Wenn es kein Intro gibt, starte beim ersten Titel oder ersten echten Akkord
+        // FALLBACK: If there is no intro, start at the first header or first real chord
         for i = 0; i < Size(lines); i = i + 1 do
             if startOfSongIdx == -1 then
                 tLine = TrimString(lines[i])
@@ -6554,7 +6554,7 @@ Function WashClipboardText(rawText : String) Returns String
         end
     end
     
-    // C) Abschneiden
+    // C) Trim
     if startOfSongIdx > 0 then
         for i = startOfSongIdx; i < Size(lines); i = i + 1 do
             cleanLines <-- lines[i]
@@ -6566,7 +6566,7 @@ Function WashClipboardText(rawText : String) Returns String
     // 3. Auto-Tagger
     lines = AutoTagSections(lines)
     
-    // 4. Der Webstuhl
+    // 4. The loom
     i = 0
     While i < Size(lines) Do
         line = lines[i]
@@ -6645,11 +6645,11 @@ Function ExecuteScrub(newValue : Double, fromOSC : Boolean)
    var calcVal : Double = 0.0
    var targetBar : Integer
    
-   Trace("[SCRUB-IN] Wert=" + newValue + " | Kam vom UI (fromOSC): " + fromOSC)
+   Trace("[SCRUB-IN] Value=" + newValue + " | From UI (fromOSC): " + fromOSC)
    
-   // ---> DAS ABSOLUTE SCHUTZSCHILD GEGEN OSC-ECHOS <---
+   // ---> ABSOLUTE SHIELD AGAINST OSC ECHOES <---
    if fromOSC and TimeSinceStartup() < ScrubberTaubTimer then
-       Trace("[SCRUB-IN] Ignoriert: OSC-Echo durch Taub-Timer geblockt.")
+       Trace("[SCRUB-IN] Ignored: OSC echo blocked by deaf timer.")
    elsif IsPerformanceActive and fromOSC then
        Trace("[SCRUB-IN] Ignored: OSC echo blocked during playback.")
    else
@@ -6677,13 +6677,13 @@ Function ExecuteScrub(newValue : Double, fromOSC : Boolean)
            end
 
            If targetBar != CurrentBar Then 
-              Trace("[SCRUB-MATH] Bisheriger Offset=" + GlobalBarOffset + " | targetBar=" + targetBar + " | SysBar=" + LastSystemBar)
+              Trace("[SCRUB-MATH] Previous offset=" + GlobalBarOffset + " | targetBar=" + targetBar + " | SysBar=" + LastSystemBar)
               
               CurrentBar = targetBar
               CurrentBeat = 1 
               GlobalBarOffset = targetBar - LastSystemBar
               
-              Trace("[SCRUB-MATH] NEUER Offset=" + GlobalBarOffset)
+              Trace("[SCRUB-MATH] NEW offset=" + GlobalBarOffset)
               
               UpdatePrompter(false) 
               
@@ -6697,7 +6697,7 @@ Function ExecuteScrub(newValue : Double, fromOSC : Boolean)
 End
 
 // ---------------------------------------------------------
-// HELPER: GENOS ECHO SENDER (Die Waffe)
+// HELPER: ARRANGER ECHO SENDER
 // ---------------------------------------------------------
 Function FireArrangerTransportEcho()
     SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
@@ -6705,24 +6705,24 @@ Function FireArrangerTransportEcho()
 End
 
 // ---------------------------------------------------------
-// DER DIREKTE GENOS-TRIGGER (Nativ MIDI FA / FC)
+// DIRECT ARRANGER TRIGGER (native MIDI FA / FC)
 // ---------------------------------------------------------
 Function FireDirectArrangerTransport()
-    // Feuert Note 14 direkt an das physische MIDI Out, ohne Loopback-Gefahr!
+    // Fires Note 14 directly to the physical MIDI Out, without loopback risk!
     // (Channel 16 = 0x9F / 0x8F, since GP uses 0-based channels)
     
     // Note ON
     if arrangerDevIdx >= 0 and IsDeviceConnected(arrangerDevIdx) then
         SendNowToMidiOutDevice(GetDeviceMidiOut(arrangerDevIdx), MakeMidiMessage3(159, 14, 127))
 
-        // 50 Millisekunden warten (simuliert das Halten der Taste)
+        // Wait 50 milliseconds (simulates holding the key)
         Wait(50.0)
 
         // Note OFF
         SendNowToMidiOutDevice(GetDeviceMidiOut(arrangerDevIdx), MakeMidiMessage3(143, 14, 0))
     end
     
-    Trace(">>> FireDIREKT-OUT: Start/Stop (Note 14) physisch an Genos gesendet.")
+    Trace(">>> FireDIRECT-OUT: Start/Stop (Note 14) physically sent to arranger.")
 End
 
 
@@ -6736,14 +6736,14 @@ Function ParkFadersForVST(vstIdx : Integer)
     
     Trace("PARK: Request for VST Index " + vstIdx)
 
-    // FIX: Limit auf MAX_VSTS angehoben!
+    // FIX: Limit raised to MAX_VSTS!
     if vstIdx >= 0 and vstIdx < MAX_VSTS then
         For i = 0; i < Link_Count; i = i + 1 Do
             if Link_Active[i] and Link_Type[i] == 0 and Link_BlockIdx[i] == vstIdx then
-                
-                s = Link_SourceIdx[i] 
-                
-                // Wir parken nur Genos-Fader (Index 0-15)
+
+                s = Link_SourceIdx[i]
+
+                // Only park arranger faders (Index 0-15)
                 if s >= 0 and s <= 15 then
                     Trace("PARK: Found Match! Link " + i + " is on Slider " + s + ". Current Val: " + GetParameter(ExternalArranger, s))
                     Mem_Fader_Buffer[s] = GetParameter(ExternalArranger, s)
@@ -6766,15 +6766,15 @@ Function RestoreFadersForVST(vstIdx : Integer)
     
     Trace("RESTORE: Request for VST Index " + vstIdx)
     
-    // FIX: Limit auf MAX_VSTS angehoben!
+    // FIX: Limit raised to MAX_VSTS!
     if vstIdx >= 0 and vstIdx < MAX_VSTS then
         For i = 0; i < Link_Count; i = i + 1 Do
             if Link_Active[i] and Link_Type[i] == 0 and Link_BlockIdx[i] == vstIdx then
-                
+
                 s = Link_SourceIdx[i]
                 faderVal = 0.0
-                
-                // Wir restaurieren nur Genos-Fader (Index 0-15)
+
+                // Only restore arranger faders (Index 0-15)
                 if s >= 0 and s <= 15 then
                     if Link_IsCC[i] then
                         faderVal = Mem_Fader_Buffer[s]
@@ -7012,16 +7012,16 @@ Function SendProgramChangeToVst(vstIdx : Integer, direction : Integer)
     bankLSB = absVal / 128
     pcVal = absVal % 128
     
-    // 3. Ziel-Kanal suchen und Feuer!
+    // 3. Find target channel and fire!
     For ch = 0; ch < 16; ch = ch + 1 Do
         if RoutingMatrix[(vstIdx * 16) + ch] then
             
-            // MIDI Messages MIT expliziter Kanalangabe (ch + 1) bauen!
+            // Build MIDI messages WITH explicit channel (ch + 1)!
             msgMSB = MakeControlChangeMessageEx(0, 0, ch + 1)       // MSB = 0
             msgLSB = MakeControlChangeMessageEx(32, bankLSB, ch + 1)// LSB = Bank
             msgPC = MakeProgramChangeMessageEx(pcVal, ch + 1)       // PC = Patch 0-127
             
-            // Ab in den zentralen Trichter (ohne Array-Klammern!)
+            // Into the central funnel (without array brackets!)
             SendNow(BLK_VSTControl, msgMSB)
             SendNow(BLK_VSTControl, msgLSB)
             SendNow(BLK_VSTControl, msgPC)
@@ -7043,7 +7043,7 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
     var feedbackMsg : String = ""
     var absVal, bankLSB, pcVal : Integer
     
-    // 1. Welches Plugin ist im aktuellen Scope geladen?
+    // 1. Which plugin is loaded in the current scope?
     if Active_VST_Scope >= 0 and Active_VST_Scope < MAX_VSTS then
         loadedName = GetPluginInfo(BLK_VST[Active_VST_Scope], 0)
         
@@ -7194,7 +7194,7 @@ Function SyncBrowserToLoadedPlugin(loadedName : String)
         While i < Size(DB_VstNames) and not found Do
             if DB_VstNames[i] == loadedName then
                 
-                // 1. Publisher Index setzen
+                // 1. Set publisher index
                 pubFound = false
                 p = 0
                 // ---> INNERE SICHERE WHILE-SCHLEIFE 1 <---
@@ -7209,7 +7209,7 @@ Function SyncBrowserToLoadedPlugin(loadedName : String)
                 // 2. Liste neu filtern
                 BuildFilteredVstList()
                 
-                // 3. Plugin Index in der gefilterten Liste setzen
+                // 3. Set plugin index in the filtered list
                 favFound = false
                 p = 0
                 // ---> INNERE SICHERE WHILE-SCHLEIFE 2 <---
@@ -7337,7 +7337,7 @@ Function ContinueActualReplace(success : Boolean, slotIdx : Integer, path : Stri
         Trace("HARD-FIRE: TIMEOUT! Ghost hand silent. Attempting wake-up blindly...")
     end
 
-    // Den Weckruf absetzen
+    // Issue the wake-up call
     SetPluginBypassed(BLK_VST[slotIdx], false)
     
     // Activate the TimerTick watchdog
@@ -7432,7 +7432,7 @@ Function GetPathForVst(vstName : String) Returns String
    
    result = ""
    
-   // HIER IST DER FIX: Wir suchen in der neuen Master-Datenbank (DB_VstNames)
+   // FIX: Search in the new master database (DB_VstNames)
    // ---> SAFE WHILE-LOOP <---
    While i < Size(DB_VstNames) and not found Do
       if DB_VstNames[i] == vstName then
@@ -7536,7 +7536,7 @@ End
 Function CycleGlobalSystemMode()
    var modeName : String
    
-   // Wir haben jetzt 3 Modi: 0 (Voice), 1 (Looper), 2 (Controller Map)
+   // We now have 3 modes: 0 (Voice), 1 (Looper), 2 (Controller Map)
    GlobalSystemMode = GlobalSystemMode + 1
    if GlobalSystemMode > 2 then GlobalSystemMode = 0 end 
 
@@ -7558,7 +7558,7 @@ Function ExecuteSmartBypass()
    var i, vstIdx, k, activeInputs : Integer
    var vstNeeded : Boolean Array = [false, false, false, false, false, false, false, false, false, false]
 
-   // 1. Live-Matrix scannen (Welcher Kanal & welches VST wird gebraucht?)
+   // 1. Scan live matrix (which channel & which VST is needed?)
    For i = 0; i < 16; i = i + 1 Do
        activeInputs = 0
        For k = 0; k < 16; k = k + 1 Do
@@ -7567,7 +7567,7 @@ Function ExecuteSmartBypass()
 
        // --- NEU: KANAL BYPASS LOGIK ---
        if activeInputs > 0 then
-           // Kanal wird genutzt -> NoteProcessor aufwecken!
+           // Channel is in use -> wake NoteProcessor!
            if IsPluginBypassed(BLK_NoteProcessor[i]) then SetPluginBypassed(BLK_NoteProcessor[i], false) end
            
            // MULTI-VST CHECK (which VST is connected to this channel?)
@@ -7579,7 +7579,7 @@ Function ExecuteSmartBypass()
                End
            end
        else
-           // Kanal wird NICHT genutzt -> NoteProcessor schlafen legen!
+           // Channel is NOT in use -> put NoteProcessor to sleep!
            if not IsPluginBypassed(BLK_NoteProcessor[i]) then SetPluginBypassed(BLK_NoteProcessor[i], true) end
        end
    End
@@ -8011,7 +8011,7 @@ Function CycleChannelScope(direction : Integer)
 
    currentIdx = GetFirstActiveScope()
    
-   // Fallback, falls (theoretisch) gar kein Kanal im Scope war
+   // Fallback if (theoretically) no channel was in scope
    if currentIdx == -1 then currentIdx = 0 end
    
    // Weiterschalten mit Endlosschleife
@@ -8132,7 +8132,7 @@ Function SyncKBSplitWatchdog()
          if Abs(pMax - Mem_MaxNote[i]) > 0.001 then 
             UpdateChannelFade(i, 4, 0, 0.0)
          end
-      End // <-- Hier endet die Schleife erst!
+      End // <-- The loop only ends here!
       
    End
 End
@@ -8331,13 +8331,13 @@ Function SyncRechUI()
     For i = 0; i < limit; i = i + 1 Do
         // 1. Wir berechnen die Koordinaten aus Sicht des Widget-Arrays (Row-Major)
         // i = 0..255. 
-        // Zeile (Input Channel 0-15)
+        // Row (Input Channel 0-15)
         row = i / 16 
         // Spalte (Output Channel 0-15)
         col = i % 16
         
         // 2. Calculate the index for parameter access (transposed / column-major)
-        // Ziel: Spalte * 16 + Zeile
+        // Target: Column * 16 + Row
         transposedIdx = (col * 16) + row
 
         // 3. Sicherheitscheck und Zuweisung
@@ -8462,7 +8462,7 @@ Function SyncChannelScopeToVst(vstIdx : Integer)
                 // SPECIAL RULE FOR VOICE SELECTOR (0): Only the FIRST channel!
                 if GlobalSystemMode == 0 then
                     if not firstFound then
-                        // Der erste Kanal wird aktiviert
+                        // The first channel gets activated
                         if not OutputScope[i] then OutputScope[i] = true; changed = true end
                         firstFound = true
                     else
@@ -8557,7 +8557,7 @@ Function UpdateSoloMuteState()
        end
    End
 
-   // 2. FOCUS MODE LOGIK (Der intelligente Kontext-Schalter - ABSOLUTER BOSS)
+   // 2. FOCUS MODE LOGIC (the intelligent context switch - ABSOLUTE BOSS)
    if focusModeVal > 0.5 then
        isFocusArmed = true
        if DebugMode then Trace("SOLO-MUTE: Focus Mode ist aktiv. Strict/Smart Solo in der Matrix ignoriert.") end
@@ -8582,7 +8582,7 @@ Function UpdateSoloMuteState()
                        // Is this foreign channel connected to an input?
                        if GetParameter(RECH, (inRow * 16) + outCol) > 0.5 then
                            
-                           // Check: Feuert dieser Input gerade unseren fokussierten Kanal an?
+                           // Check: Is this input currently firing our focused channel?
                            For scopeIdx = 0; scopeIdx < 16; scopeIdx = scopeIdx + 1 Do
                                if OutputScope[scopeIdx] and GetParameter(RECH, (inRow * 16) + scopeIdx) > 0.5 then
                                    fedBySameInput = true
@@ -8678,7 +8678,7 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
    
        // Iterate over ALL 16 channels
        For i = 0; i < 16; i = i + 1 Do
-          // Ist der Kanal im UI markiert UND hat er ein Looper-VST?
+          // Is the channel selected in the UI AND does it have a looper VST?
           if OutputScope[i] and IsChannelActiveForLooper(i) then
              currentState = Mem_Loop_State[i]
              newState = -1
@@ -8827,7 +8827,7 @@ Function ChangeVstScope(direction : Integer, directIdx : Integer)
                            r = 0
                            While r < 16 and not isRoutActive Do
                                if GetParameter(RECH, (r * 16) + c) > 0.5 then 
-                                   isRoutActive = true // Bricht sofort BEIDE Schleifen ab!
+                                   isRoutActive = true // Immediately breaks BOTH loops!
                                end
                                r = r + 1
                            End
@@ -8915,14 +8915,14 @@ Function CycleChannelUsage(direction : Integer)
    var firstScopeIdx : Integer
    var currentUsage, newUsage : String
    
-   // 1. Ersten Kanal im Scope finden
+   // 1. Find first channel in scope
    // ---> UNSER SAUBERER SCOPE-HELPER <---
    firstScopeIdx = GetFirstActiveScope()
    
    // --- THE FENCE (no return statement!) ---
    if firstScopeIdx > -1 then 
    
-       // 2. Aktuellen Index in der Kategorie-Liste finden
+       // 2. Find current index in the category list
        currentUsage = ChannelUsage[firstScopeIdx]
        catIdx = -1 // Initial value for safe search
        
@@ -8935,7 +8935,7 @@ Function CycleChannelUsage(direction : Integer)
           i = i + 1
        End
        
-       // Fallback, falls die Kategorie (warum auch immer) nicht existiert
+       // Fallback if the category (for whatever reason) does not exist
        if catIdx == -1 then catIdx = 0 end
        
        // 3. Cycle (with wrap-around)
@@ -8984,7 +8984,7 @@ Function CycleScopeSection(direction : Integer)
     
     if foundAnchor == -1 then foundAnchor = 1 end // Fallback auf Hardware Sliders
     
-    // 2. Ziel-Sektion berechnen (mit Endlos-Schleife)
+    // 2. Calculate target section (with wrap-around loop)
     foundAnchor = foundAnchor + direction
     if foundAnchor < 0 then foundAnchor = Size(MacroGroup_Anchors) - 1
     elsif foundAnchor >= Size(MacroGroup_Anchors) then foundAnchor = 0 end
@@ -8992,7 +8992,7 @@ Function CycleScopeSection(direction : Integer)
     // 3. Anwenden
     CurrentEditScope = MacroGroup_Anchors[foundAnchor]
     
-    // UI Update (Hardware-Regler Stellung abholen)
+    // UI Update (fetch hardware controller position)
     if CurrentEditScope > -1 and CurrentEditScope <= 15 then
         SetWidgetValue(SLD_Morph, GetParameter(ExternalArranger, CurrentEditScope))
     else
@@ -9006,18 +9006,18 @@ Function CycleScopeSection(direction : Integer)
 End
 
 // ---------------------------------------------------------
-// SET DEFAULT CHANNEL SCOPE (Auto-Fokus auf Kanal 1)
+// SET DEFAULT CHANNEL SCOPE (auto-focus on channel 1)
 // ---------------------------------------------------------
 Function SetDefaultChannelScope()
    var i, firstActiveVST : Integer
    
-   // 1. Array-Status setzen (Nur Index 0 ist true)
+   // 1. Set array status (only index 0 is true)
    // (Hier ist For richtig, da wir wirklich alle 16 durchlaufen wollen)
    For i = 0; i < 16; i = i + 1 Do
       if i == 0 then OutputScope[i] = true else OutputScope[i] = false end
    End
    
-   // 2. DAS GEHIRN WASCHEN (Active_VST_Scope auf ersten legalen Wert setzen)
+   // 2. RESET THE BRAIN (set Active_VST_Scope to first legal value)
    firstActiveVST = -1
    
    // Which VST is connected to channel 1 (index 0)?
@@ -9032,7 +9032,7 @@ Function SetDefaultChannelScope()
        End
    end
    
-   // Wenn Kanal 1 leer ist, suchen wir das erste VST, das generell aktiv ist
+   // If channel 1 is empty, search for the first VST that is generally active
    if firstActiveVST == -1 then
        i = 0
        // ---> DIE ZWEITE SICHERE WHILE-SCHLEIFE <---
@@ -9044,7 +9044,7 @@ Function SetDefaultChannelScope()
        End
    end
    
-   // Wenn wir eins gefunden haben (oder Fallback 0), setzen wir es
+   // If we found one (or fallback 0), set it
    if firstActiveVST > -1 then Active_VST_Scope = firstActiveVST else Active_VST_Scope = 0 end
    
    if DebugMode then Trace("DEFAULT SCOPE: Active_VST_Scope resetted to " + Active_VST_Scope) end
@@ -9305,7 +9305,7 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
                if Mem_SoloStrict[strictSoloCh] == 1 then Mem_SoloStrict[strictSoloCh] = 0 else Mem_SoloStrict[strictSoloCh] = 1 end
                Mem_SoloSmart[strictSoloCh] = 0 // Strict kickt Smart
                UpdateSoloMuteState()
-               if OutputScope[strictSoloCh] then UpdateInjectionSoloDisplay() end // UI Kosmetik falls Kanal im Fokus
+               if OutputScope[strictSoloCh] then UpdateInjectionSoloDisplay() end // UI cosmetic if channel is in focus
            end
            
        // --- SMART SOLO TOGGLE ---
@@ -9562,7 +9562,7 @@ Function ProcessHardwareNote(m : NoteMessage)
         
         // Durchsuche die HAL-Datenbank nach dieser Note
         For i = 0; i < HW_Count; i = i + 1 Do
-            // WICHTIG: Wir suchen nur nach Noten!
+            // IMPORTANT: Only search for notes!
             if HW_IsNote[i] and HW_Channel[i] == chan and HW_CC[i] == noteNum then
                 Trace("HAL: Note Triggered Macro " + (HW_MacroIdx[i] + 1) + " with Val " + val)
                 
@@ -9722,7 +9722,7 @@ Function ResetData()
    LastFiredBar = -1
    GlobalBarOffset = 0
    
-   // Lokalen Monitor sofort auf Ladezustand setzen
+   // Immediately set local monitor to loading state
    OSC_SendStringSpecific("/UI/SetHeader", "", Local_IP, Local_PORT)
    OSC_SendStringSpecific("/UI/SetFooter", "", Local_IP, Local_PORT)
    OSC_SendStringSpecific("/UI/SetLyrics", "LOADING SCRIPT...", Local_IP, Local_PORT)
@@ -9761,7 +9761,7 @@ Function JumpToRegMemAnchor(regNum : Integer)
             // Wir merken uns das allererste Vorkommen im Song (als Fallback)
             if firstFoundBar == -1 then firstFoundBar = Arr_TL_Bar[i] end
 
-            // Wir suchen das Vorkommen, das VOR uns liegt (in der Zukunft)
+            // Search for the occurrence that lies AHEAD (in the future)
             if Arr_TL_Bar[i] > CurrentBar then
                 targetBar = Arr_TL_Bar[i]
                 found = true
@@ -9855,7 +9855,7 @@ Trace("PROMPTER: TimeJump -> Disabled. Ignoring forward jump.")
         end
         
     else
-        Trace("PROMPTER: Autopilot -> RegMem " + pressedRegNum + " ist bereits aktiv. Alles OK.")
+        Trace("PROMPTER: Autopilot -> RegMem " + pressedRegNum + " already active. All OK.")
     end
 End
 
@@ -9892,7 +9892,7 @@ Function FinishRecording()
     swapped = true
     endBar = CurrentBar
 
-    Trace("PROMPTER: ⬛ REC beendet. Bereich: Takt " + RecordStartBar + " bis " + endBar)
+    Trace("PROMPTER: REC finished. Range: bar " + RecordStartBar + " to " + endBar)
 
     // ==========================================
     // 3. ARRAYS MERGEN & CLEANUP (REPLACE LOGIK)
@@ -10050,7 +10050,7 @@ Function ParseSongData()
                      isSectionLine = true
                  End
              
-                 // 5. REINER TEXT (Filtert # Zeilen und ALLE {tags} aus)
+                 // 5. PURE TEXT (filters out # lines and ALL {tags})
                  if isSectionLine == false and IndexOfSubstring(line, "{", false) != 0 Then 
                      currentBlockText = currentBlockText + line + NEW_LINE 
                  End
@@ -10135,7 +10135,7 @@ Function LoadSongText(songName : String)
        // Wir nutzen deine bestehende Funktion, um die leere Struktur zu schreiben
        CreateSkeletonFile() 
        
-       // WICHTIG: Status auf 2 setzen (Wartet auf Paste)
+       // IMPORTANT: Set status to 2 (waiting for paste)
        IsEmptyMode = true
        CurrentState = 2 
        UpdatePrompter(true)
@@ -10226,7 +10226,7 @@ Function SaveSongSnapshot()
        pCount = GetParameterCount(BLK_NoteProcessor[0]) // Get dynamic length
        
        For i = 0; i < 16; i = i + 1 Do
-          // A. Routing Check: Ist der Kanal aktiv?
+          // A. Routing check: Is the channel active?
           activeInputs = 0
           For k = 0; k < 16; k = k + 1 Do if GetParameter(RECH, (k * 16) + i) > 0.5 then activeInputs = activeInputs + 1 end End
           
@@ -10272,7 +10272,7 @@ Function SaveSongSnapshot()
                             stdVal = 0.0 // Fallback
                         end
                         
-                        // DELTA-CHECK: Nur speichern, wenn der Wert vom Factory-Standard abweicht!
+                        // DELTA-CHECK: Only save if the value deviates from the factory default!
                         if Abs(val - stdVal) > 0.001 then 
                             pName = TrimString(GetParameterName(BLK_NoteProcessor[i], p))
                             content = content + "Ch" + (i+1) + "_NP_" + pName + "=" + val + NEW_LINE 
@@ -10357,7 +10357,7 @@ Function LoadSongTimeline(songFilePath : String)
             // Ein neuer Block beginnt -> wir sind fertig mit Suchen
             elsif IndexOfSubstring(line, "[", false) == 0 and line != "[Timeline]" then
                 inSection = false
-            // Wir sind im Block und die Zeile hat ein "="
+            // We are in the block and the line has an "="
             elsif inSection and IndexOfSubstring(line, "=", false) > 0 then
                 
                 kvParts = SplitString(line, "=")
@@ -10394,7 +10394,7 @@ Function LoadSongTimeline(songFilePath : String)
                 end
             end
         end
-        Trace("PROMPTER: Timeline geladen. " + Size(Arr_TL_Bar) + " Events gefunden.")
+        Trace("PROMPTER: Timeline loaded. " + Size(Arr_TL_Bar) + " events found.")
     else
         Trace("PROMPTER: Keine INI Datei gefunden. Timeline ist leer.")
     end
@@ -10470,7 +10470,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
        AutoShowGUITimer = 0.0
        IsUpdatingGUI = false
        
-       // 1. RECH (Matrix) wieder exakt auf den System-Standard setzen
+       // 1. Reset RECH (Matrix) to exactly the system default
        For i = 0; i < 256; i = i + 1 Do SetParameter(RECH, i, DEF_RECH[i]) End
        
        // 2. Clean all channels and set to system defaults
@@ -10599,7 +10599,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                            elsif Size(subParts) >= 3 then
                               blockType = subParts[1]
                               
-                              // Namen wieder zusammensetzen (z. B. "p_SplitMin")
+                              // Reassemble the name (e.g. "p_SplitMin")
                               paramNameOrIdx = ""
                               For j = 2; j < Size(subParts); j = j + 1 Do
                                  if j > 2 then paramNameOrIdx = paramNameOrIdx + "_" end
@@ -10930,7 +10930,7 @@ Function SaveStructureFromClipboard()
            
            i = 0
            stopSearch = false
-           // Schleife bricht sofort sicher ab, wenn stopSearch auf TRUE springt
+           // Loop safely exits immediately when stopSearch flips to TRUE
            While i < Size(existingLines) and not stopSearch Do
                if IndexOfSubstring(TrimString(existingLines[i]), "{", false) == 0 then
                    headerStr = headerStr + TrimString(existingLines[i]) + NEW_LINE
@@ -11063,7 +11063,7 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
                 // HIER IST DIE WEICHE:
                 // -------------------------------------------------------------
                 if remainingQueue != "" then
-                    // Es gibt noch mehr zu laden -> Skript stirbt gleich wieder
+                    // More to load -> script will die again shortly
                     TriggerNextQueueJob()
                 else
                     // WARTESCHLANGE IST LEER! Alle Plugins sind getauscht.
@@ -11073,7 +11073,7 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
                     // Bringt die Arrays, den Publisher, das VST und die UI wieder exakt in Einklang!
                     FocusBrowserOnCurrentSlot() 
                     
-                    // Aktualisiert die restlichen 4 Info-Zeilen im Display
+                    // Update the remaining 4 info lines in the display
                     UpdateVstInfoDisplay()
                     
                     // ========================================================
@@ -11146,7 +11146,7 @@ Function EvaluateTransportSync()
         
         if GetWidgetValue(BTN_Loop_HostSync) > 0.5 then
             For i = 0; i < 16; i = i + 1 Do
-            // Alle laufenden oder wartenden Looper auf STOP (4) oder EMPTY (0) setzen
+            // Set all running or waiting loopers to STOP (4) or EMPTY (0)
             if Mem_Loop_State[i] == 1 or Mem_Loop_State[i] == 2 or Mem_Loop_State[i] == 3 or Mem_Loop_State[i] == 6 then 
                 Mem_Loop_State[i] = 4 
             elsif Mem_Loop_State[i] == 5 then 
@@ -11286,7 +11286,7 @@ Initialization
                    0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
    // --- RECH MATRIX (Standard Routing) ---
-   // Wir setzen erst alles auf 0.0, dann die Ausnahmen auf 1.0
+   // Initialize all to 0.0, then set exceptions to 1.0
    DEF_RECH = []
    For i = 0; i < 256; i = i + 1 Do DEF_RECH <-- 0.0 End
    
@@ -11356,7 +11356,7 @@ Initialization
    
    Arr_Subbar_LEDs = [LBL_Subbar_1, LBL_Subbar_2, LBL_Subbar_3, LBL_Subbar_4]
    
-   // B. Hardware & Text-Datenbanken laden
+   // B. Load hardware & text databases
    LoadHardwareMap() // <- Jetzt sicher weit oben!
    LoadVstDatabase()
    BuildFilteredVstList()
@@ -12729,7 +12729,7 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
    // 1. SYSTEM SPERREN
    CurrentState = 9 // LOADING
    IsSaving = false
-   IsLoadingSnapshot = true // Wichtig: Sperre sofort setzen!
+   IsLoadingSnapshot = true // Important: Set lock immediately!
    
    // ========================================================
    // NEU: Write Mode & Record Modes beim Songwechsel killen!
@@ -12753,8 +12753,8 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
    Else
       currentGPName = GetCurrentSongName()
   
-      // Nur noch EINE Schleife!
-      foundMap = false // Hier setzen wir es vor der Schleife auf false
+      // Only ONE loop now!
+      foundMap = false // Set to false before the loop
       i = Size(Mapping_GPSong) - 1
       
       While i >= 0 and not foundMap Do
@@ -12767,7 +12767,7 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
 
                   // CROSSFADER SLIDER KALIBRIERUNG ---
                   Wait(150.0)
-                  // Sendet CC7 (Volume) mit Wert 127 auf Kanal 7 (0-basiert = 6)
+                  // Send CC7 (Volume) with value 127 on channel 7 (0-based = 6)
                   SendNowToMidiOutDevice(GetDeviceMidiOut(arrangerDevIdx), MakeControlChangeMessageEx(7, 127, 7))
               end
               // --------------------------------------
@@ -12781,7 +12781,7 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
       
       // 4. LAZY LOAD TRIGGER SETZEN
       // Anstatt hier sofort 'LoadSongSnapshot' aufzurufen (was den Crash verursacht),
-      // merken wir uns den Song und laden ihn erst im TimerTick in 200ms.
+      // store the song and load it later in TimerTick after 200ms.
       
       If InSetlistMode() Then 
          PendingSongName = currentGPName
@@ -12965,7 +12965,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
                             beatsPerBar = GetTimeSigNumerator(); if beatsPerBar <= 0 then beatsPerBar = 4 end
                             LoopLengthMS[jTgt] = (60000.0 / GetBPM()) * IntToFloat(beatsPerBar) * IntToFloat(Mem_Loop_Length[jTgt])
                          end
-                         if DebugMode then Trace("LOOPER: Ziel-Kanal " + (jTgt+1) + " wurde sofort auf REC geschaltet!") end
+                         if DebugMode then Trace("LOOPER: Target channel " + (jTgt+1) + " immediately switched to REC!") end
                          
                      elsif Mem_Loop_State[jTgt] == 4 then // Wenn Ziel gestoppt ist -> Play!
                          Mem_Loop_State[jTgt] = 2
@@ -12973,7 +12973,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
                          LoopAnchorBar[jTgt] = CurrentBar
                          LoopAnchorBeat[jTgt] = CurrentBeat
                          LoopAnchorTick[jTgt] = Global_CurrentTick
-                         if DebugMode then Trace("LOOPER: Ziel-Kanal " + (jTgt+1) + " wurde sofort auf PLAY geschaltet!") end
+                         if DebugMode then Trace("LOOPER: Target channel " + (jTgt+1) + " immediately switched to PLAY!") end
                      end
                      
                      // FIRE DIAGNOSTIC SCANNER FOR TARGET CHANNEL!
@@ -13177,7 +13177,7 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
                // === 2. TIME-MACHINE LOGIC (only execute when NOT recording) ===
                if RecordMode == 0 then
                    if IsPerformanceActive == false then
-                       // Modus: PAUSE -> Wir suchen den Takt dieser RegMem und springen dorthin
+                       // Mode: PAUSE -> Find the bar of this RegMem and jump there
                        JumpToRegMemAnchor(regNumber)
                    else
                        // Mode: PLAY -> Autopilot monitors the jump
@@ -13217,8 +13217,8 @@ On OSCMessageReceived(m : OSCMessage) Matching "/GP/ViewReady"
         OSC_IsWaitingForViewSwitch = false
         OSC_ViewSwitchTimeout = 0.0
         
-        // Wir setzen nur den Zeitstempel. Den Rest erledigt On TimerTick (Abschnitt A.1)
-        // Das gibt die 3 Sekunden "Beobachtungs-Pause", ohne GP einzufrieren.
+        // Only set the timestamp. The rest is handled by On TimerTick (section A.1)
+        // This provides the 3-second observation pause without freezing GP.
         PostViewSwitchDelayTimer = TimeSinceStartup() + 3000.0 
     else
         Trace("<<< OSC-IN: Ignoriert (Skript hat nicht auf View-Switch gewartet).")
@@ -13676,7 +13676,7 @@ On TimerTick(ms : Double)
               // ========================================================
               if GetWidgetValue(BTN_AutoShow_GUI) > 0.5 then
                   // The system already knows from loading which VST has focus.
-                  // Wir setzen den Timer auf 1 Sekunde, damit GP nach dem Laden kurz durchatmen kann.
+                  // Set timer to 1 second so GP can briefly recover after loading.
                   Pending_VST_GUI = Active_VST_Scope
                   AutoShowGUITimer = TimeSinceStartup() + 1000.0 
                   if DebugMode then Trace("AUTO-SHOW: Initial GUI open scheduled for VST " + (Active_VST_Scope + 1)) end
