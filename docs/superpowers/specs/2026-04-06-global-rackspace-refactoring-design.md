@@ -22,6 +22,7 @@
 - **No early return:** Functions use `result` variable; no `return` statement
 - **Wiring changes:** Block renames require manual adjustment in GP Wiring View
 - **Note Prozessor 7.2.gpscript:** Not modified in this refactoring
+- **Genos2_Control V2.gpscript:** Logic migrated into Global Rackspace; scriptlet becomes empty or removed
 
 ## 3. File Structure
 
@@ -212,9 +213,11 @@ GetDeviceIdxForBlock(blockIdx) → Integer               // Reverse lookup
 ### 4.7 Convenience Variables (set during Initialization)
 
 ```
-arrangerDevIdx   : Integer = -1    // Device with CAP_TRANSPORT_SYNC, or -1
-controllerDevIdx : Integer = -1    // Device with CAP_SYSEX_COMMANDS, or -1
+arrangerDevIdx   : Integer = -1    // First device with CAP_TRANSPORT_SYNC, or -1
+controllerDevIdx : Integer = -1    // First device with CAP_SYSEX_COMMANDS, or -1
 ```
+
+These are set during Initialization by scanning `DEV_Active` in index order. The first matching device wins. Users who need finer control can assign these manually in the config file via a future `[ROLES]` section.
 
 ### 4.8 Fallback Behavior
 
@@ -329,6 +332,7 @@ Within each section, functions are ordered by internal dependency layer (leaf fu
 
 - No new features added
 - No changes to `Note Prozessor 7.2.gpscript`
+- `Genos2_Control V2.gpscript` logic absorbed into Global Rackspace (scriptlet may be emptied/removed)
 - No new Scriptlets (no Wiring topology changes beyond renames)
 - No changes to existing config file formats (HardwareMap.txt, ControllerMaps.txt, VstDatabase.txt)
 - No changes to widget labels or user-facing strings
