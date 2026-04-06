@@ -674,6 +674,241 @@ Function SplitString(text : String, delimiter : String) Returns String Array
    result = resultArr
 End
 
+// ============================================================================
+// SECTION 14: HARDWARE ABSTRACTION LAYER — RUNTIME
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// 14a: Config File Parser
+// ----------------------------------------------------------------------------
+
+Function ParseCapString(capStr : String) Returns Integer
+   var parts : String Array
+   var i, caps : Integer
+   caps = 0
+   parts = SplitString(capStr, ",")
+   For i = 0; i < Size(parts); i = i + 1 Do
+      Select
+         TrimString(parts[i]) == "TRANSPORT_SYNC"      Do caps = caps + CAP_TRANSPORT_SYNC
+         TrimString(parts[i]) == "SYSEX_TRIGGER"        Do caps = caps + CAP_SYSEX_TRIGGER
+         TrimString(parts[i]) == "CROSSFADER_TARGETS"   Do caps = caps + CAP_CROSSFADER_TARGETS
+         TrimString(parts[i]) == "SYSEX_PROFILES"       Do caps = caps + CAP_SYSEX_PROFILES
+         TrimString(parts[i]) == "JOYSTICK"             Do caps = caps + CAP_JOYSTICK
+         TrimString(parts[i]) == "MIDI_OUT"             Do caps = caps + CAP_MIDI_OUT
+         TrimString(parts[i]) == "FEEDBACK_CC"          Do caps = caps + CAP_FEEDBACK_CC
+         TrimString(parts[i]) == "SYSEX_COMMANDS"       Do caps = caps + CAP_SYSEX_COMMANDS
+      End
+   End
+   result = caps
+End
+
+Function ParseControlType(typeStr : String) Returns Integer
+   result = CTYPE_FADER
+   Select
+      typeStr == "FADER"    Do result = CTYPE_FADER
+      typeStr == "ENCODER"  Do result = CTYPE_ENCODER
+      typeStr == "BUTTON"   Do result = CTYPE_BUTTON
+      typeStr == "JOYSTICK" Do result = CTYPE_JOYSTICK
+      typeStr == "PAD"      Do result = CTYPE_PAD
+   End
+End
+
+Function ParseFeedbackType(fbStr : String) Returns Integer
+   result = FB_NONE
+   Select
+      fbStr == "NONE"  Do result = FB_NONE
+      fbStr == "CC"    Do result = FB_CC
+      fbStr == "SYSEX" Do result = FB_SYSEX
+   End
+End
+
+// Parses DeviceConfig.txt (INI format) and fills DEV_*, CTRL_*, SYSEX_* registries.
+Function ParseDeviceConfig()
+   var content, line, key, val, section : String
+   var lines : String Array
+   var i, eqPos, currentDevIdx, currentCtrlIdx, currentSysExIdx : Integer
+
+   if not FileExists(DeviceConfigFilePath) then
+      Trace("HAL: No DeviceConfig.txt found at " + DeviceConfigFilePath + ". Running in fallback mode.")
+   else
+      content = LoadStringFromTextFile(DeviceConfigFilePath)
+      lines = SplitString(content, NEW_LINE)
+      section = ""
+      currentDevIdx = -1
+      currentCtrlIdx = -1
+      currentSysExIdx = -1
+
+      CTRL_DevIdx = []; CTRL_Type = []; CTRL_CC = []; CTRL_Channel = []
+      CTRL_RangeMin = []; CTRL_RangeMax = []; CTRL_Feedback = []; CTRL_Label = []
+      SYSEX_DevIdx = []; SYSEX_Purpose = []; SYSEX_Data = []
+      CTRL_Count = 0; SYSEX_Count = 0
+
+      For i = 0; i < Size(lines); i = i + 1 Do
+         line = TrimString(lines[i])
+
+         if Length(line) == 0 then
+            // skip empty line
+         elsif GetCharAtIndex(line, 0) == ";" then
+            // skip comment
+
+         elsif IndexOfSubstring(line, "[DEVICE:", false) == 0 then
+            section = "DEVICE"
+            currentDevIdx = StringToInt(CopySubstring(line, 8, 1))
+            if currentDevIdx >= 0 and currentDevIdx < MAX_DEVICES then
+               DEV_Active[currentDevIdx] = true
+            end
+
+         elsif IndexOfSubstring(line, "[CONTROL:", false) == 0 then
+            section = "CONTROL"
+            currentCtrlIdx = CTRL_Count
+            CTRL_DevIdx <-- 0; CTRL_Type <-- CTYPE_FADER; CTRL_CC <-- -1
+            CTRL_Channel <-- -1; CTRL_RangeMin <-- 0; CTRL_RangeMax <-- 127
+            CTRL_Feedback <-- FB_NONE; CTRL_Label <-- ""
+            CTRL_Count = CTRL_Count + 1
+
+         elsif IndexOfSubstring(line, "[SYSEX:", false) == 0 then
+            section = "SYSEX"
+            currentSysExIdx = SYSEX_Count
+            SYSEX_DevIdx <-- 0; SYSEX_Purpose <-- ""; SYSEX_Data <-- ""
+            SYSEX_Count = SYSEX_Count + 1
+
+         else
+            eqPos = IndexOfSubstring(line, "=", false)
+            if eqPos > 0 then
+               key = TrimString(CopySubstring(line, 0, eqPos))
+               val = TrimString(CopySubstring(line, eqPos + 1, Length(line) - eqPos - 1))
+
+               if section == "DEVICE" and currentDevIdx >= 0 and currentDevIdx < MAX_DEVICES then
+                  Select
+                     key == "Name"     Do DEV_Name[currentDevIdx] = val
+                     key == "MidiIn"   Do DEV_MidiIn[currentDevIdx] = val
+                     key == "MidiOut"  Do DEV_MidiOut[currentDevIdx] = val
+                     key == "Channel"  Do DEV_Channel[currentDevIdx] = StringToInt(val)
+                     key == "Caps"     Do DEV_Caps[currentDevIdx] = ParseCapString(val)
+                  End
+
+               elsif section == "CONTROL" and currentCtrlIdx >= 0 then
+                  Select
+                     key == "Device"   Do CTRL_DevIdx[currentCtrlIdx] = StringToInt(val)
+                     key == "Label"    Do CTRL_Label[currentCtrlIdx] = val
+                     key == "Type"     Do CTRL_Type[currentCtrlIdx] = ParseControlType(val)
+                     key == "CC"       Do CTRL_CC[currentCtrlIdx] = StringToInt(val)
+                     key == "Channel"  Do CTRL_Channel[currentCtrlIdx] = StringToInt(val)
+                     key == "RangeMin" Do CTRL_RangeMin[currentCtrlIdx] = StringToInt(val)
+                     key == "RangeMax" Do CTRL_RangeMax[currentCtrlIdx] = StringToInt(val)
+                     key == "Feedback" Do CTRL_Feedback[currentCtrlIdx] = ParseFeedbackType(val)
+                  End
+
+               elsif section == "SYSEX" and currentSysExIdx >= 0 then
+                  Select
+                     key == "Device"   Do SYSEX_DevIdx[currentSysExIdx] = StringToInt(val)
+                     key == "Purpose"  Do SYSEX_Purpose[currentSysExIdx] = val
+                     key == "Data"     Do SYSEX_Data[currentSysExIdx] = val
+                  End
+               end
+            end
+         end
+      End
+
+      Trace("HAL: Loaded " + IntToString(CTRL_Count) + " controls, " + IntToString(SYSEX_Count) + " SysEx commands.")
+   end
+End
+
+// ----------------------------------------------------------------------------
+// 14b: Device Lookup
+// ----------------------------------------------------------------------------
+
+Function DeviceHasCap(devIdx : Integer, cap : Integer) Returns Boolean
+   if devIdx >= 0 and devIdx < MAX_DEVICES and DEV_Active[devIdx] then
+      result = (DEV_Caps[devIdx] And cap) > 0
+   end
+End
+
+Function GetDeviceIdxByName(name : String) Returns Integer
+   var i : Integer
+   result = -1
+   For i = 0; i < MAX_DEVICES; i = i + 1 Do
+      if DEV_Active[i] and DEV_Name[i] == name then result = i end
+   End
+End
+
+Function GetDeviceMidiOut(devIdx : Integer) Returns String
+   result = ""
+   if devIdx >= 0 and devIdx < MAX_DEVICES then result = DEV_MidiOut[devIdx] end
+End
+
+Function IsDeviceConnected(devIdx : Integer) Returns Boolean
+   if devIdx >= 0 and devIdx < MAX_DEVICES and DEV_Active[devIdx] and DEV_MidiOut[devIdx] != "" then
+      result = MidiOutDeviceExists(DEV_MidiOut[devIdx])
+   end
+End
+
+// ----------------------------------------------------------------------------
+// 14c: Control Lookup
+// ----------------------------------------------------------------------------
+
+Function FindControl(devIdx : Integer, cc : Integer) Returns Integer
+   var i : Integer
+   result = -1
+   For i = 0; i < CTRL_Count; i = i + 1 Do
+      if CTRL_DevIdx[i] == devIdx and CTRL_CC[i] == cc then result = i end
+   End
+End
+
+Function GetControlType(ctrlIdx : Integer) Returns Integer
+   result = -1
+   if ctrlIdx >= 0 and ctrlIdx < CTRL_Count then result = CTRL_Type[ctrlIdx] end
+End
+
+Function GetControlFeedback(ctrlIdx : Integer) Returns Integer
+   result = FB_NONE
+   if ctrlIdx >= 0 and ctrlIdx < CTRL_Count then result = CTRL_Feedback[ctrlIdx] end
+End
+
+// ----------------------------------------------------------------------------
+// 14d: SysEx Lookup & Send
+// ----------------------------------------------------------------------------
+
+Function GetDeviceSysEx(devIdx : Integer, purpose : String) Returns String
+   var i : Integer
+   result = ""
+   For i = 0; i < SYSEX_Count; i = i + 1 Do
+      if SYSEX_DevIdx[i] == devIdx and SYSEX_Purpose[i] == purpose then
+         result = SYSEX_Data[i]
+      end
+   End
+End
+
+Function SendDeviceSysEx(devIdx : Integer, purpose : String)
+   var data, outDev : String
+   if IsDeviceConnected(devIdx) then
+      data = GetDeviceSysEx(devIdx, purpose)
+      outDev = GetDeviceMidiOut(devIdx)
+      if data != "" and outDev != "" then
+         SendSysexNowToMidiOutDevice(SM_CreateSysexFromString(data), outDev)
+      end
+   end
+End
+
+// ----------------------------------------------------------------------------
+// 14e: Device-to-Block Mapping
+// ----------------------------------------------------------------------------
+
+Function MapDevicesToBlocks()
+   var i : Integer
+   For i = 0; i < MAX_DEVICES; i = i + 1 Do
+      DEV_BlockIdx[i] = -1
+      if DEV_Active[i] then DEV_BlockIdx[i] = i end
+   End
+End
+
+Function GetDeviceIdxForBlock(blockIdx : Integer) Returns Integer
+   result = -1
+   if blockIdx >= 0 and blockIdx < MAX_DEVICES and DEV_Active[blockIdx] then
+      result = blockIdx
+   end
+End
+
 // ----------------------------------------------------------------------
 // --- HELPER: Setzt die Farbe und den Selektions-Status eines Kanals ---
 // ----------------------------------------------------------------------
