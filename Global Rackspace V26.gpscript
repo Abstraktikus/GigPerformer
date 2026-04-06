@@ -555,6 +555,11 @@ Var
 // SECTION 13: CORE UTILITIES
 // ============================================================================
 
+
+// ============================================================================
+// SECTION 13: CORE UTILITIES
+// ============================================================================
+
 Function Wait(ms : Double)
    var t_wait : Double = 0.0
    t_wait = TimeSinceStartup();
@@ -879,12 +884,6 @@ Function GetActiveLooperScope() Returns Integer
     End
 End
 
-Function ShowCtrlOverlay(msg : String, durationMS : Double)
-   Ctrl_OverlayMsg = msg
-   Ctrl_OverlayTimer = TimeSinceStartup() + durationMS
-   RefreshCtrlInfoDisplay()
-End
-
 // ---------------------------------------------------------
 // HELPER: GET CURRENT MAP SLOT
 // ---------------------------------------------------------
@@ -894,33 +893,6 @@ Function GetActiveMapSlot() Returns Integer
    else
        result = 0 // Fallback auf VST 1
    end
-End
-
-// ----------------------------------------------------------------------
-// --- SMART CONFIG CHECK ---
-// ----------------------------------------------------------------------
-
-// Returns TRUE if the channel deviates from the default (is custom)
-Function IsChannelCustom(chIdx : Integer) Returns Boolean
-   // CheckBlock returns false on deviation; invert to get custom flag
-   result = not CheckBlock(BLK_NoteProcessor[chIdx], DEF_NoteProcessor, "IsCust NP")
-End
-
-Function IsChannelFactory(chIdx : Integer) Returns Boolean
-   // Returns true if all values match the factory array exactly
-   result = CheckBlock(BLK_NoteProcessor[chIdx], FACT_NoteProcessor, "IsFact NP")
-End
-
-Function ShowVSTOverlay(msg : String, durationMS : Double)
-    VST_OverlayMsg = msg
-    VST_OverlayTimer = TimeSinceStartup() + durationMS
-    RefreshVstInfoDisplay()
-End
-
-Function ShowRecOverlay(msg : String, durationMS : Double)
-    Rec_OverlayMsg = msg
-    Rec_OverlayTimer = TimeSinceStartup() + durationMS
-    RefreshRecDisplay(GetWidgetValue(SLD_CurrentState))
 End
 
 // ---------------------------------------------------------
@@ -1161,10 +1133,6 @@ End
 // SECTION 14: HARDWARE ABSTRACTION LAYER — RUNTIME
 // ============================================================================
 
-// ----------------------------------------------------------------------------
-// 14a: Config File Parser
-// ----------------------------------------------------------------------------
-
 Function ParseCapString(capStr : String) Returns Integer
    var parts : String Array
    var i, caps : Integer
@@ -1397,9 +1365,6 @@ End
 // SECTION 15: MIDI & CHANNEL ENGINE
 // ============================================================================
 
-// ---------------------------------------------------------
-// HELPER: GET PARAMETER INDEX BY NAME
-// ---------------------------------------------------------
 Function GetParamIdxByName(blk : PluginBlock, targetName : String) Returns Integer
    var p, pCount : Integer
    var found : Boolean = false
@@ -1469,6 +1434,31 @@ Function CheckBlock(blk : PluginBlock, arr : Double Array, context : String) Ret
    end
 End
 
+
+// ============================================================================
+// SECTION 13: CORE UTILITIES
+// ============================================================================
+
+// ----------------------------------------------------------------------
+// --- SMART CONFIG CHECK ---
+// ----------------------------------------------------------------------
+
+// Returns TRUE if the channel deviates from the default (is custom)
+Function IsChannelCustom(chIdx : Integer) Returns Boolean
+   // CheckBlock returns false on deviation; invert to get custom flag
+   result = not CheckBlock(BLK_NoteProcessor[chIdx], DEF_NoteProcessor, "IsCust NP")
+End
+
+Function IsChannelFactory(chIdx : Integer) Returns Boolean
+   // Returns true if all values match the factory array exactly
+   result = CheckBlock(BLK_NoteProcessor[chIdx], FACT_NoteProcessor, "IsFact NP")
+End
+
+
+// ============================================================================
+// SECTION 15: MIDI & CHANNEL ENGINE
+// ============================================================================
+
 // ----------------------------------------------------------------------
 // --- FACTORY & DEFAULT LEARNING (Dynamic & Object-Oriented) ---
 // ----------------------------------------------------------------------
@@ -1521,152 +1511,6 @@ Function Trigger_NotesOff(ch : Integer)
           if DebugMode then Trace("NOTES OFF: Triggered Panic on NoteProcessor for Channel " + ch) end
       end
    end
-End
-
-// ---------------------------------------------------------
-// INJECTION KBSPLIT (Lowest/Highest)
-// ---------------------------------------------------------
-
-Function InjectKBSplitToggle(paramName : String, uiVal : Double)
-   var i, pIdx : Integer
-   For i = 0; i < 16; i = i + 1 Do
-      if OutputScope[i] then
-         pIdx = GetParamIdxByName(BLK_NoteProcessor[i], paramName)
-         if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, uiVal) end
-         if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
-      end
-   End
-   UpdateMetaColors() 
-End
-
-// ---------------------------------------------------------
-// INJECT FILTER TOGGLE
-// ---------------------------------------------------------
-Function InjectFilterToggle(paramName : String, uiVal : Double)
-   var i, pIdx : Integer
-   
-   Trace(">>> INJECT: Button '" + paramName + "' pressed (target: " + uiVal + ")")
-   
-   For i = 0; i < 16; i = i + 1 Do
-      if OutputScope[i] then
-         pIdx = GetParamIdxByName(BLK_NoteProcessor[i], paramName)
-         
-         if pIdx > -1 then 
-             SetParameter(BLK_NoteProcessor[i], pIdx, uiVal) 
-             Trace("    [OK] Ch " + (i+1) + ": Parameter at index " + pIdx + " found -> Toggled!")
-         else
-             Trace("    [ERROR] Ch " + (i+1) + ": Parameter '" + paramName + "' DOES NOT EXIST! (Old scriptlet version?)")
-         end
-      end
-   End
-   UpdateMetaColors() 
-End
-
-// ---------------------------------------------------------
-// INJECT TRANSPOSE 
-// ---------------------------------------------------------
-Function InjectTranspose(steps : Integer)
-   var i, newVal, pIdx : Integer
-   var paramVal : Double = 0.0
-   
-   Trace(">>> INJECT: Transpose pressed (Steps: " + steps + ")")
-   
-   For i = 0; i < 16; i = i + 1 Do
-      if OutputScope[i] then
-         newVal = Mem_Transpose[i] + steps
-         
-         if newVal < -48 then newVal = -48
-         elsif newVal > 48 then newVal = 48
-         end
-         
-         Mem_Transpose[i] = newVal
-         paramVal = (IntToFloat(newVal) + 48.0) / 96.0
-         
-         pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_Transpose")
-         if pIdx > -1 then 
-             SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) 
-             Trace("    [OK] Ch " + (i+1) + ": Transpose at index " + pIdx + " found -> Applied!")
-         else
-             Trace("    [ERROR] Ch " + (i+1) + ": Parameter 'p_Transpose' DOES NOT EXIST!")
-         end
-         
-         if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
-      end
-   End
-   
-   UpdateInjectionTransposeDisplay()
-   UpdateMetaColors() 
-End
-
-// ---------------------------------------------------------
-// INJECT USER MUTE
-// ---------------------------------------------------------
-
-Function InjectUserMuteToggle(uiVal : Double)
-   var i, intVal, idx_mute : Integer
-   if uiVal > 0.5 then intVal = 1 else intVal = 0 end
-   
-   For i = 0; i < 16; i = i + 1 Do
-      if OutputScope[i] then
-         Mem_UserMute[i] = intVal
-         
-         // Dynamic lookup
-         idx_mute = GetParamIdxByName(BLK_NoteProcessor[i], "p_UserMute")
-         if idx_mute > -1 then SetParameter(BLK_NoteProcessor[i], idx_mute, uiVal) end
-         
-         // If muting, ensure no notes are stuck
-         if intVal == 1 and not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
-      end
-   End
-   UpdateMetaColors() 
-End
-
-// ---------------------------------------------------------
-// VST MANUAL OVERRIDE BYPASS CALLBACKS
-// ---------------------------------------------------------
-
-Function HandleInjectBypassClick(btnIdx : Integer, val : Double)
-    var i, count, firstScopeIdx, targetVstIdx : Integer
-    
-    // GPScript-compliant guard:
-    if not IsUpdatingBypassUI then
-        
-        // ---> UNSER SAUBERER SCOPE-HELPER <---
-        firstScopeIdx = GetFirstActiveScope()
-
-        if firstScopeIdx > -1 then
-            count = 0
-            targetVstIdx = -1
-            
-            // Which VST belongs to this button?
-            if Size(RoutingMatrix) == 160 then
-                i = 0
-                // ---> DIE SICHERE WHILE-SCHLEIFE <---
-                While i < MAX_VSTS and targetVstIdx == -1 Do
-                    if RoutingMatrix[(i * 16) + firstScopeIdx] == true then
-                        if count == btnIdx then
-                            targetVstIdx = i
-                        end
-                        count = count + 1
-                    end
-                    i = i + 1 // Always increment
-                End
-            end
-
-            // Write value to RAM and execute
-            if targetVstIdx > -1 then
-                if val > 0.5 then
-                    Mem_ManualVSTBypass[targetVstIdx] = true  // Bypass AN (Button leuchtet)
-                else
-                    Mem_ManualVSTBypass[targetVstIdx] = false // Bypass AUS (Button dunkel)
-                end
-                
-                // Force immediate re-evaluation
-                ExecuteSmartBypass()
-            end
-        end
-        
-    end // End of guard block
 End
 
 // ---------------------------------------------------------
@@ -1842,146 +1686,11 @@ Function CopyMidiParams(src : MidiInBlock, dest : MidiInBlock)
    For p = 0; p < count; p = p + 1 Do SetParameter(dest, p, GetParameter(src, p)) End
 End
 
-// ---------------------------------------------------------
-// KB-sPLIT WATCHDOG
-// ---------------------------------------------------------
-
-Function SyncKBSplitWatchdog()
-   var i : Integer; var pMin, pMax : Double = 0.0
-   
-   // Only check when not loading
-   If not IsLoadingSnapshot Then
-      
-      For i = 0; i < 16; i = i + 1 Do
-         // 1. Echte Werte aus dem Plugin lesen
-         pMin = GetParameter(BLK_MidiIn[i], 16)
-         pMax = GetParameter(BLK_MidiIn[i], 17)
-         
-         // 2. Check MIN
-         if Abs(pMin - Mem_MinNote[i]) > 0.001 then 
-            UpdateChannelFade(i, 4, 0, 0.0) 
-         end
-         
-         // 3. Check MAX (must remain inside the loop)
-         if Abs(pMax - Mem_MaxNote[i]) > 0.001 then 
-            UpdateChannelFade(i, 4, 0, 0.0)
-         end
-      End // <-- Hier endet die Schleife erst!
-      
-   End
-End
-
-// ---------------------------------------------------------
-// INJECTION HELPER & CALLBACKS: NOTE PROCESSOR
-// ---------------------------------------------------------
-
-Function InjectNPToggle(paramType : Integer, paramName : String, uiVal : Double)
-   var i, intVal, pIdx : Integer
-   if uiVal > 0.5 then intVal = 1 else intVal = 0 end
-   
-   For i = 0; i < 16; i = i + 1 Do
-      if OutputScope[i] then
-         if paramType == 0 then Mem_NP_ChordMode[i] = intVal
-         elsif paramType == 1 then Mem_NP_LatchMode[i] = intVal
-         elsif paramType == 2 then Mem_NP_Engine[i] = intVal
-         elsif paramType == 3 then Mem_NP_MuteOrig[i] = intVal
-         elsif paramType == 4 then Mem_NP_AutoSustain[i] = intVal
-         elsif paramType == 5 then Mem_NP_Octaver[i] = intVal
-         elsif paramType == 6 then Mem_NP_OctaverMuteOrig[i] = intVal
-         elsif paramType == 7 then Mem_NP_VelRangeActive[i] = intVal
-         elsif paramType == 8 then Mem_NP_HumanizeActive[i] = intVal
-         elsif paramType == 9 then Mem_NP_QuantizeActive[i] = intVal
-         end
-         
-         pIdx = GetParamIdxByName(BLK_NoteProcessor[i], paramName)
-         if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, IntToFloat(intVal)) end
-         
-         if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
-      end
-   End
-   // UI update is intentionally deferred to avoid flickering
-   UpdateMetaColors() 
-End
-
-Function InjectNPStep(paramType : Integer, paramName : String, direction : Integer)
-   var i, newVal, pIdx : Integer
-   var pluginVal : Double = 0.0
-   
-   For i = 0; i < 16; i = i + 1 Do
-      if OutputScope[i] then
-         if paramType == 0 then // MinKeys (1-5)
-            newVal = Mem_NP_MinKeys[i] + direction
-            if newVal < 1 then newVal = 1 elsif newVal > 5 then newVal = 5 end
-            Mem_NP_MinKeys[i] = newVal; pluginVal = (IntToFloat(newVal) - 1.0) / 4.0 
-         elsif paramType == 1 then // OctaveOffset (-3 bis 3)
-            newVal = Mem_NP_Octave[i] + direction
-            if newVal < -3 then newVal = -3 elsif newVal > 3 then newVal = 3 end
-            Mem_NP_Octave[i] = newVal; pluginVal = (IntToFloat(newVal) + 3.0) / 6.0 
-         elsif paramType == 2 then // OctLow (0-3)
-            newVal = Mem_NP_OctLow[i] + direction
-            if newVal < 0 then newVal = 0 elsif newVal > 3 then newVal = 3 end
-            Mem_NP_OctLow[i] = newVal; pluginVal = IntToFloat(newVal) / 3.0 
-         elsif paramType == 3 then // OctLowOffset (0-3)
-            newVal = Mem_NP_OctLowOffset[i] + direction
-            if newVal < 0 then newVal = 0 elsif newVal > 3 then newVal = 3 end
-            Mem_NP_OctLowOffset[i] = newVal; pluginVal = IntToFloat(newVal) / 3.0 
-         elsif paramType == 4 then // OctHigh (0-3)
-            newVal = Mem_NP_OctHigh[i] + direction
-            if newVal < 0 then newVal = 0 elsif newVal > 3 then newVal = 3 end
-            Mem_NP_OctHigh[i] = newVal; pluginVal = IntToFloat(newVal) / 3.0 
-         elsif paramType == 5 then // OctHighOffset (0-3)
-            newVal = Mem_NP_OctHighOffset[i] + direction
-            if newVal < 0 then newVal = 0 elsif newVal > 3 then newVal = 3 end
-            Mem_NP_OctHighOffset[i] = newVal; pluginVal = IntToFloat(newVal) / 3.0 
-
-         // --- V7.4 NEUE STEPS ---
-         elsif paramType == 6 then // MinVel (0-127)
-            newVal = Mem_NP_MinVel[i] + direction
-            if newVal < 0 then newVal = 0 elsif newVal > 127 then newVal = 127 end
-            // Prevent Min from exceeding Max
-            if newVal > Mem_NP_MaxVel[i] then newVal = Mem_NP_MaxVel[i] end
-            Mem_NP_MinVel[i] = newVal; pluginVal = IntToFloat(newVal) / 127.0 
-         elsif paramType == 7 then // MaxVel (0-127)
-            newVal = Mem_NP_MaxVel[i] + direction
-            if newVal < 0 then newVal = 0 elsif newVal > 127 then newVal = 127 end
-            // Prevent Max from going below Min
-            if newVal < Mem_NP_MinVel[i] then newVal = Mem_NP_MinVel[i] end
-            Mem_NP_MaxVel[i] = newVal; pluginVal = IntToFloat(newVal) / 127.0 
-         elsif paramType == 8 then // HumVel (0-100)
-            newVal = Mem_NP_HumVel[i] + direction
-            if newVal < 0 then newVal = 0 elsif newVal > 100 then newVal = 100 end
-            Mem_NP_HumVel[i] = newVal; pluginVal = IntToFloat(newVal) / 100.0 
-         elsif paramType == 9 then // HumTime (0-100)
-            newVal = Mem_NP_HumTime[i] + direction
-            if newVal < 0 then newVal = 0 elsif newVal > 100 then newVal = 100 end
-            Mem_NP_HumTime[i] = newVal; pluginVal = IntToFloat(newVal) / 100.0 
-         elsif paramType == 10 then // QuantKey (0-11)
-            newVal = Mem_NP_QuantKey[i] + direction
-            if newVal < 0 then newVal = 11 elsif newVal > 11 then newVal = 0 end // Wrap around
-            Mem_NP_QuantKey[i] = newVal; pluginVal = IntToFloat(newVal) / 11.0 
-         elsif paramType == 11 then // QuantScale (0-5)
-            newVal = Mem_NP_QuantScale[i] + direction
-            if newVal < 0 then newVal = 5 elsif newVal > 5 then newVal = 0 end // Wrap around
-            Mem_NP_QuantScale[i] = newVal; pluginVal = IntToFloat(newVal) / 5.0 
-         end
-         
-         pIdx = GetParamIdxByName(BLK_NoteProcessor[i], paramName)
-         if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, pluginVal) end
-         if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
-      end
-   End
-   UpdateInjectionNPDisplay()
-   UpdateMetaColors()
-End
-
 
 // ============================================================================
 // SECTION 16: DISPLAY ENGINE
 // ============================================================================
 
-// ---------------------------------------------------------
-// RECORDER LED ENGINE
-// ---------------------------------------------------------
 Function UpdateSubbarLEDs(currentBeat : Integer)
     var i : Integer
     var ledIndex : Integer
@@ -2119,6 +1828,22 @@ Function RefreshVstInfoDisplay()
        SetWidgetLabel(LBL_VSTConfiguration, finalText)
    end
 End
+
+
+// ============================================================================
+// SECTION 13: CORE UTILITIES
+// ============================================================================
+
+Function ShowVSTOverlay(msg : String, durationMS : Double)
+    VST_OverlayMsg = msg
+    VST_OverlayTimer = TimeSinceStartup() + durationMS
+    RefreshVstInfoDisplay()
+End
+
+
+// ============================================================================
+// SECTION 16: DISPLAY ENGINE
+// ============================================================================
 
 Function RefreshSafeReplacerUI()
    var realSlotIdx : Integer 
@@ -2612,83 +2337,6 @@ Function UpdateInjectionLooperTransportUI()
 End
 
 // ---------------------------------------------------------
-// UPDATE LOOPER INJECTION DISPLAY
-// ---------------------------------------------------------
-
-Function UpdateInjectionLooperDisplay()
-   var focusCh : Integer
-   var targetTxt : String
-   var isValid : Boolean = false
-   
-   focusCh = GetFirstActiveScope()
-   
-   if focusCh != -1 then
-      if IsChannelActiveForLooper(focusCh) then isValid = true end
-   end
-   
-   if not isValid then
-      SetWidgetLabel(LBL_LoopAction, "Bypassed")
-      SetWidgetLabel(LBL_LoopTarget, "-")
-      SetWidgetLabel(LBL_LoopLength, "-")
-      SetWidgetLabel(LBL_LoopOut, "-") 
-      SetWidgetLabel(LBL_LoopStop, "-") 
-   else
-      SetWidgetLabel(LBL_LoopLength, GetLoopLengthName(Mem_Loop_Length[focusCh]))
-      SetWidgetLabel(LBL_LoopAction, GetLoopActionName(Mem_Loop_Action[focusCh]))
-      
-      if Mem_Loop_Target[focusCh] == -1 then targetTxt = "STAY" 
-      else targetTxt = "-> CH " + IntToString(Mem_Loop_Target[focusCh] + 1) end
-      SetWidgetLabel(LBL_LoopTarget, targetTxt)
-      
-      SetWidgetLabel(LBL_LoopOut, GetLoopOutName(Mem_Loop_OutMode[focusCh]))
-      SetWidgetLabel(LBL_LoopStop, GetLoopStopName(Mem_Loop_StopMode[focusCh]))
-   end
-   
-   BuildLooperConfigLines() 
-   UpdateInjectionLooperTransportUI()
-End
-
-// ---------------------------------------------------------
-// REFRESH ALL INJECTION DISPLAYS
-// Refreshes the entire lower UI half based on scope
-// ---------------------------------------------------------
-Function RefreshAllInjectionDisplays()
-   // Add any additional displays here
-   UpdateInjectionSplitDisplay()
-   UpdateInjectionFadeDisplay()
-   UpdateInjectionTransposeDisplay()
-   UpdateInjectionFilterDisplay()
-   UpdateInjectionNPDisplay()
-   UpdateInjectionMuteDisplay()
-   UpdateUsageLabelDisplay()
-   UpdateScopeVelocityMeter()
-   UpdateInjectionLooperDisplay()
-End
-
-// ---------------------------------------------------------
-// STATE-DEPENDENT COLORS --> OUTPUT
-// ---------------------------------------------------------
-Function UpdateMetaColors()
-   var i, colorCode, inCh : Integer
-   var healed : Boolean = false 
-   
-   OutputSyncTimer = TimeSinceStartup() + 150.0
-   
-   For i = 0; i < 16; i = i + 1 Do
-      // ... (Auto-Healer bleibt) ...
-      colorCode = AnalyzeChannel(i)
-      SetChannelState(i, colorCode)
-   End
-    
-   RefreshDiagDisplay()  
-   // ---> HIER WURDE ExecuteSmartBypass() ENTFERNT! <---
-   
-   if healed then 
-       UpdateInjectionLooperDisplay() 
-   end
-End
-
-// ---------------------------------------------------------
 // INPUT FEEDBACK (TRISTATE LOGIK)
 // ---------------------------------------------------------
 
@@ -2888,6 +2536,22 @@ Function RefreshCtrlInfoDisplay()
     end
 End
 
+
+// ============================================================================
+// SECTION 13: CORE UTILITIES
+// ============================================================================
+
+Function ShowCtrlOverlay(msg : String, durationMS : Double)
+   Ctrl_OverlayMsg = msg
+   Ctrl_OverlayTimer = TimeSinceStartup() + durationMS
+   RefreshCtrlInfoDisplay()
+End
+
+
+// ============================================================================
+// SECTION 17: CONTROLLER MAP ENGINE
+// ============================================================================
+
 // ---------------------------------------------------------
 // GENOS KNOBS UND SLIDER INFO DISPLAY (FOR MORPHFADER)
 // ---------------------------------------------------------
@@ -3010,30 +2674,6 @@ Function ScrollToCurrentCtrlScope()
     // 5. Wert setzen und Display rendern
     SetWidgetValue(SLD_ControllerInfo, scrollVal)
     RefreshCtrlInfoDisplay()
-End
-
-Function ExecuteLink(i : Integer, val : Double)
-   var scaledVal : Double = Link_MinVal[i] + (val * (Link_MaxVal[i] - Link_MinVal[i]))
-   var midiVal : Integer
-   var m : MidiMessage
-
-   if Link_IsCC[i] == true then
-       midiVal = Round(scaledVal * 127.0)
-       if midiVal < 0 then midiVal = 0 elsif midiVal > 127 then midiVal = 127 end
-       
-       if Link_Type[i] == 0 then 
-           m = MakeControlChangeMessageEx(Link_TargetParam[i], midiVal, GetChannelForVST(Link_BlockIdx[i]))
-           SendNow(BLK_VSTControl, m)
-       elsif Link_Type[i] == 3 then
-           m = MakeControlChangeMessageEx(Link_TargetParam[i], midiVal, Link_BlockIdx[i])
-           SendNow(BLK_VSTControl, m)
-       end
-   else
-       if Link_Type[i] == 0 then SetParameter(BLK_VST[Link_BlockIdx[i]], Link_TargetParam[i], scaledVal)
-       elsif Link_Type[i] == 1 then SetParameter(BLK_NoteProcessor[Link_BlockIdx[i]], Link_TargetParam[i], scaledVal)
-       elsif Link_Type[i] == 2 then SetParameter(AudioMixer, Link_TargetParam[i], scaledVal)
-       end
-   end
 End
 
 // ---------------------------------------------------------
@@ -3654,462 +3294,6 @@ Function UnlearnHardware(mIdx : Integer)
    Trace("HAL: Unlearned all external controllers for Macro " + (mIdx + 1))
 End
 
-// ---------------------------------------------------------------------
-// APPLY EDITOR-TEST // Executes the test fader logic in the editor
-// ---------------------------------------------------------------------
-
-Function ApplyEditorTest(val : Double)
-    var i, midiVal : Integer
-    var scaledVal : Double = 0.0
-    var m : MidiMessage 
-    
-    if CurrentEditScope == -1 then
-        For i = 0; i < Link_Count; i = i + 1 Do
-            if Link_Active[i] then ExecuteLink(i, val) end
-        End
-    else
-        // ---> GUARD <---
-        if CurrentEditScope >= 0 and CurrentEditScope <= 15 then
-            SetParameter(ExternalArranger, CurrentEditScope, val)
-        end
-        
-        For i = 0; i < Link_Count; i = i + 1 Do
-            if Link_Active[i] and Link_SourceIdx[i] == CurrentEditScope then ExecuteLink(i, val) end
-        End
-    end
-End
-
-// ---------------------------------------------------------
-// THE MAGIC EAR (MIDI LEARN LISTENER)
-// ---------------------------------------------------------
-
-// 1. Die Intelligenz: Hier passiert die eigentliche Arbeit
-Function ProcessMidiLearn(m : NoteMessage)
-   var noteNum, pIdx, vel, i : Integer
-   var paramVal : Double = 0.0
-   
-   // Only respond when learning and the key is pressed
-   if (IsLearningMin or IsLearningMax) and IsNoteOn(m) then
-       
-       noteNum = GetNoteNumber(m)
-       paramVal = noteNum / 127.0 // Convert to 0.0-1.0 for the plugin
-       
-       // INJECTION: Push the value to all selected channels
-       For i = 0; i < 16; i = i + 1 Do
-          if OutputScope[i] then
-             
-             if IsLearningMin then
-                // Parameter 0 ist p_SplitMin in Deinem V7.1 NoteProcessor!
-                SetParameter(BLK_NoteProcessor[i], 0, paramVal)
-             else
-                // Parameter 1 ist p_SplitMax in Deinem V7.1 NoteProcessor!
-                SetParameter(BLK_NoteProcessor[i], 1, paramVal)
-             end
-             
-             // Sync memory and plugin
-             UpdateChannelFade(i, 4, 0, 0.0) 
-             
-             // Prevent stuck notes when transposing
-             if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
-          end
-       End
-       
-       // Auto-Off: Learn Modus beenden und Buttons ausschalten
-       IsLearningMin = false
-       IsLearningMax = false
-       SetWidgetValue(BTN_LearnMin, 0.0)
-       SetWidgetValue(BTN_LearnMax, 0.0)
-       
-       
-       // UI aktualisieren
-       UpdateInjectionSplitDisplay()
-       UpdateMetaColors() // Split changed, channel may now be [CUST]
-       
-       Trace("LEARN SUCCESS: Injected Note " + noteNum + " to Scope.")
-   end
-   
-   if (IsLearningVelMin or IsLearningVelMax) and IsNoteOn(m) then
-           vel = GetVelocity(m)
-           paramVal = IntToFloat(vel) / 127.0
-           
-           For i = 0; i < 16; i = i + 1 Do
-              if OutputScope[i] then
-                 if IsLearningVelMin then
-                    Mem_NP_MinVel[i] = vel
-                    pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_MinVel")
-                 else
-                    Mem_NP_MaxVel[i] = vel
-                    pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_MaxVel")
-                 end
-                 
-                 // Ins Plugin injizieren
-                 if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) end
-              end
-           End
-           
-           // Auto-Off: Learn Modus beenden
-           IsLearningVelMin = false
-           IsLearningVelMax = false
-           SetWidgetValue(BTN_Inject_NP_VelMinLearn, 0.0)
-           SetWidgetValue(BTN_Inject_NP_VelMaxLearn, 0.0)
-           
-           UpdateInjectionNPDisplay()
-           UpdateMetaColors() 
-           Trace("LEARN SUCCESS: Injected Velocity " + vel + " to Scope.")
-       end   
-End
-
-Function LoadControllerMap(mapName : String)
-   var content, line, key, valuePart, header : String
-   var lines, parts, groupParts, blockParts, paramParts : String Array
-   var i, j, k, sliderIdx : Integer
-   var targetBlkName, pStr : String
-   var sectionFound : Boolean = false
-   
-   // Parsing Vars
-   var entryStr, scaleStr : String
-   var minV, maxV : Double = 0.0
-   var braceOpen, braceClose : Integer
-   var scaleParts : String Array
-   var expectedParamName : String 
-   var validMap : Boolean
-   var startPos, endPos : Integer
-   var remainingContent, sectionContent : String
-   var chNum : Integer
-   
-   // Temp vars for CC logic
-   var isCC : Boolean
-   var finalID : Integer
-   var isSrcCC : Boolean
-
-   Trace("LoadMap: Requesting '" + mapName + "'")
-
-   // ---------------------------------------------------------
-   // 1. ENGINE RESET (Alle Arrays leeren)
-   // ---------------------------------------------------------
-   Link_Count = 0
-   Link_Active = []; Link_SourceIdx = []; Link_Type = []; Link_BlockIdx = []; 
-   Link_TargetParam = []; Link_BlockName = []; Link_MinVal = []; Link_MaxVal = []
-   Link_ExpectedName = []; Link_IsCC = []; Link_IsSleepSwitch = []; Link_SourceIsCC = []
-   
-   CF_MacroIdx = -1; CF_CCIdx = -1
-   SCRUB_MacroIdx = -1; SCRUB_CCIdx = -1
-   VST_BROWSE_MacroIdx = -1; VST_BROWSE_CCIdx = -1
-   Last_VST_Browse_Val = -1.0
-   SYSTEM_TOGGLE_MacroIdx = -1; SYSTEM_TOGGLE_CCIdx = -1
-   
-   // ---> BUGFIX: ALLE FEHLENDEN SYSTEM-MACROS RESETTEN! <---
-   VST_SCOPE_MacroIdx = -1; VST_SCOPE_CCIdx = -1
-   VST_SCOPE_PREV_MacroIdx = -1; VST_SCOPE_PREV_CCIdx = -1
-   VST_SCOPE_NEXT_MacroIdx = -1; VST_SCOPE_NEXT_CCIdx = -1
-   VST_PREV_MacroIdx = -1; VST_PREV_CCIdx = -1
-   VST_NEXT_MacroIdx = -1; VST_NEXT_CCIdx = -1
-   REC_SONGPART_MacroIdx = -1; REC_SONGPART_CCIdx = -1
-   
-   For k = 0; k < 16; k = k + 1 Do 
-       LOOPER_CH_MacroIdx[k] = DEF_LOOPER_CH_MacroIdx[k]; LOOPER_CH_CCIdx[k] = -1 
-       SOLO_STRICT_MacroIdx[k] = DEF_SOLO_STRICT_MacroIdx[k]; SOLO_STRICT_CCIdx[k] = -1
-       SOLO_SMART_MacroIdx[k] = DEF_SOLO_SMART_MacroIdx[k]; SOLO_SMART_CCIdx[k] = -1
-       USER_MUTE_MacroIdx[k] = DEF_USER_MUTE_MacroIdx[k]; USER_MUTE_CCIdx[k] = -1
-       VELRANGE_MacroIdx[k] = DEF_VELRANGE_MacroIdx[k]; VELRANGE_CCIdx[k] = -1
-       ROOT_MacroIdx[k]     = DEF_ROOT_MacroIdx[k];     ROOT_CCIdx[k] = -1
-       OCTAVER_MacroIdx[k]  = DEF_OCTAVER_MacroIdx[k];  OCTAVER_CCIdx[k] = -1
-       HUMANIZE_MacroIdx[k] = DEF_HUMANIZE_MacroIdx[k]; HUMANIZE_CCIdx[k] = -1
-       QUANTIZE_MacroIdx[k] = DEF_QUANTIZE_MacroIdx[k]; QUANTIZE_CCIdx[k] = -1
-       SUSTAIN_MacroIdx[k]  = DEF_SUSTAIN_MacroIdx[k];  SUSTAIN_CCIdx[k] = -1
-   End
-   
-   CurrentCtrlMapName = mapName
-   LBL_CtrlConfig.SetWidgetLabel(mapName)
-   CurrentEditScope = -1
-
-   // ---------------------------------------------------------
-   // 2. LOGIC SPLIT (Leer vs. Laden)
-   // ---------------------------------------------------------
-   if mapName == "-" or mapName == "None" or mapName == "" then
-       UpdateEditScopeDisplay()
-       SetWidgetLabel(LBL_ControllerInfo, "") 
-       Trace("LoadMap: Mappings cleared.")
-       
-   else
-       UpdateEditScopeDisplay()
-   
-       if FileExists(ControllerMapFilePath) then
-           content = LoadStringFromTextFile(ControllerMapFilePath)
-           header = "[Map:" + mapName + "]"
-           
-           // HIGH-SPEED SCAN: Wir suchen nur den Header!
-           startPos = IndexOfSubstring(content, header, false)
-           
-           if startPos > -1 then
-               sectionFound = true
-               Trace("LoadMap: --- FOUND SECTION: " + header + " ---")
-               
-               // 1. Schneide alles VOR und INKLUSIVE dem Header ab
-               remainingContent = CopySubstring(content, startPos + Length(header), Length(content) - (startPos + Length(header)))
-               
-               // 2. Find the start of the NEXT map
-               endPos = IndexOfSubstring(remainingContent, "[Map:", false)
-               
-               if endPos > -1 then
-                   // Schneide genau unseren Block heraus
-                   sectionContent = CopySubstring(remainingContent, 0, endPos)
-               else
-                   // Es war die letzte Map im File
-                   sectionContent = remainingContent
-               end
-               
-               // JETZT ERST SPLITTEN! (Geht blitzschnell, da nur ~40 Zeilen)
-               lines = SplitString(sectionContent, NEW_LINE)
-               
-               // FAST LOOP OVER SHORT BLOCK
-               For i = 0; i < Size(lines); i = i + 1 Do
-                   line = TrimString(lines[i])
-                   
-                   // ZEILE PARSEN
-                   if Length(line) > 0 and IndexOfSubstring(line, ";", false) != 0 and IndexOfSubstring(line, "=", false) > -1 then
-                       parts = SplitString(line, "=")
-                       
-                       if Size(parts) == 2 then
-                           key = TrimString(parts[0]) 
-                           valuePart = TrimString(parts[1])
-                           
-                           isSrcCC = false
-                           sliderIdx = -1
-                           
-                           if IndexOfSubstring(key, "Macro", false) == 0 then 
-                               sliderIdx = StringToInt(ReplaceString(key, "Macro", "", false)) - 1
-                           elsif IndexOfSubstring(key, "CC", false) == 0 then 
-                               sliderIdx = StringToInt(ReplaceString(key, "CC", "", false))
-                               isSrcCC = true
-                           end
-                           
-                           if sliderIdx >= 0 and sliderIdx <= 127 then
-                               // --- SONDERFUNKTIONEN ---
-                               if valuePart == "CROSSFADER" then
-                                   if isSrcCC then CF_CCIdx = sliderIdx else CF_MacroIdx = sliderIdx end
-                               elsif valuePart == "VST_PREV" then
-                                   if isSrcCC then VST_PREV_CCIdx = sliderIdx else VST_PREV_MacroIdx = sliderIdx end
-                               elsif valuePart == "VST_NEXT" then
-                                   if isSrcCC then VST_NEXT_CCIdx = sliderIdx else VST_NEXT_MacroIdx = sliderIdx end
-                               elsif valuePart == "VST_BROWSE" then
-                                   if isSrcCC then VST_BROWSE_CCIdx = sliderIdx else VST_BROWSE_MacroIdx = sliderIdx end
-                               elsif valuePart == "VST_SCOPE" then
-                                   if isSrcCC then VST_SCOPE_CCIdx = sliderIdx else VST_SCOPE_MacroIdx = sliderIdx end
-                               elsif valuePart == "VST_SCOPE_PREV" then
-                                   if isSrcCC then VST_SCOPE_PREV_CCIdx = sliderIdx else VST_SCOPE_PREV_MacroIdx = sliderIdx end
-                               elsif valuePart == "VST_SCOPE_NEXT" then
-                                   if isSrcCC then VST_SCOPE_NEXT_CCIdx = sliderIdx else VST_SCOPE_NEXT_MacroIdx = sliderIdx end
-                               elsif valuePart == "REC_SONGPART" then
-                                   if isSrcCC then REC_SONGPART_CCIdx = sliderIdx else REC_SONGPART_MacroIdx = sliderIdx end
-                               elsif valuePart == "SYSTEM_TOGGLE" then
-                                   if isSrcCC then SYSTEM_TOGGLE_CCIdx = sliderIdx else SYSTEM_TOGGLE_MacroIdx = sliderIdx end
-                               elsif valuePart == "SCRUBBER" then
-                                   if isSrcCC then SCRUB_CCIdx = sliderIdx else SCRUB_MacroIdx = sliderIdx end
-                                   
-                               // --- GRUPPEN MAKROS ---
-                                elsif IndexOfSubstring(valuePart, "LOOPER_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "LOOPER_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then LOOPER_CH_CCIdx[chNum] = sliderIdx else LOOPER_CH_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "SOLO_STRICT_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "SOLO_STRICT_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then SOLO_STRICT_CCIdx[chNum] = sliderIdx else SOLO_STRICT_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "SOLO_SMART_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "SOLO_SMART_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then SOLO_SMART_CCIdx[chNum] = sliderIdx else SOLO_SMART_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "USER_MUTE_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "USER_MUTE_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then USER_MUTE_CCIdx[chNum] = sliderIdx else USER_MUTE_MacroIdx[chNum] = sliderIdx end
-                                    end
-
-                                elsif IndexOfSubstring(valuePart, "VELRANGE_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "VELRANGE_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then VELRANGE_CCIdx[chNum] = sliderIdx else VELRANGE_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "ROOT_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "ROOT_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then ROOT_CCIdx[chNum] = sliderIdx else ROOT_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "OCTAVER_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "OCTAVER_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then OCTAVER_CCIdx[chNum] = sliderIdx else OCTAVER_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "HUMANIZE_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "HUMANIZE_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then HUMANIZE_CCIdx[chNum] = sliderIdx else HUMANIZE_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "QUANTIZE_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "QUANTIZE_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then QUANTIZE_CCIdx[chNum] = sliderIdx else QUANTIZE_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "SUSTAIN_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "SUSTAIN_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then SUSTAIN_CCIdx[chNum] = sliderIdx else SUSTAIN_MacroIdx[chNum] = sliderIdx end
-                                    end
-                               
-                               // --- NORMALE LINKS ---
-                               else
-                                   groupParts = SplitString(valuePart, "|")
-                                   For j = 0; j < Size(groupParts); j = j + 1 Do
-                                       entryStr = TrimString(groupParts[j])
-                                       minV = 0.0; maxV = 1.0
-                                       
-                                       braceOpen = IndexOfSubstring(entryStr, "{", false)
-                                       braceClose = IndexOfSubstring(entryStr, "}", false)
-                                       if braceOpen > -1 and braceClose > braceOpen then
-                                           scaleStr = CopySubstring(entryStr, braceOpen + 1, braceClose - braceOpen - 1)
-                                           entryStr = TrimString(CopySubstring(entryStr, 0, braceOpen))
-                                           scaleParts = SplitString(scaleStr, ",")
-                                           if Size(scaleParts) == 2 then
-                                               minV = StringToDouble(TrimString(scaleParts[0]))
-                                               maxV = StringToDouble(TrimString(scaleParts[1]))
-                                           end
-                                       end
-                                       
-                                       blockParts = SplitString(entryStr, ":")
-                                       if Size(blockParts) >= 2 then
-                                           targetBlkName = TrimString(blockParts[0])
-                                           paramParts = SplitString(blockParts[1], ",")
-                                           expectedParamName = ""
-                                           if Size(blockParts) >= 3 then expectedParamName = TrimString(blockParts[2]) end
-                                           
-                                           For k = 0; k < Size(paramParts); k = k + 1 Do
-                                               if Link_Count < MAX_LINKS then
-                                                   pStr = TrimString(paramParts[k])
-                                                   isCC = false
-                                                   if IndexOfSubstring(pStr, "CC", false) == 0 then
-                                                       isCC = true
-                                                       finalID = StringToInt(ReplaceString(pStr, "CC", "", false))
-                                                   else
-                                                       finalID = StringToInt(pStr)
-                                                   end
-                                                   AppendLinkEncoded(targetBlkName, finalID, sliderIdx, minV, maxV, expectedParamName, isCC, isSrcCC)
-                                               end
-                                           End
-                                       end
-                                   End
-                               end
-                           end
-                       end
-                   end
-               End
-           else
-               Trace("LoadMap ERROR: Section '" + header + "' not found!") 
-           end
-           
-           // --- 3. POST PROCESSING ---
-           if sectionFound then 
-               if not IsLoadingSnapshot then
-                   HardwareSyncTimer = TimeSinceStartup() + 100.0 
-                   validMap = ValidateMapping()
-                   if not validMap then MapMismatch = true else MapMismatch = false end
-               else
-                   MapMismatch = false
-               end
-               
-               if VST_SCOPE_MacroIdx >= 0 and VST_SCOPE_MacroIdx <= 15 then SetParameter(ExternalArranger, VST_SCOPE_MacroIdx, 0.5) end
-               if VST_BROWSE_MacroIdx >= 0 and VST_BROWSE_MacroIdx <= 15 then SetParameter(ExternalArranger, VST_BROWSE_MacroIdx, 0.5) end
-               if REC_SONGPART_MacroIdx >= 0 and REC_SONGPART_MacroIdx <= 15 then SetParameter(ExternalArranger, REC_SONGPART_MacroIdx, 0.5) end
-               
-               UpdateControllerInfoDisplay()
-           end
-       end
-   end 
-   
-   // Index Update
-   For i = 0; i < Size(CtrlMapList); i = i + 1 Do 
-       if CtrlMapList[i] == mapName then CurrentCtrlMapIndex = i end 
-   End
-End
-
-// ---------------------------------------------------------
-// SMART ADAPT: AUTO-MAP ON ISOLATION (UNIVERSAL)
-// ---------------------------------------------------------
-Function EvaluateSmartAdapt()
-    var i, activeVSTs, targetVstIdx : Integer
-    var targetMap : String = ""
-
-    // 1. GUARD: Is the feature enabled?
-    if GetWidgetValue(BTN_SmartAdapt) > 0.5 then
-        
-        // 2. WIE VIELE VSTS SIND GERADE WACH? (Die universelle Wahrheit)
-        activeVSTs = 0
-        targetVstIdx = -1
-        
-        For i = 0; i < MAX_VSTS; i = i + 1 Do
-            // IsPluginBypassed == false bedeutet das VST ist AKTIV/WACH
-            if not IsPluginBypassed(BLK_VST[i]) and GetPluginInfo(BLK_VST[i], 0) != "Element" then
-                activeVSTs = activeVSTs + 1
-                targetVstIdx = i
-            end
-        End
-
-        // 3. ISOLATION AKTIV: Exakt EIN VST ist wach! (Egal durch welchen Modus)
-        if activeVSTs == 1 then
-            targetMap = "Standard_VST" + IntToString(targetVstIdx + 1)
-            
-            // Nur wechseln, wenn wir nicht sowieso schon auf dieser Map sind
-            if CurrentCtrlMapName != targetMap then
-                
-                // Aktuelle Map sichern (aber nur, wenn wir gerade erst ins Solo gehen!)
-                if not IsAutoSoloMapActive then
-                    PreSoloMapName = CurrentCtrlMapName
-                    IsAutoSoloMapActive = true
-                end
-                
-                Trace("SMART ADAPT: VST " + (targetVstIdx + 1) + " spielt alleine. Lade " + targetMap)
-                LoadControllerMap(targetMap)
-                
-                // Slightly delay hardware sync (debounce 400ms)
-                HardwareSyncTimer = TimeSinceStartup() + 400.0 
-                
-                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> AUTO-MAP: " + targetMap + " <<<", Local_IP, Local_PORT)
-                MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-            end
-            
-        // 4. ISOLATION INACTIVE (>1 VST awake or all muted): Revert to previous map!
-        else
-            if IsAutoSoloMapActive then
-                if PreSoloMapName != "" and PreSoloMapName != CurrentCtrlMapName then
-                    Trace("SMART ADAPT: Isolation ended (" + activeVSTs + " VSTs active). Reverting to -> " + PreSoloMapName)
-                    LoadControllerMap(PreSoloMapName)
-                    
-                    HardwareSyncTimer = TimeSinceStartup() + 400.0
-                    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> MAP RESTORED <<<", Local_IP, Local_PORT)
-                    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-                end
-                IsAutoSoloMapActive = false
-                PreSoloMapName = ""
-            end
-        end
-        
-    // 5. FEATURE DISABLED: Clean up any ghost state!
-    else
-        if IsAutoSoloMapActive then
-            if PreSoloMapName != "" and PreSoloMapName != CurrentCtrlMapName then
-                Trace("SMART ADAPT: Feature disabled. Reverting to -> " + PreSoloMapName)
-                LoadControllerMap(PreSoloMapName)
-                HardwareSyncTimer = TimeSinceStartup() + 400.0
-            end
-            IsAutoSoloMapActive = false
-            PreSoloMapName = ""
-        end
-    end
-End
-
 Function RefreshCtrlMapList()
    var content, initialContent, tempContent, mapName : String
    var pos, closePos : Integer
@@ -4172,34 +3356,6 @@ Function RefreshCtrlMapList()
    end
    
    Trace("RefreshList: Total Maps = " + Size(CtrlMapList))
-End
-
-Function CycleCtrlMap(direction : Integer)
-    var newIdx : Integer
-    
-    // Liste leer? Scan!
-    if Size(CtrlMapList) <= 1 then 
-        Trace("Cycle: List empty/default. Refreshing...")
-        RefreshCtrlMapList() 
-    end
-    
-    if Size(CtrlMapList) > 0 then
-        newIdx = CurrentCtrlMapIndex + direction
-        
-        // Wrap Around
-        if newIdx < 0 then newIdx = Size(CtrlMapList) - 1
-        elsif newIdx >= Size(CtrlMapList) then newIdx = 0
-        end
-        
-        Trace("Cycle: Index " + CurrentCtrlMapIndex + " -> " + newIdx + " (" + CtrlMapList[newIdx] + ")")
-        
-        LoadControllerMap(CtrlMapList[newIdx])
-        RecordTimelineEvent("Map", newIdx)        
-        CurrentCtrlMapIndex = newIdx
-    else
-        Trace("Cycle: ERROR - List is still empty!")
-        LBL_CtrlConfig.SetWidgetLabel("No Maps!")
-    end
 End
 
 // ---------------------------------------------------------------------
@@ -4266,24 +3422,6 @@ Function SyncArrangerToCurrentMap()
        end
    End
    if DebugMode then Trace("=== END HARD-TRACE ===") end
-End
-
-// ---------------------------------------------------------
-// AUTO SWITCH MAP ON BYPASS
-// ---------------------------------------------------------
-
-// Checks whether we are in default mode
-// und passt die Map sofort an den neuen VST-Status an.
-Function AutoSwitchMapOnBypass()
-    // Wir schalten nur automatisch um, wenn die aktuelle Map 
-    // entweder "Standard" ist oder bereits eine der dynamischen VST-Maps.
-    // Prevents a specifically loaded song map from being overwritten.
-    if CurrentCtrlMapName == "Standard" or IndexOfSubstring(CurrentCtrlMapName, "Standard_VST", false) == 0 then
-        LoadControllerMap(GetDynamicStandardMap())
-    end
-    
-    // Danach immer die Hardware syncen
-    SyncArrangerToCurrentMap()
 End
 
 // ---------------------------------------------------------
@@ -4864,6 +4002,70 @@ Function BuildLooperConfigLines()
    RefreshLooperInfoDisplay()
 End
 
+
+// ============================================================================
+// SECTION 16: DISPLAY ENGINE
+// ============================================================================
+
+// ---------------------------------------------------------
+// UPDATE LOOPER INJECTION DISPLAY
+// ---------------------------------------------------------
+
+Function UpdateInjectionLooperDisplay()
+   var focusCh : Integer
+   var targetTxt : String
+   var isValid : Boolean = false
+   
+   focusCh = GetFirstActiveScope()
+   
+   if focusCh != -1 then
+      if IsChannelActiveForLooper(focusCh) then isValid = true end
+   end
+   
+   if not isValid then
+      SetWidgetLabel(LBL_LoopAction, "Bypassed")
+      SetWidgetLabel(LBL_LoopTarget, "-")
+      SetWidgetLabel(LBL_LoopLength, "-")
+      SetWidgetLabel(LBL_LoopOut, "-") 
+      SetWidgetLabel(LBL_LoopStop, "-") 
+   else
+      SetWidgetLabel(LBL_LoopLength, GetLoopLengthName(Mem_Loop_Length[focusCh]))
+      SetWidgetLabel(LBL_LoopAction, GetLoopActionName(Mem_Loop_Action[focusCh]))
+      
+      if Mem_Loop_Target[focusCh] == -1 then targetTxt = "STAY" 
+      else targetTxt = "-> CH " + IntToString(Mem_Loop_Target[focusCh] + 1) end
+      SetWidgetLabel(LBL_LoopTarget, targetTxt)
+      
+      SetWidgetLabel(LBL_LoopOut, GetLoopOutName(Mem_Loop_OutMode[focusCh]))
+      SetWidgetLabel(LBL_LoopStop, GetLoopStopName(Mem_Loop_StopMode[focusCh]))
+   end
+   
+   BuildLooperConfigLines() 
+   UpdateInjectionLooperTransportUI()
+End
+
+// ---------------------------------------------------------
+// REFRESH ALL INJECTION DISPLAYS
+// Refreshes the entire lower UI half based on scope
+// ---------------------------------------------------------
+Function RefreshAllInjectionDisplays()
+   // Add any additional displays here
+   UpdateInjectionSplitDisplay()
+   UpdateInjectionFadeDisplay()
+   UpdateInjectionTransposeDisplay()
+   UpdateInjectionFilterDisplay()
+   UpdateInjectionNPDisplay()
+   UpdateInjectionMuteDisplay()
+   UpdateUsageLabelDisplay()
+   UpdateScopeVelocityMeter()
+   UpdateInjectionLooperDisplay()
+End
+
+
+// ============================================================================
+// SECTION 18: LOOPER ENGINE
+// ============================================================================
+
 // ---------------------------------------------------------
 // LOOPER: BUFFER SANITIZER (Hanging Note & Sustain Killer)
 // ---------------------------------------------------------
@@ -5313,141 +4515,6 @@ Function GetLooperEventCount(ch : Integer) Returns Integer
 End
 
 // ---------------------------------------------------------
-// LOOPER: MASTER TRANSPORT SWITCH (MULTI-SCOPE CAPABLE)
-// ---------------------------------------------------------
-Function TriggerFocusLooperTransport(isRecAction : Boolean)
-   var i, currentState, newState : Integer
-   var stateChanged : Boolean = false
-   var scopeIsValid : Boolean = true
-
-   // ========================================================
-   // GUARD: Conflict check BEFORE recording!
-   // ========================================================
-   if isRecAction then
-       For i = 0; i < 16; i = i + 1 Do
-           if OutputScope[i] and IsChannelActiveForLooper(i) then
-               // Nutzt unsere bestehende Logik aus Phase 1!
-               if not ValidateLooperScopeConfig(Mem_Loop_Target[i], Mem_Loop_OutMode[i]) then
-                   scopeIsValid = false
-               end
-           end
-       End
-       
-       if not scopeIsValid then
-           ShowCtrlOverlay("REC BLOCKED: MULTI-SCOPE CONFLICT", 2500.0)
-           if DebugMode then Trace("LOOPER: REC blocked by Scope Conflict (Jump or Global Out in Multi-Scope).") end
-       end
-   end
-
-   // Nur weitermachen, wenn der Scope legal ist (oder es nur ein Play/Stop Klick ist)
-   if scopeIsValid then
-   
-       // Iterate over ALL 16 channels
-       For i = 0; i < 16; i = i + 1 Do
-          // Ist der Kanal im UI markiert UND hat er ein Looper-VST?
-          if OutputScope[i] and IsChannelActiveForLooper(i) then
-             currentState = Mem_Loop_State[i]
-             newState = -1
-             
-             if isRecAction == true then
-                // ==========================================
-                // --- CASE: REC-BUTTON PRESSED ---
-                // ==========================================
-                Select
-                   currentState == 0 Do // EMPTY -> START REC
-                      if GetWidgetValue(BTN_Loop_CountIn) > 0.5 then 
-                         newState = 8 // -> COUNT-IN
-                         LoopFreeArmTimer[i] = TimeSinceStartup() + GetCountInDurationMS()
-                      else 
-                         newState = 5 // -> ARM REC
-                      end
-                   
-                   currentState == 1 Do // REC RUNNING -> MANUAL STOP
-                      CloseLooperBuffer(i)
-                      if Mem_Loop_Length[i] == 0 then LoopLengthMS[i] = TimeSinceStartup() - LoopStartTime[i] end
-                      newState = 2 // -> WECHSLE ZU PLAY
-                      LoopNextEventIdx[i] = GetLooperEventCount(i)
-                      LoopPlayheadMS[i] = -1.0
-
-                   currentState == 2 Do // PLAY -> OVERDUB
-                      newState = 3 
-                      
-                   currentState == 3 Do // OVERDUB -> PLAY
-                      CloseLooperBuffer(i)
-                      newState = 2 
-                   
-                   currentState == 4 Do // STOPPED -> OVERDUB
-                      newState = 3
-                      LoopStartTime[i] = TimeSinceStartup()
-                      LoopNextEventIdx[i] = GetLooperEventCount(i)
-                      LoopPlayheadMS[i] = -1.0
-                      LoopAnchorBar[i] = CurrentBar
-                      LoopAnchorBeat[i] = CurrentBeat
-                      LoopAnchorTick[i] = Global_CurrentTick
-                      
-                   currentState == 5 or currentState == 8 Do newState = 0 // ARM / COUNT-IN ABBRECHEN
-                End
-
-             else
-                // ==========================================
-                // --- CASE: PLAY-BUTTON PRESSED ---
-                // ==========================================
-                Select
-                   currentState == 1 Do // REC RUNNING -> FORCE PLAY
-                      CloseLooperBuffer(i)
-                      if Mem_Loop_Length[i] == 0 then LoopLengthMS[i] = TimeSinceStartup() - LoopStartTime[i] end
-                      newState = 2 // -> WECHSLE ZU PLAY
-                      LoopNextEventIdx[i] = GetLooperEventCount(i)
-                      LoopPlayheadMS[i] = -1.0
-                   
-                   currentState == 2 or currentState == 3 Do 
-                      if Mem_Loop_StopMode[i] == 0 then
-                          newState = 4 // INSTANT STOPP
-                          Trigger_NotesOff(i + 1) 
-                      else
-                          newState = 7 // PENDING STOPP (Wartet auf Taktende)
-                      end
-                      
-                   currentState == 7 Do // User presses again -> EMERGENCY STOP
-                      newState = 4
-                      Trigger_NotesOff(i + 1)
-                   
-                   currentState == 4 Do // STOPP -> PLAY STARTEN
-                      if GetWidgetValue(BTN_Loop_HostSync) > 0.5 then 
-                          newState = 6 // ARM PLAY
-                      else 
-                          newState = 2 // ISOLATED PLAY START
-                          LoopStartTime[i] = TimeSinceStartup()
-                          LoopNextEventIdx[i] = GetLooperEventCount(i)
-                          LoopPlayheadMS[i] = -1.0
-                          LoopAnchorBar[i] = CurrentBar
-                          LoopAnchorBeat[i] = CurrentBeat
-                          LoopAnchorTick[i] = Global_CurrentTick
-                      end
-                      
-                   currentState == 6 Do newState = 4 // ARM PLAY ABBRECHEN
-                End
-             end
-             
-             // Apply state for this channel
-             if newState != -1 then
-                Mem_Loop_State[i] = newState
-                stateChanged = true
-             end
-             
-          end
-       End
-       
-       // Update UI and labels once at the end, only if at least 1 channel changed
-       if stateChanged then
-          UpdateSoloMuteState()
-          BuildLooperConfigLines()
-          UpdateInjectionLooperTransportUI()
-       end
-   end // Ende des scopeIsValid Checks
-End
-
-// ---------------------------------------------------------
 // LOOPER: CAPTURE ENGINE
 // ---------------------------------------------------------
 Function RecordLoopEvent(chIdx : Integer, m : MidiMessage)
@@ -5704,9 +4771,6 @@ End
 // SECTION 19: PROMPTER & TIMELINE ENGINE
 // ============================================================================
 
-// ---------------------------------------------------------
-// THE TIME INSPECTOR (Bar Counter Trace)
-// ---------------------------------------------------------
 Function TraceTimeDomains()
     var gpStr, songStr, loopStr : String
     var ch, activeLoopers : Integer
@@ -5845,6 +4909,22 @@ Function RefreshRecDisplay(scrollVal : Double)
         SetWidgetLabel(LBL_CurrentState, finalText)
     end
 End
+
+
+// ============================================================================
+// SECTION 13: CORE UTILITIES
+// ============================================================================
+
+Function ShowRecOverlay(msg : String, durationMS : Double)
+    Rec_OverlayMsg = msg
+    Rec_OverlayTimer = TimeSinceStartup() + durationMS
+    RefreshRecDisplay(GetWidgetValue(SLD_CurrentState))
+End
+
+
+// ============================================================================
+// SECTION 19: PROMPTER & TIMELINE ENGINE
+// ============================================================================
 
 Function ScrollToCurrentTimelineEvent()
     var i : Integer = 0
@@ -6521,6 +5601,413 @@ Function ValidateMapping() Returns Boolean
    
    result = isValid
 End
+
+
+// ============================================================================
+// SECTION 17: CONTROLLER MAP ENGINE
+// ============================================================================
+
+Function LoadControllerMap(mapName : String)
+   var content, line, key, valuePart, header : String
+   var lines, parts, groupParts, blockParts, paramParts : String Array
+   var i, j, k, sliderIdx : Integer
+   var targetBlkName, pStr : String
+   var sectionFound : Boolean = false
+   
+   // Parsing Vars
+   var entryStr, scaleStr : String
+   var minV, maxV : Double = 0.0
+   var braceOpen, braceClose : Integer
+   var scaleParts : String Array
+   var expectedParamName : String 
+   var validMap : Boolean
+   var startPos, endPos : Integer
+   var remainingContent, sectionContent : String
+   var chNum : Integer
+   
+   // Temp vars for CC logic
+   var isCC : Boolean
+   var finalID : Integer
+   var isSrcCC : Boolean
+
+   Trace("LoadMap: Requesting '" + mapName + "'")
+
+   // ---------------------------------------------------------
+   // 1. ENGINE RESET (Alle Arrays leeren)
+   // ---------------------------------------------------------
+   Link_Count = 0
+   Link_Active = []; Link_SourceIdx = []; Link_Type = []; Link_BlockIdx = []; 
+   Link_TargetParam = []; Link_BlockName = []; Link_MinVal = []; Link_MaxVal = []
+   Link_ExpectedName = []; Link_IsCC = []; Link_IsSleepSwitch = []; Link_SourceIsCC = []
+   
+   CF_MacroIdx = -1; CF_CCIdx = -1
+   SCRUB_MacroIdx = -1; SCRUB_CCIdx = -1
+   VST_BROWSE_MacroIdx = -1; VST_BROWSE_CCIdx = -1
+   Last_VST_Browse_Val = -1.0
+   SYSTEM_TOGGLE_MacroIdx = -1; SYSTEM_TOGGLE_CCIdx = -1
+   
+   // ---> BUGFIX: ALLE FEHLENDEN SYSTEM-MACROS RESETTEN! <---
+   VST_SCOPE_MacroIdx = -1; VST_SCOPE_CCIdx = -1
+   VST_SCOPE_PREV_MacroIdx = -1; VST_SCOPE_PREV_CCIdx = -1
+   VST_SCOPE_NEXT_MacroIdx = -1; VST_SCOPE_NEXT_CCIdx = -1
+   VST_PREV_MacroIdx = -1; VST_PREV_CCIdx = -1
+   VST_NEXT_MacroIdx = -1; VST_NEXT_CCIdx = -1
+   REC_SONGPART_MacroIdx = -1; REC_SONGPART_CCIdx = -1
+   
+   For k = 0; k < 16; k = k + 1 Do 
+       LOOPER_CH_MacroIdx[k] = DEF_LOOPER_CH_MacroIdx[k]; LOOPER_CH_CCIdx[k] = -1 
+       SOLO_STRICT_MacroIdx[k] = DEF_SOLO_STRICT_MacroIdx[k]; SOLO_STRICT_CCIdx[k] = -1
+       SOLO_SMART_MacroIdx[k] = DEF_SOLO_SMART_MacroIdx[k]; SOLO_SMART_CCIdx[k] = -1
+       USER_MUTE_MacroIdx[k] = DEF_USER_MUTE_MacroIdx[k]; USER_MUTE_CCIdx[k] = -1
+       VELRANGE_MacroIdx[k] = DEF_VELRANGE_MacroIdx[k]; VELRANGE_CCIdx[k] = -1
+       ROOT_MacroIdx[k]     = DEF_ROOT_MacroIdx[k];     ROOT_CCIdx[k] = -1
+       OCTAVER_MacroIdx[k]  = DEF_OCTAVER_MacroIdx[k];  OCTAVER_CCIdx[k] = -1
+       HUMANIZE_MacroIdx[k] = DEF_HUMANIZE_MacroIdx[k]; HUMANIZE_CCIdx[k] = -1
+       QUANTIZE_MacroIdx[k] = DEF_QUANTIZE_MacroIdx[k]; QUANTIZE_CCIdx[k] = -1
+       SUSTAIN_MacroIdx[k]  = DEF_SUSTAIN_MacroIdx[k];  SUSTAIN_CCIdx[k] = -1
+   End
+   
+   CurrentCtrlMapName = mapName
+   LBL_CtrlConfig.SetWidgetLabel(mapName)
+   CurrentEditScope = -1
+
+   // ---------------------------------------------------------
+   // 2. LOGIC SPLIT (Leer vs. Laden)
+   // ---------------------------------------------------------
+   if mapName == "-" or mapName == "None" or mapName == "" then
+       UpdateEditScopeDisplay()
+       SetWidgetLabel(LBL_ControllerInfo, "") 
+       Trace("LoadMap: Mappings cleared.")
+       
+   else
+       UpdateEditScopeDisplay()
+   
+       if FileExists(ControllerMapFilePath) then
+           content = LoadStringFromTextFile(ControllerMapFilePath)
+           header = "[Map:" + mapName + "]"
+           
+           // HIGH-SPEED SCAN: Wir suchen nur den Header!
+           startPos = IndexOfSubstring(content, header, false)
+           
+           if startPos > -1 then
+               sectionFound = true
+               Trace("LoadMap: --- FOUND SECTION: " + header + " ---")
+               
+               // 1. Schneide alles VOR und INKLUSIVE dem Header ab
+               remainingContent = CopySubstring(content, startPos + Length(header), Length(content) - (startPos + Length(header)))
+               
+               // 2. Find the start of the NEXT map
+               endPos = IndexOfSubstring(remainingContent, "[Map:", false)
+               
+               if endPos > -1 then
+                   // Schneide genau unseren Block heraus
+                   sectionContent = CopySubstring(remainingContent, 0, endPos)
+               else
+                   // Es war die letzte Map im File
+                   sectionContent = remainingContent
+               end
+               
+               // JETZT ERST SPLITTEN! (Geht blitzschnell, da nur ~40 Zeilen)
+               lines = SplitString(sectionContent, NEW_LINE)
+               
+               // FAST LOOP OVER SHORT BLOCK
+               For i = 0; i < Size(lines); i = i + 1 Do
+                   line = TrimString(lines[i])
+                   
+                   // ZEILE PARSEN
+                   if Length(line) > 0 and IndexOfSubstring(line, ";", false) != 0 and IndexOfSubstring(line, "=", false) > -1 then
+                       parts = SplitString(line, "=")
+                       
+                       if Size(parts) == 2 then
+                           key = TrimString(parts[0]) 
+                           valuePart = TrimString(parts[1])
+                           
+                           isSrcCC = false
+                           sliderIdx = -1
+                           
+                           if IndexOfSubstring(key, "Macro", false) == 0 then 
+                               sliderIdx = StringToInt(ReplaceString(key, "Macro", "", false)) - 1
+                           elsif IndexOfSubstring(key, "CC", false) == 0 then 
+                               sliderIdx = StringToInt(ReplaceString(key, "CC", "", false))
+                               isSrcCC = true
+                           end
+                           
+                           if sliderIdx >= 0 and sliderIdx <= 127 then
+                               // --- SONDERFUNKTIONEN ---
+                               if valuePart == "CROSSFADER" then
+                                   if isSrcCC then CF_CCIdx = sliderIdx else CF_MacroIdx = sliderIdx end
+                               elsif valuePart == "VST_PREV" then
+                                   if isSrcCC then VST_PREV_CCIdx = sliderIdx else VST_PREV_MacroIdx = sliderIdx end
+                               elsif valuePart == "VST_NEXT" then
+                                   if isSrcCC then VST_NEXT_CCIdx = sliderIdx else VST_NEXT_MacroIdx = sliderIdx end
+                               elsif valuePart == "VST_BROWSE" then
+                                   if isSrcCC then VST_BROWSE_CCIdx = sliderIdx else VST_BROWSE_MacroIdx = sliderIdx end
+                               elsif valuePart == "VST_SCOPE" then
+                                   if isSrcCC then VST_SCOPE_CCIdx = sliderIdx else VST_SCOPE_MacroIdx = sliderIdx end
+                               elsif valuePart == "VST_SCOPE_PREV" then
+                                   if isSrcCC then VST_SCOPE_PREV_CCIdx = sliderIdx else VST_SCOPE_PREV_MacroIdx = sliderIdx end
+                               elsif valuePart == "VST_SCOPE_NEXT" then
+                                   if isSrcCC then VST_SCOPE_NEXT_CCIdx = sliderIdx else VST_SCOPE_NEXT_MacroIdx = sliderIdx end
+                               elsif valuePart == "REC_SONGPART" then
+                                   if isSrcCC then REC_SONGPART_CCIdx = sliderIdx else REC_SONGPART_MacroIdx = sliderIdx end
+                               elsif valuePart == "SYSTEM_TOGGLE" then
+                                   if isSrcCC then SYSTEM_TOGGLE_CCIdx = sliderIdx else SYSTEM_TOGGLE_MacroIdx = sliderIdx end
+                               elsif valuePart == "SCRUBBER" then
+                                   if isSrcCC then SCRUB_CCIdx = sliderIdx else SCRUB_MacroIdx = sliderIdx end
+                                   
+                               // --- GRUPPEN MAKROS ---
+                                elsif IndexOfSubstring(valuePart, "LOOPER_CH", false) == 0 then
+                                    chNum = StringToInt(ReplaceString(valuePart, "LOOPER_CH", "", false)) - 1
+                                    if chNum >= 0 and chNum < 16 then
+                                        if isSrcCC then LOOPER_CH_CCIdx[chNum] = sliderIdx else LOOPER_CH_MacroIdx[chNum] = sliderIdx end
+                                    end
+                                elsif IndexOfSubstring(valuePart, "SOLO_STRICT_CH", false) == 0 then
+                                    chNum = StringToInt(ReplaceString(valuePart, "SOLO_STRICT_CH", "", false)) - 1
+                                    if chNum >= 0 and chNum < 16 then
+                                        if isSrcCC then SOLO_STRICT_CCIdx[chNum] = sliderIdx else SOLO_STRICT_MacroIdx[chNum] = sliderIdx end
+                                    end
+                                elsif IndexOfSubstring(valuePart, "SOLO_SMART_CH", false) == 0 then
+                                    chNum = StringToInt(ReplaceString(valuePart, "SOLO_SMART_CH", "", false)) - 1
+                                    if chNum >= 0 and chNum < 16 then
+                                        if isSrcCC then SOLO_SMART_CCIdx[chNum] = sliderIdx else SOLO_SMART_MacroIdx[chNum] = sliderIdx end
+                                    end
+                                elsif IndexOfSubstring(valuePart, "USER_MUTE_CH", false) == 0 then
+                                    chNum = StringToInt(ReplaceString(valuePart, "USER_MUTE_CH", "", false)) - 1
+                                    if chNum >= 0 and chNum < 16 then
+                                        if isSrcCC then USER_MUTE_CCIdx[chNum] = sliderIdx else USER_MUTE_MacroIdx[chNum] = sliderIdx end
+                                    end
+
+                                elsif IndexOfSubstring(valuePart, "VELRANGE_CH", false) == 0 then
+                                    chNum = StringToInt(ReplaceString(valuePart, "VELRANGE_CH", "", false)) - 1
+                                    if chNum >= 0 and chNum < 16 then
+                                        if isSrcCC then VELRANGE_CCIdx[chNum] = sliderIdx else VELRANGE_MacroIdx[chNum] = sliderIdx end
+                                    end
+                                elsif IndexOfSubstring(valuePart, "ROOT_CH", false) == 0 then
+                                    chNum = StringToInt(ReplaceString(valuePart, "ROOT_CH", "", false)) - 1
+                                    if chNum >= 0 and chNum < 16 then
+                                        if isSrcCC then ROOT_CCIdx[chNum] = sliderIdx else ROOT_MacroIdx[chNum] = sliderIdx end
+                                    end
+                                elsif IndexOfSubstring(valuePart, "OCTAVER_CH", false) == 0 then
+                                    chNum = StringToInt(ReplaceString(valuePart, "OCTAVER_CH", "", false)) - 1
+                                    if chNum >= 0 and chNum < 16 then
+                                        if isSrcCC then OCTAVER_CCIdx[chNum] = sliderIdx else OCTAVER_MacroIdx[chNum] = sliderIdx end
+                                    end
+                                elsif IndexOfSubstring(valuePart, "HUMANIZE_CH", false) == 0 then
+                                    chNum = StringToInt(ReplaceString(valuePart, "HUMANIZE_CH", "", false)) - 1
+                                    if chNum >= 0 and chNum < 16 then
+                                        if isSrcCC then HUMANIZE_CCIdx[chNum] = sliderIdx else HUMANIZE_MacroIdx[chNum] = sliderIdx end
+                                    end
+                                elsif IndexOfSubstring(valuePart, "QUANTIZE_CH", false) == 0 then
+                                    chNum = StringToInt(ReplaceString(valuePart, "QUANTIZE_CH", "", false)) - 1
+                                    if chNum >= 0 and chNum < 16 then
+                                        if isSrcCC then QUANTIZE_CCIdx[chNum] = sliderIdx else QUANTIZE_MacroIdx[chNum] = sliderIdx end
+                                    end
+                                elsif IndexOfSubstring(valuePart, "SUSTAIN_CH", false) == 0 then
+                                    chNum = StringToInt(ReplaceString(valuePart, "SUSTAIN_CH", "", false)) - 1
+                                    if chNum >= 0 and chNum < 16 then
+                                        if isSrcCC then SUSTAIN_CCIdx[chNum] = sliderIdx else SUSTAIN_MacroIdx[chNum] = sliderIdx end
+                                    end
+                               
+                               // --- NORMALE LINKS ---
+                               else
+                                   groupParts = SplitString(valuePart, "|")
+                                   For j = 0; j < Size(groupParts); j = j + 1 Do
+                                       entryStr = TrimString(groupParts[j])
+                                       minV = 0.0; maxV = 1.0
+                                       
+                                       braceOpen = IndexOfSubstring(entryStr, "{", false)
+                                       braceClose = IndexOfSubstring(entryStr, "}", false)
+                                       if braceOpen > -1 and braceClose > braceOpen then
+                                           scaleStr = CopySubstring(entryStr, braceOpen + 1, braceClose - braceOpen - 1)
+                                           entryStr = TrimString(CopySubstring(entryStr, 0, braceOpen))
+                                           scaleParts = SplitString(scaleStr, ",")
+                                           if Size(scaleParts) == 2 then
+                                               minV = StringToDouble(TrimString(scaleParts[0]))
+                                               maxV = StringToDouble(TrimString(scaleParts[1]))
+                                           end
+                                       end
+                                       
+                                       blockParts = SplitString(entryStr, ":")
+                                       if Size(blockParts) >= 2 then
+                                           targetBlkName = TrimString(blockParts[0])
+                                           paramParts = SplitString(blockParts[1], ",")
+                                           expectedParamName = ""
+                                           if Size(blockParts) >= 3 then expectedParamName = TrimString(blockParts[2]) end
+                                           
+                                           For k = 0; k < Size(paramParts); k = k + 1 Do
+                                               if Link_Count < MAX_LINKS then
+                                                   pStr = TrimString(paramParts[k])
+                                                   isCC = false
+                                                   if IndexOfSubstring(pStr, "CC", false) == 0 then
+                                                       isCC = true
+                                                       finalID = StringToInt(ReplaceString(pStr, "CC", "", false))
+                                                   else
+                                                       finalID = StringToInt(pStr)
+                                                   end
+                                                   AppendLinkEncoded(targetBlkName, finalID, sliderIdx, minV, maxV, expectedParamName, isCC, isSrcCC)
+                                               end
+                                           End
+                                       end
+                                   End
+                               end
+                           end
+                       end
+                   end
+               End
+           else
+               Trace("LoadMap ERROR: Section '" + header + "' not found!") 
+           end
+           
+           // --- 3. POST PROCESSING ---
+           if sectionFound then 
+               if not IsLoadingSnapshot then
+                   HardwareSyncTimer = TimeSinceStartup() + 100.0 
+                   validMap = ValidateMapping()
+                   if not validMap then MapMismatch = true else MapMismatch = false end
+               else
+                   MapMismatch = false
+               end
+               
+               if VST_SCOPE_MacroIdx >= 0 and VST_SCOPE_MacroIdx <= 15 then SetParameter(ExternalArranger, VST_SCOPE_MacroIdx, 0.5) end
+               if VST_BROWSE_MacroIdx >= 0 and VST_BROWSE_MacroIdx <= 15 then SetParameter(ExternalArranger, VST_BROWSE_MacroIdx, 0.5) end
+               if REC_SONGPART_MacroIdx >= 0 and REC_SONGPART_MacroIdx <= 15 then SetParameter(ExternalArranger, REC_SONGPART_MacroIdx, 0.5) end
+               
+               UpdateControllerInfoDisplay()
+           end
+       end
+   end 
+   
+   // Index Update
+   For i = 0; i < Size(CtrlMapList); i = i + 1 Do 
+       if CtrlMapList[i] == mapName then CurrentCtrlMapIndex = i end 
+   End
+End
+
+// ---------------------------------------------------------
+// SMART ADAPT: AUTO-MAP ON ISOLATION (UNIVERSAL)
+// ---------------------------------------------------------
+Function EvaluateSmartAdapt()
+    var i, activeVSTs, targetVstIdx : Integer
+    var targetMap : String = ""
+
+    // 1. GUARD: Is the feature enabled?
+    if GetWidgetValue(BTN_SmartAdapt) > 0.5 then
+        
+        // 2. WIE VIELE VSTS SIND GERADE WACH? (Die universelle Wahrheit)
+        activeVSTs = 0
+        targetVstIdx = -1
+        
+        For i = 0; i < MAX_VSTS; i = i + 1 Do
+            // IsPluginBypassed == false bedeutet das VST ist AKTIV/WACH
+            if not IsPluginBypassed(BLK_VST[i]) and GetPluginInfo(BLK_VST[i], 0) != "Element" then
+                activeVSTs = activeVSTs + 1
+                targetVstIdx = i
+            end
+        End
+
+        // 3. ISOLATION AKTIV: Exakt EIN VST ist wach! (Egal durch welchen Modus)
+        if activeVSTs == 1 then
+            targetMap = "Standard_VST" + IntToString(targetVstIdx + 1)
+            
+            // Nur wechseln, wenn wir nicht sowieso schon auf dieser Map sind
+            if CurrentCtrlMapName != targetMap then
+                
+                // Aktuelle Map sichern (aber nur, wenn wir gerade erst ins Solo gehen!)
+                if not IsAutoSoloMapActive then
+                    PreSoloMapName = CurrentCtrlMapName
+                    IsAutoSoloMapActive = true
+                end
+                
+                Trace("SMART ADAPT: VST " + (targetVstIdx + 1) + " spielt alleine. Lade " + targetMap)
+                LoadControllerMap(targetMap)
+                
+                // Slightly delay hardware sync (debounce 400ms)
+                HardwareSyncTimer = TimeSinceStartup() + 400.0 
+                
+                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> AUTO-MAP: " + targetMap + " <<<", Local_IP, Local_PORT)
+                MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+            end
+            
+        // 4. ISOLATION INACTIVE (>1 VST awake or all muted): Revert to previous map!
+        else
+            if IsAutoSoloMapActive then
+                if PreSoloMapName != "" and PreSoloMapName != CurrentCtrlMapName then
+                    Trace("SMART ADAPT: Isolation ended (" + activeVSTs + " VSTs active). Reverting to -> " + PreSoloMapName)
+                    LoadControllerMap(PreSoloMapName)
+                    
+                    HardwareSyncTimer = TimeSinceStartup() + 400.0
+                    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> MAP RESTORED <<<", Local_IP, Local_PORT)
+                    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+                end
+                IsAutoSoloMapActive = false
+                PreSoloMapName = ""
+            end
+        end
+        
+    // 5. FEATURE DISABLED: Clean up any ghost state!
+    else
+        if IsAutoSoloMapActive then
+            if PreSoloMapName != "" and PreSoloMapName != CurrentCtrlMapName then
+                Trace("SMART ADAPT: Feature disabled. Reverting to -> " + PreSoloMapName)
+                LoadControllerMap(PreSoloMapName)
+                HardwareSyncTimer = TimeSinceStartup() + 400.0
+            end
+            IsAutoSoloMapActive = false
+            PreSoloMapName = ""
+        end
+    end
+End
+
+Function CycleCtrlMap(direction : Integer)
+    var newIdx : Integer
+    
+    // Liste leer? Scan!
+    if Size(CtrlMapList) <= 1 then 
+        Trace("Cycle: List empty/default. Refreshing...")
+        RefreshCtrlMapList() 
+    end
+    
+    if Size(CtrlMapList) > 0 then
+        newIdx = CurrentCtrlMapIndex + direction
+        
+        // Wrap Around
+        if newIdx < 0 then newIdx = Size(CtrlMapList) - 1
+        elsif newIdx >= Size(CtrlMapList) then newIdx = 0
+        end
+        
+        Trace("Cycle: Index " + CurrentCtrlMapIndex + " -> " + newIdx + " (" + CtrlMapList[newIdx] + ")")
+        
+        LoadControllerMap(CtrlMapList[newIdx])
+        RecordTimelineEvent("Map", newIdx)        
+        CurrentCtrlMapIndex = newIdx
+    else
+        Trace("Cycle: ERROR - List is still empty!")
+        LBL_CtrlConfig.SetWidgetLabel("No Maps!")
+    end
+End
+
+// ---------------------------------------------------------
+// AUTO SWITCH MAP ON BYPASS
+// ---------------------------------------------------------
+
+// Checks whether we are in default mode
+// und passt die Map sofort an den neuen VST-Status an.
+Function AutoSwitchMapOnBypass()
+    // Wir schalten nur automatisch um, wenn die aktuelle Map 
+    // entweder "Standard" ist oder bereits eine der dynamischen VST-Maps.
+    // Prevents a specifically loaded song map from being overwritten.
+    if CurrentCtrlMapName == "Standard" or IndexOfSubstring(CurrentCtrlMapName, "Standard_VST", false) == 0 then
+        LoadControllerMap(GetDynamicStandardMap())
+    end
+    
+    // Danach immer die Hardware syncen
+    SyncArrangerToCurrentMap()
+End
+
+
+// ============================================================================
+// SECTION 19: PROMPTER & TIMELINE ENGINE
+// ============================================================================
 
 // =========================================================================
 // DER ULTIMATE GUITAR WEAVER (Auto-Converter)
@@ -7218,134 +6705,6 @@ Function FireArrangerTransportEcho()
 End
 
 // ---------------------------------------------------------
-// TRANSPORT SYNC EVALUATION (The Smart Latch Brain)
-// ---------------------------------------------------------
-Function EvaluateTransportSync()
-    var playing : Boolean = PendingPlayheadState
-    var i : Integer
-    
-    // Die reine Wahrheit: Hat das Scriptlet in den letzten 800ms "HIER!" gerufen?
-    var timeSinceHW : Double = TimeSinceStartup() - LastHardwarePulseTime
-    var isHW : Boolean = (timeSinceHW < 800.0 and timeSinceHW >= 0.0) 
-
-    Trace(">>> EvaluateTransportSync: Play=" + playing + " | HW_Pulse=" + isHW)
-
-    // ========================================================
-    // DEIN GENIALER WATCHDOG (Nur bei Stopp aktiv!)
-    // ========================================================
-    if not playing then
-        StopWatchdogTimer = TimeSinceStartup() + 2500.0 
-        Trace("WATCHDOG: Playhead gestoppt. Lausche auf Geister-Noten...")
-        
-        if GetWidgetValue(BTN_Loop_HostSync) > 0.5 then
-            For i = 0; i < 16; i = i + 1 Do
-            // Alle laufenden oder wartenden Looper auf STOP (4) oder EMPTY (0) setzen
-            if Mem_Loop_State[i] == 1 or Mem_Loop_State[i] == 2 or Mem_Loop_State[i] == 3 or Mem_Loop_State[i] == 6 then 
-                Mem_Loop_State[i] = 4 
-            elsif Mem_Loop_State[i] == 5 then 
-                Mem_Loop_State[i] = 0 
-            end
-            Trigger_NotesOff(i + 1) // Noten sicherheitshalber killen
-        End
-        BuildLooperConfigLines()
-        UpdateInjectionLooperTransportUI()
-    end
-    else
-        StopWatchdogTimer = 0.0 
-    end
-
-    // ========================================================
-    // DIE NEUE EINWEG-SPIEGEL LOGIK
-    // ========================================================
-
-    // --- MODUS 0: ISOLATED (GUI darf Genos nicht steuern) ---
-    if CurrentSyncMode == 0 then 
-        IsPerformanceActive = playing
-        if not playing then
-//            EnablePlayhead(false) 
-            Trace("ETS: [OK] ETS: ISOLATED: Genos hat gestartet.")
-        else
-            Trace("ETS: [OK] ETS: ISOLATED: GP hat gestartet")
-        end
-    
-    // --- MODUS 1: GENOS LEADS (GUI darf Genos nicht steuern) ---
-    elsif CurrentSyncMode == 1 then 
-        IsPerformanceActive = playing
-        if not isHW then
-            // FORBIDDEN: GUI started/stopped GP! Force GP back immediately.
-            Trace("ETS: [X] ETS: ARRANGER LEADS: GUI acted illegally! Forcing GP back...")
-            IsCorrectingPlayhead = true; EnablePlayhead(not playing) 
-        else
-            Trace("ETS: [OK] ETS: GENOS LEADS: Genos Aktion. GP lief nativ mit.")
-        end
-        
-    // --- MODUS 2: GP LEADS (Genos darf GP nicht starten) ---
-    elsif CurrentSyncMode == 2 then 
-        IsPerformanceActive = playing
-        if not isHW then
-            Trace("ETS: [OK] GP LEADS: GUI Aktion. Sende Befehl an Genos...")
-            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
-            StyleTriggerResetTimer = TimeSinceStartup() + 60.0
-            LastHardwarePulseTime = TimeSinceStartup() + 1000.0
-        else
-            // VERBOTEN: Genos hat GP nativ gestartet! Wir killen sofort beide!
-            Trace("ETS: [X] GP LEADS: Genos hat illegal gestartet! Stoppe beide...")
-            IsCorrectingPlayhead = true; EnablePlayhead(false)
-            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
-            StyleTriggerResetTimer = TimeSinceStartup() + 60.0
-        end
-
-    // --- MODUS 3: FULL SYNC ---
-    elsif CurrentSyncMode == 3 then 
-        IsPerformanceActive = playing
-        if not isHW then
-            // It was a pure mouse click! We need to sync the arranger!
-            Trace("ETS: [OK] FULL SYNC: GUI Aktion. Sende Befehl an Genos...")
-            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
-            StyleTriggerResetTimer = TimeSinceStartup() + 60.0
-            
-            // IMPORTANT: Set the pulse artificially into the future so that
-            // unvermeidliche Echo des Genos beim Stoppen uns nicht verwirrt!
-            LastHardwarePulseTime = TimeSinceStartup() + 1000.0
-        else
-            // It was a hardware click! GP responded natively. Script stays silent.
-            Trace("ETS: [OK] FULL SYNC: Arranger action. GP ran natively. (No echo needed)")
-        end
-        
-    // --- MODUS 4: INITIAL LATCH ---
-    elsif CurrentSyncMode == 4 then 
-        if playing then
-            if isHW then
-                if not IsPerformanceActive then
-                    IsPerformanceActive = true; UpdateSyncLabel()
-                end
-            else
-                IsPerformanceActive = true; UpdateSyncLabel()
-                SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
-                StyleTriggerResetTimer = TimeSinceStartup() + 60.0
-                LastHardwarePulseTime = TimeSinceStartup() + 1000.0
-            end
-        else
-            // On stop, ignore the arranger entirely so GP continues unaffected!
-            if isHW then
-                Trace("ETS: [X] INITIAL LATCH: Genos hat gestoppt. Wird ignoriert! Re-Start GP.")
-                IsCorrectingPlayhead = true; EnablePlayhead(true)
-            else
-                IsPerformanceActive = false; UpdateSyncLabel()
-            end
-        end
-    end
-    
-    // --- UI Updates ---
-    if RecordMode > 0 then
-        BuildRecDisplayLines()
-        RefreshRecDisplay(GetWidgetValue(SLD_CurrentState))
-    end
-    
-    ProcessTopQueueJobResult(true) 
-End
-
-// ---------------------------------------------------------
 // DER DIREKTE GENOS-TRIGGER (Nativ MIDI FA / FC)
 // ---------------------------------------------------------
 Function FireDirectArrangerTransport()
@@ -7371,11 +6730,6 @@ End
 // SECTION 20: VST REPLACER ENGINE
 // ============================================================================
 
-// ---------------------------------------------------------
-// FADER PARK & RESTORE LOGIC (LUXUS-FEATURE)
-// ---------------------------------------------------------
-
-// 1. PARK: Werte merken und Fader auf 0 fahren
 Function ParkFadersForVST(vstIdx : Integer)
     var i, s : Integer
     var count : Integer = 0
@@ -7500,6 +6854,65 @@ Function GetChannelForVST(vstIdx : Integer) Returns Integer
       i = i + 1
    End
 End
+
+
+// ============================================================================
+// SECTION 17: CONTROLLER MAP ENGINE
+// ============================================================================
+
+Function ExecuteLink(i : Integer, val : Double)
+   var scaledVal : Double = Link_MinVal[i] + (val * (Link_MaxVal[i] - Link_MinVal[i]))
+   var midiVal : Integer
+   var m : MidiMessage
+
+   if Link_IsCC[i] == true then
+       midiVal = Round(scaledVal * 127.0)
+       if midiVal < 0 then midiVal = 0 elsif midiVal > 127 then midiVal = 127 end
+       
+       if Link_Type[i] == 0 then 
+           m = MakeControlChangeMessageEx(Link_TargetParam[i], midiVal, GetChannelForVST(Link_BlockIdx[i]))
+           SendNow(BLK_VSTControl, m)
+       elsif Link_Type[i] == 3 then
+           m = MakeControlChangeMessageEx(Link_TargetParam[i], midiVal, Link_BlockIdx[i])
+           SendNow(BLK_VSTControl, m)
+       end
+   else
+       if Link_Type[i] == 0 then SetParameter(BLK_VST[Link_BlockIdx[i]], Link_TargetParam[i], scaledVal)
+       elsif Link_Type[i] == 1 then SetParameter(BLK_NoteProcessor[Link_BlockIdx[i]], Link_TargetParam[i], scaledVal)
+       elsif Link_Type[i] == 2 then SetParameter(AudioMixer, Link_TargetParam[i], scaledVal)
+       end
+   end
+End
+
+// ---------------------------------------------------------------------
+// APPLY EDITOR-TEST // Executes the test fader logic in the editor
+// ---------------------------------------------------------------------
+
+Function ApplyEditorTest(val : Double)
+    var i, midiVal : Integer
+    var scaledVal : Double = 0.0
+    var m : MidiMessage 
+    
+    if CurrentEditScope == -1 then
+        For i = 0; i < Link_Count; i = i + 1 Do
+            if Link_Active[i] then ExecuteLink(i, val) end
+        End
+    else
+        // ---> GUARD <---
+        if CurrentEditScope >= 0 and CurrentEditScope <= 15 then
+            SetParameter(ExternalArranger, CurrentEditScope, val)
+        end
+        
+        For i = 0; i < Link_Count; i = i + 1 Do
+            if Link_Active[i] and Link_SourceIdx[i] == CurrentEditScope then ExecuteLink(i, val) end
+        End
+    end
+End
+
+
+// ============================================================================
+// SECTION 20: VST REPLACER ENGINE
+// ============================================================================
 
 // ---------------------------------------------------------
 // PRESET BROWSER LOGIC (Smart-Browse)
@@ -8120,10 +7533,6 @@ End
 // SECTION 21: ORCHESTRATION
 // ============================================================================
 
-// ----------------------------------------------------------------------
-// --- JOYSTICK LEVEL 0 OSC-DISPLAY ---
-// ----------------------------------------------------------------------
-
 Function CycleGlobalSystemMode()
    var modeName : String
    
@@ -8206,6 +7615,64 @@ Function ExecuteSmartBypass()
    UpdateVstInfoDisplay() 
    UpdateUsageLabelDisplay()
 End
+
+
+// ============================================================================
+// SECTION 15: MIDI & CHANNEL ENGINE
+// ============================================================================
+
+// ---------------------------------------------------------
+// VST MANUAL OVERRIDE BYPASS CALLBACKS
+// ---------------------------------------------------------
+
+Function HandleInjectBypassClick(btnIdx : Integer, val : Double)
+    var i, count, firstScopeIdx, targetVstIdx : Integer
+    
+    // GPScript-compliant guard:
+    if not IsUpdatingBypassUI then
+        
+        // ---> UNSER SAUBERER SCOPE-HELPER <---
+        firstScopeIdx = GetFirstActiveScope()
+
+        if firstScopeIdx > -1 then
+            count = 0
+            targetVstIdx = -1
+            
+            // Which VST belongs to this button?
+            if Size(RoutingMatrix) == 160 then
+                i = 0
+                // ---> DIE SICHERE WHILE-SCHLEIFE <---
+                While i < MAX_VSTS and targetVstIdx == -1 Do
+                    if RoutingMatrix[(i * 16) + firstScopeIdx] == true then
+                        if count == btnIdx then
+                            targetVstIdx = i
+                        end
+                        count = count + 1
+                    end
+                    i = i + 1 // Always increment
+                End
+            end
+
+            // Write value to RAM and execute
+            if targetVstIdx > -1 then
+                if val > 0.5 then
+                    Mem_ManualVSTBypass[targetVstIdx] = true  // Bypass AN (Button leuchtet)
+                else
+                    Mem_ManualVSTBypass[targetVstIdx] = false // Bypass AUS (Button dunkel)
+                end
+                
+                // Force immediate re-evaluation
+                ExecuteSmartBypass()
+            end
+        end
+        
+    end // End of guard block
+End
+
+
+// ============================================================================
+// SECTION 21: ORCHESTRATION
+// ============================================================================
 
 // ----------------------------------------------------------------------
 // --- THE INSPECTOR (Analysis Engine) ---
@@ -8299,6 +7766,245 @@ Function AnalyzeChannel(chIdx : Integer) Returns Integer
    
    result = colorCode
 End
+
+
+// ============================================================================
+// SECTION 16: DISPLAY ENGINE
+// ============================================================================
+
+// ---------------------------------------------------------
+// STATE-DEPENDENT COLORS --> OUTPUT
+// ---------------------------------------------------------
+Function UpdateMetaColors()
+   var i, colorCode, inCh : Integer
+   var healed : Boolean = false 
+   
+   OutputSyncTimer = TimeSinceStartup() + 150.0
+   
+   For i = 0; i < 16; i = i + 1 Do
+      // ... (Auto-Healer bleibt) ...
+      colorCode = AnalyzeChannel(i)
+      SetChannelState(i, colorCode)
+   End
+    
+   RefreshDiagDisplay()  
+   // ---> HIER WURDE ExecuteSmartBypass() ENTFERNT! <---
+   
+   if healed then 
+       UpdateInjectionLooperDisplay() 
+   end
+End
+
+
+// ============================================================================
+// SECTION 15: MIDI & CHANNEL ENGINE
+// ============================================================================
+
+// ---------------------------------------------------------
+// INJECTION KBSPLIT (Lowest/Highest)
+// ---------------------------------------------------------
+
+Function InjectKBSplitToggle(paramName : String, uiVal : Double)
+   var i, pIdx : Integer
+   For i = 0; i < 16; i = i + 1 Do
+      if OutputScope[i] then
+         pIdx = GetParamIdxByName(BLK_NoteProcessor[i], paramName)
+         if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, uiVal) end
+         if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
+      end
+   End
+   UpdateMetaColors() 
+End
+
+// ---------------------------------------------------------
+// INJECT FILTER TOGGLE
+// ---------------------------------------------------------
+Function InjectFilterToggle(paramName : String, uiVal : Double)
+   var i, pIdx : Integer
+   
+   Trace(">>> INJECT: Button '" + paramName + "' pressed (target: " + uiVal + ")")
+   
+   For i = 0; i < 16; i = i + 1 Do
+      if OutputScope[i] then
+         pIdx = GetParamIdxByName(BLK_NoteProcessor[i], paramName)
+         
+         if pIdx > -1 then 
+             SetParameter(BLK_NoteProcessor[i], pIdx, uiVal) 
+             Trace("    [OK] Ch " + (i+1) + ": Parameter at index " + pIdx + " found -> Toggled!")
+         else
+             Trace("    [ERROR] Ch " + (i+1) + ": Parameter '" + paramName + "' DOES NOT EXIST! (Old scriptlet version?)")
+         end
+      end
+   End
+   UpdateMetaColors() 
+End
+
+// ---------------------------------------------------------
+// INJECT TRANSPOSE 
+// ---------------------------------------------------------
+Function InjectTranspose(steps : Integer)
+   var i, newVal, pIdx : Integer
+   var paramVal : Double = 0.0
+   
+   Trace(">>> INJECT: Transpose pressed (Steps: " + steps + ")")
+   
+   For i = 0; i < 16; i = i + 1 Do
+      if OutputScope[i] then
+         newVal = Mem_Transpose[i] + steps
+         
+         if newVal < -48 then newVal = -48
+         elsif newVal > 48 then newVal = 48
+         end
+         
+         Mem_Transpose[i] = newVal
+         paramVal = (IntToFloat(newVal) + 48.0) / 96.0
+         
+         pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_Transpose")
+         if pIdx > -1 then 
+             SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) 
+             Trace("    [OK] Ch " + (i+1) + ": Transpose at index " + pIdx + " found -> Applied!")
+         else
+             Trace("    [ERROR] Ch " + (i+1) + ": Parameter 'p_Transpose' DOES NOT EXIST!")
+         end
+         
+         if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
+      end
+   End
+   
+   UpdateInjectionTransposeDisplay()
+   UpdateMetaColors() 
+End
+
+// ---------------------------------------------------------
+// INJECT USER MUTE
+// ---------------------------------------------------------
+
+Function InjectUserMuteToggle(uiVal : Double)
+   var i, intVal, idx_mute : Integer
+   if uiVal > 0.5 then intVal = 1 else intVal = 0 end
+   
+   For i = 0; i < 16; i = i + 1 Do
+      if OutputScope[i] then
+         Mem_UserMute[i] = intVal
+         
+         // Dynamic lookup
+         idx_mute = GetParamIdxByName(BLK_NoteProcessor[i], "p_UserMute")
+         if idx_mute > -1 then SetParameter(BLK_NoteProcessor[i], idx_mute, uiVal) end
+         
+         // If muting, ensure no notes are stuck
+         if intVal == 1 and not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
+      end
+   End
+   UpdateMetaColors() 
+End
+
+// ---------------------------------------------------------
+// INJECTION HELPER & CALLBACKS: NOTE PROCESSOR
+// ---------------------------------------------------------
+
+Function InjectNPToggle(paramType : Integer, paramName : String, uiVal : Double)
+   var i, intVal, pIdx : Integer
+   if uiVal > 0.5 then intVal = 1 else intVal = 0 end
+   
+   For i = 0; i < 16; i = i + 1 Do
+      if OutputScope[i] then
+         if paramType == 0 then Mem_NP_ChordMode[i] = intVal
+         elsif paramType == 1 then Mem_NP_LatchMode[i] = intVal
+         elsif paramType == 2 then Mem_NP_Engine[i] = intVal
+         elsif paramType == 3 then Mem_NP_MuteOrig[i] = intVal
+         elsif paramType == 4 then Mem_NP_AutoSustain[i] = intVal
+         elsif paramType == 5 then Mem_NP_Octaver[i] = intVal
+         elsif paramType == 6 then Mem_NP_OctaverMuteOrig[i] = intVal
+         elsif paramType == 7 then Mem_NP_VelRangeActive[i] = intVal
+         elsif paramType == 8 then Mem_NP_HumanizeActive[i] = intVal
+         elsif paramType == 9 then Mem_NP_QuantizeActive[i] = intVal
+         end
+         
+         pIdx = GetParamIdxByName(BLK_NoteProcessor[i], paramName)
+         if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, IntToFloat(intVal)) end
+         
+         if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
+      end
+   End
+   // UI update is intentionally deferred to avoid flickering
+   UpdateMetaColors() 
+End
+
+Function InjectNPStep(paramType : Integer, paramName : String, direction : Integer)
+   var i, newVal, pIdx : Integer
+   var pluginVal : Double = 0.0
+   
+   For i = 0; i < 16; i = i + 1 Do
+      if OutputScope[i] then
+         if paramType == 0 then // MinKeys (1-5)
+            newVal = Mem_NP_MinKeys[i] + direction
+            if newVal < 1 then newVal = 1 elsif newVal > 5 then newVal = 5 end
+            Mem_NP_MinKeys[i] = newVal; pluginVal = (IntToFloat(newVal) - 1.0) / 4.0 
+         elsif paramType == 1 then // OctaveOffset (-3 bis 3)
+            newVal = Mem_NP_Octave[i] + direction
+            if newVal < -3 then newVal = -3 elsif newVal > 3 then newVal = 3 end
+            Mem_NP_Octave[i] = newVal; pluginVal = (IntToFloat(newVal) + 3.0) / 6.0 
+         elsif paramType == 2 then // OctLow (0-3)
+            newVal = Mem_NP_OctLow[i] + direction
+            if newVal < 0 then newVal = 0 elsif newVal > 3 then newVal = 3 end
+            Mem_NP_OctLow[i] = newVal; pluginVal = IntToFloat(newVal) / 3.0 
+         elsif paramType == 3 then // OctLowOffset (0-3)
+            newVal = Mem_NP_OctLowOffset[i] + direction
+            if newVal < 0 then newVal = 0 elsif newVal > 3 then newVal = 3 end
+            Mem_NP_OctLowOffset[i] = newVal; pluginVal = IntToFloat(newVal) / 3.0 
+         elsif paramType == 4 then // OctHigh (0-3)
+            newVal = Mem_NP_OctHigh[i] + direction
+            if newVal < 0 then newVal = 0 elsif newVal > 3 then newVal = 3 end
+            Mem_NP_OctHigh[i] = newVal; pluginVal = IntToFloat(newVal) / 3.0 
+         elsif paramType == 5 then // OctHighOffset (0-3)
+            newVal = Mem_NP_OctHighOffset[i] + direction
+            if newVal < 0 then newVal = 0 elsif newVal > 3 then newVal = 3 end
+            Mem_NP_OctHighOffset[i] = newVal; pluginVal = IntToFloat(newVal) / 3.0 
+
+         // --- V7.4 NEUE STEPS ---
+         elsif paramType == 6 then // MinVel (0-127)
+            newVal = Mem_NP_MinVel[i] + direction
+            if newVal < 0 then newVal = 0 elsif newVal > 127 then newVal = 127 end
+            // Prevent Min from exceeding Max
+            if newVal > Mem_NP_MaxVel[i] then newVal = Mem_NP_MaxVel[i] end
+            Mem_NP_MinVel[i] = newVal; pluginVal = IntToFloat(newVal) / 127.0 
+         elsif paramType == 7 then // MaxVel (0-127)
+            newVal = Mem_NP_MaxVel[i] + direction
+            if newVal < 0 then newVal = 0 elsif newVal > 127 then newVal = 127 end
+            // Prevent Max from going below Min
+            if newVal < Mem_NP_MinVel[i] then newVal = Mem_NP_MinVel[i] end
+            Mem_NP_MaxVel[i] = newVal; pluginVal = IntToFloat(newVal) / 127.0 
+         elsif paramType == 8 then // HumVel (0-100)
+            newVal = Mem_NP_HumVel[i] + direction
+            if newVal < 0 then newVal = 0 elsif newVal > 100 then newVal = 100 end
+            Mem_NP_HumVel[i] = newVal; pluginVal = IntToFloat(newVal) / 100.0 
+         elsif paramType == 9 then // HumTime (0-100)
+            newVal = Mem_NP_HumTime[i] + direction
+            if newVal < 0 then newVal = 0 elsif newVal > 100 then newVal = 100 end
+            Mem_NP_HumTime[i] = newVal; pluginVal = IntToFloat(newVal) / 100.0 
+         elsif paramType == 10 then // QuantKey (0-11)
+            newVal = Mem_NP_QuantKey[i] + direction
+            if newVal < 0 then newVal = 11 elsif newVal > 11 then newVal = 0 end // Wrap around
+            Mem_NP_QuantKey[i] = newVal; pluginVal = IntToFloat(newVal) / 11.0 
+         elsif paramType == 11 then // QuantScale (0-5)
+            newVal = Mem_NP_QuantScale[i] + direction
+            if newVal < 0 then newVal = 5 elsif newVal > 5 then newVal = 0 end // Wrap around
+            Mem_NP_QuantScale[i] = newVal; pluginVal = IntToFloat(newVal) / 5.0 
+         end
+         
+         pIdx = GetParamIdxByName(BLK_NoteProcessor[i], paramName)
+         if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, pluginVal) end
+         if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
+      end
+   End
+   UpdateInjectionNPDisplay()
+   UpdateMetaColors()
+End
+
+
+// ============================================================================
+// SECTION 21: ORCHESTRATION
+// ============================================================================
 
 Function CycleChannelScope(direction : Integer)
    var i, currentIdx : Integer
@@ -8396,6 +8102,130 @@ Function UpdateChannelFade(chIdx : Integer, type : Integer, direction : Integer,
    if idxFIn > -1 then SetParameter(BLK_NoteProcessor[chIdx], idxFIn, IntToFloat(Mem_FadeIn[chIdx]) / 127.0) end
    if idxFOut > -1 then SetParameter(BLK_NoteProcessor[chIdx], idxFOut, IntToFloat(Mem_FadeOut[chIdx]) / 127.0) end
 End
+
+
+// ============================================================================
+// SECTION 15: MIDI & CHANNEL ENGINE
+// ============================================================================
+
+// ---------------------------------------------------------
+// KB-sPLIT WATCHDOG
+// ---------------------------------------------------------
+
+Function SyncKBSplitWatchdog()
+   var i : Integer; var pMin, pMax : Double = 0.0
+   
+   // Only check when not loading
+   If not IsLoadingSnapshot Then
+      
+      For i = 0; i < 16; i = i + 1 Do
+         // 1. Echte Werte aus dem Plugin lesen
+         pMin = GetParameter(BLK_MidiIn[i], 16)
+         pMax = GetParameter(BLK_MidiIn[i], 17)
+         
+         // 2. Check MIN
+         if Abs(pMin - Mem_MinNote[i]) > 0.001 then 
+            UpdateChannelFade(i, 4, 0, 0.0) 
+         end
+         
+         // 3. Check MAX (must remain inside the loop)
+         if Abs(pMax - Mem_MaxNote[i]) > 0.001 then 
+            UpdateChannelFade(i, 4, 0, 0.0)
+         end
+      End // <-- Hier endet die Schleife erst!
+      
+   End
+End
+
+
+// ============================================================================
+// SECTION 17: CONTROLLER MAP ENGINE
+// ============================================================================
+
+// ---------------------------------------------------------
+// THE MAGIC EAR (MIDI LEARN LISTENER)
+// ---------------------------------------------------------
+
+// 1. Die Intelligenz: Hier passiert die eigentliche Arbeit
+Function ProcessMidiLearn(m : NoteMessage)
+   var noteNum, pIdx, vel, i : Integer
+   var paramVal : Double = 0.0
+   
+   // Only respond when learning and the key is pressed
+   if (IsLearningMin or IsLearningMax) and IsNoteOn(m) then
+       
+       noteNum = GetNoteNumber(m)
+       paramVal = noteNum / 127.0 // Convert to 0.0-1.0 for the plugin
+       
+       // INJECTION: Push the value to all selected channels
+       For i = 0; i < 16; i = i + 1 Do
+          if OutputScope[i] then
+             
+             if IsLearningMin then
+                // Parameter 0 ist p_SplitMin in Deinem V7.1 NoteProcessor!
+                SetParameter(BLK_NoteProcessor[i], 0, paramVal)
+             else
+                // Parameter 1 ist p_SplitMax in Deinem V7.1 NoteProcessor!
+                SetParameter(BLK_NoteProcessor[i], 1, paramVal)
+             end
+             
+             // Sync memory and plugin
+             UpdateChannelFade(i, 4, 0, 0.0) 
+             
+             // Prevent stuck notes when transposing
+             if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
+          end
+       End
+       
+       // Auto-Off: Learn Modus beenden und Buttons ausschalten
+       IsLearningMin = false
+       IsLearningMax = false
+       SetWidgetValue(BTN_LearnMin, 0.0)
+       SetWidgetValue(BTN_LearnMax, 0.0)
+       
+       
+       // UI aktualisieren
+       UpdateInjectionSplitDisplay()
+       UpdateMetaColors() // Split changed, channel may now be [CUST]
+       
+       Trace("LEARN SUCCESS: Injected Note " + noteNum + " to Scope.")
+   end
+   
+   if (IsLearningVelMin or IsLearningVelMax) and IsNoteOn(m) then
+           vel = GetVelocity(m)
+           paramVal = IntToFloat(vel) / 127.0
+           
+           For i = 0; i < 16; i = i + 1 Do
+              if OutputScope[i] then
+                 if IsLearningVelMin then
+                    Mem_NP_MinVel[i] = vel
+                    pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_MinVel")
+                 else
+                    Mem_NP_MaxVel[i] = vel
+                    pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_MaxVel")
+                 end
+                 
+                 // Ins Plugin injizieren
+                 if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) end
+              end
+           End
+           
+           // Auto-Off: Learn Modus beenden
+           IsLearningVelMin = false
+           IsLearningVelMax = false
+           SetWidgetValue(BTN_Inject_NP_VelMinLearn, 0.0)
+           SetWidgetValue(BTN_Inject_NP_VelMaxLearn, 0.0)
+           
+           UpdateInjectionNPDisplay()
+           UpdateMetaColors() 
+           Trace("LEARN SUCCESS: Injected Velocity " + vel + " to Scope.")
+       end   
+End
+
+
+// ============================================================================
+// SECTION 21: ORCHESTRATION
+// ============================================================================
 
 Function CycleSyncMode(direction : Integer)
    CurrentSyncMode = CurrentSyncMode + direction
@@ -8810,6 +8640,151 @@ Function UpdateSoloMuteState()
    // C) FINALLY SmartAdapt checks the resulting reality and loads the map if needed
    EvaluateSmartAdapt()
 End
+
+
+// ============================================================================
+// SECTION 18: LOOPER ENGINE
+// ============================================================================
+
+// ---------------------------------------------------------
+// LOOPER: MASTER TRANSPORT SWITCH (MULTI-SCOPE CAPABLE)
+// ---------------------------------------------------------
+Function TriggerFocusLooperTransport(isRecAction : Boolean)
+   var i, currentState, newState : Integer
+   var stateChanged : Boolean = false
+   var scopeIsValid : Boolean = true
+
+   // ========================================================
+   // GUARD: Conflict check BEFORE recording!
+   // ========================================================
+   if isRecAction then
+       For i = 0; i < 16; i = i + 1 Do
+           if OutputScope[i] and IsChannelActiveForLooper(i) then
+               // Nutzt unsere bestehende Logik aus Phase 1!
+               if not ValidateLooperScopeConfig(Mem_Loop_Target[i], Mem_Loop_OutMode[i]) then
+                   scopeIsValid = false
+               end
+           end
+       End
+       
+       if not scopeIsValid then
+           ShowCtrlOverlay("REC BLOCKED: MULTI-SCOPE CONFLICT", 2500.0)
+           if DebugMode then Trace("LOOPER: REC blocked by Scope Conflict (Jump or Global Out in Multi-Scope).") end
+       end
+   end
+
+   // Nur weitermachen, wenn der Scope legal ist (oder es nur ein Play/Stop Klick ist)
+   if scopeIsValid then
+   
+       // Iterate over ALL 16 channels
+       For i = 0; i < 16; i = i + 1 Do
+          // Ist der Kanal im UI markiert UND hat er ein Looper-VST?
+          if OutputScope[i] and IsChannelActiveForLooper(i) then
+             currentState = Mem_Loop_State[i]
+             newState = -1
+             
+             if isRecAction == true then
+                // ==========================================
+                // --- CASE: REC-BUTTON PRESSED ---
+                // ==========================================
+                Select
+                   currentState == 0 Do // EMPTY -> START REC
+                      if GetWidgetValue(BTN_Loop_CountIn) > 0.5 then 
+                         newState = 8 // -> COUNT-IN
+                         LoopFreeArmTimer[i] = TimeSinceStartup() + GetCountInDurationMS()
+                      else 
+                         newState = 5 // -> ARM REC
+                      end
+                   
+                   currentState == 1 Do // REC RUNNING -> MANUAL STOP
+                      CloseLooperBuffer(i)
+                      if Mem_Loop_Length[i] == 0 then LoopLengthMS[i] = TimeSinceStartup() - LoopStartTime[i] end
+                      newState = 2 // -> WECHSLE ZU PLAY
+                      LoopNextEventIdx[i] = GetLooperEventCount(i)
+                      LoopPlayheadMS[i] = -1.0
+
+                   currentState == 2 Do // PLAY -> OVERDUB
+                      newState = 3 
+                      
+                   currentState == 3 Do // OVERDUB -> PLAY
+                      CloseLooperBuffer(i)
+                      newState = 2 
+                   
+                   currentState == 4 Do // STOPPED -> OVERDUB
+                      newState = 3
+                      LoopStartTime[i] = TimeSinceStartup()
+                      LoopNextEventIdx[i] = GetLooperEventCount(i)
+                      LoopPlayheadMS[i] = -1.0
+                      LoopAnchorBar[i] = CurrentBar
+                      LoopAnchorBeat[i] = CurrentBeat
+                      LoopAnchorTick[i] = Global_CurrentTick
+                      
+                   currentState == 5 or currentState == 8 Do newState = 0 // ARM / COUNT-IN ABBRECHEN
+                End
+
+             else
+                // ==========================================
+                // --- CASE: PLAY-BUTTON PRESSED ---
+                // ==========================================
+                Select
+                   currentState == 1 Do // REC RUNNING -> FORCE PLAY
+                      CloseLooperBuffer(i)
+                      if Mem_Loop_Length[i] == 0 then LoopLengthMS[i] = TimeSinceStartup() - LoopStartTime[i] end
+                      newState = 2 // -> WECHSLE ZU PLAY
+                      LoopNextEventIdx[i] = GetLooperEventCount(i)
+                      LoopPlayheadMS[i] = -1.0
+                   
+                   currentState == 2 or currentState == 3 Do 
+                      if Mem_Loop_StopMode[i] == 0 then
+                          newState = 4 // INSTANT STOPP
+                          Trigger_NotesOff(i + 1) 
+                      else
+                          newState = 7 // PENDING STOPP (Wartet auf Taktende)
+                      end
+                      
+                   currentState == 7 Do // User presses again -> EMERGENCY STOP
+                      newState = 4
+                      Trigger_NotesOff(i + 1)
+                   
+                   currentState == 4 Do // STOPP -> PLAY STARTEN
+                      if GetWidgetValue(BTN_Loop_HostSync) > 0.5 then 
+                          newState = 6 // ARM PLAY
+                      else 
+                          newState = 2 // ISOLATED PLAY START
+                          LoopStartTime[i] = TimeSinceStartup()
+                          LoopNextEventIdx[i] = GetLooperEventCount(i)
+                          LoopPlayheadMS[i] = -1.0
+                          LoopAnchorBar[i] = CurrentBar
+                          LoopAnchorBeat[i] = CurrentBeat
+                          LoopAnchorTick[i] = Global_CurrentTick
+                      end
+                      
+                   currentState == 6 Do newState = 4 // ARM PLAY ABBRECHEN
+                End
+             end
+             
+             // Apply state for this channel
+             if newState != -1 then
+                Mem_Loop_State[i] = newState
+                stateChanged = true
+             end
+             
+          end
+       End
+       
+       // Update UI and labels once at the end, only if at least 1 channel changed
+       if stateChanged then
+          UpdateSoloMuteState()
+          BuildLooperConfigLines()
+          UpdateInjectionLooperTransportUI()
+       end
+   end // Ende des scopeIsValid Checks
+End
+
+
+// ============================================================================
+// SECTION 21: ORCHESTRATION
+// ============================================================================
 
 Function ChangeVstScope(direction : Integer, directIdx : Integer)
    var newScope : Integer = Active_VST_Scope
@@ -9602,10 +9577,6 @@ End
 // ============================================================================
 // SECTION 23: SONG & SNAPSHOT MANAGEMENT
 // ============================================================================
-
-// -------------------------------------------------------
-// RESET TO DEFAULT / SYSTEM RESET (PANIC BUTTON)
-// -------------------------------------------------------
 
 Function PerformSystemReset()
    var i, j : Integer
@@ -11150,12 +11121,137 @@ End
 
 
 // ============================================================================
-// SECTION 24: INITIALIZATION
+// SECTION 19: PROMPTER & TIMELINE ENGINE
 // ============================================================================
 
 // ---------------------------------------------------------
-// INITIALIZATION (Safe Order)
+// TRANSPORT SYNC EVALUATION (The Smart Latch Brain)
 // ---------------------------------------------------------
+Function EvaluateTransportSync()
+    var playing : Boolean = PendingPlayheadState
+    var i : Integer
+    
+    // Die reine Wahrheit: Hat das Scriptlet in den letzten 800ms "HIER!" gerufen?
+    var timeSinceHW : Double = TimeSinceStartup() - LastHardwarePulseTime
+    var isHW : Boolean = (timeSinceHW < 800.0 and timeSinceHW >= 0.0) 
+
+    Trace(">>> EvaluateTransportSync: Play=" + playing + " | HW_Pulse=" + isHW)
+
+    // ========================================================
+    // DEIN GENIALER WATCHDOG (Nur bei Stopp aktiv!)
+    // ========================================================
+    if not playing then
+        StopWatchdogTimer = TimeSinceStartup() + 2500.0 
+        Trace("WATCHDOG: Playhead gestoppt. Lausche auf Geister-Noten...")
+        
+        if GetWidgetValue(BTN_Loop_HostSync) > 0.5 then
+            For i = 0; i < 16; i = i + 1 Do
+            // Alle laufenden oder wartenden Looper auf STOP (4) oder EMPTY (0) setzen
+            if Mem_Loop_State[i] == 1 or Mem_Loop_State[i] == 2 or Mem_Loop_State[i] == 3 or Mem_Loop_State[i] == 6 then 
+                Mem_Loop_State[i] = 4 
+            elsif Mem_Loop_State[i] == 5 then 
+                Mem_Loop_State[i] = 0 
+            end
+            Trigger_NotesOff(i + 1) // Noten sicherheitshalber killen
+        End
+        BuildLooperConfigLines()
+        UpdateInjectionLooperTransportUI()
+    end
+    else
+        StopWatchdogTimer = 0.0 
+    end
+
+    // ========================================================
+    // DIE NEUE EINWEG-SPIEGEL LOGIK
+    // ========================================================
+
+    // --- MODUS 0: ISOLATED (GUI darf Genos nicht steuern) ---
+    if CurrentSyncMode == 0 then 
+        IsPerformanceActive = playing
+        if not playing then
+//            EnablePlayhead(false) 
+            Trace("ETS: [OK] ETS: ISOLATED: Genos hat gestartet.")
+        else
+            Trace("ETS: [OK] ETS: ISOLATED: GP hat gestartet")
+        end
+    
+    // --- MODUS 1: GENOS LEADS (GUI darf Genos nicht steuern) ---
+    elsif CurrentSyncMode == 1 then 
+        IsPerformanceActive = playing
+        if not isHW then
+            // FORBIDDEN: GUI started/stopped GP! Force GP back immediately.
+            Trace("ETS: [X] ETS: ARRANGER LEADS: GUI acted illegally! Forcing GP back...")
+            IsCorrectingPlayhead = true; EnablePlayhead(not playing) 
+        else
+            Trace("ETS: [OK] ETS: GENOS LEADS: Genos Aktion. GP lief nativ mit.")
+        end
+        
+    // --- MODUS 2: GP LEADS (Genos darf GP nicht starten) ---
+    elsif CurrentSyncMode == 2 then 
+        IsPerformanceActive = playing
+        if not isHW then
+            Trace("ETS: [OK] GP LEADS: GUI Aktion. Sende Befehl an Genos...")
+            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
+            StyleTriggerResetTimer = TimeSinceStartup() + 60.0
+            LastHardwarePulseTime = TimeSinceStartup() + 1000.0
+        else
+            // VERBOTEN: Genos hat GP nativ gestartet! Wir killen sofort beide!
+            Trace("ETS: [X] GP LEADS: Genos hat illegal gestartet! Stoppe beide...")
+            IsCorrectingPlayhead = true; EnablePlayhead(false)
+            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
+            StyleTriggerResetTimer = TimeSinceStartup() + 60.0
+        end
+
+    // --- MODUS 3: FULL SYNC ---
+    elsif CurrentSyncMode == 3 then 
+        IsPerformanceActive = playing
+        if not isHW then
+            // It was a pure mouse click! We need to sync the arranger!
+            Trace("ETS: [OK] FULL SYNC: GUI Aktion. Sende Befehl an Genos...")
+            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
+            StyleTriggerResetTimer = TimeSinceStartup() + 60.0
+            
+            // IMPORTANT: Set the pulse artificially into the future so that
+            // unvermeidliche Echo des Genos beim Stoppen uns nicht verwirrt!
+            LastHardwarePulseTime = TimeSinceStartup() + 1000.0
+        else
+            // It was a hardware click! GP responded natively. Script stays silent.
+            Trace("ETS: [OK] FULL SYNC: Arranger action. GP ran natively. (No echo needed)")
+        end
+        
+    // --- MODUS 4: INITIAL LATCH ---
+    elsif CurrentSyncMode == 4 then 
+        if playing then
+            if isHW then
+                if not IsPerformanceActive then
+                    IsPerformanceActive = true; UpdateSyncLabel()
+                end
+            else
+                IsPerformanceActive = true; UpdateSyncLabel()
+                SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
+                StyleTriggerResetTimer = TimeSinceStartup() + 60.0
+                LastHardwarePulseTime = TimeSinceStartup() + 1000.0
+            end
+        else
+            // On stop, ignore the arranger entirely so GP continues unaffected!
+            if isHW then
+                Trace("ETS: [X] INITIAL LATCH: Genos hat gestoppt. Wird ignoriert! Re-Start GP.")
+                IsCorrectingPlayhead = true; EnablePlayhead(true)
+            else
+                IsPerformanceActive = false; UpdateSyncLabel()
+            end
+        end
+    end
+    
+    // --- UI Updates ---
+    if RecordMode > 0 then
+        BuildRecDisplayLines()
+        RefreshRecDisplay(GetWidgetValue(SLD_CurrentState))
+    end
+    
+    ProcessTopQueueJobResult(true) 
+End
+
 
 Initialization
    var devCount, i, i_init, finishedIdx, ch, p, vIdx, vCount, rIdx, idxInit : Integer;
