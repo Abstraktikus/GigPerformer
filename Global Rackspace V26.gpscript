@@ -37,12 +37,12 @@ Var
    NEW_LINE : String = <<<
 >>>
    ASCII_LOOKUP : String = " !_#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[_]^_`abcdefghijklmnopqrstuvwxyz{|}~"
-   FILTER_DEFAULT_VAL : Double = 0.0941176 // Der Standardwert für GP MIDI Filter (Passthru)
+   FILTER_DEFAULT_VAL : Double = 0.0941176 // Default GP MIDI Filter value (passthrough)
    MAX_LINKS : Integer = 512
    MAX_VSTS : Integer = 10
    MAX_MACROS : Integer = 100
    
-   // --- Global Default Macro Assignments (Start-Indizes für 16er Blöcke) ---
+   // --- Global Default Macro Assignments (start indices for 16-element blocks) ---
    DEF_LOOPER_CH_MacroIdx   : Integer Array = [34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
    DEF_SOLO_SMART_MacroIdx  : Integer Array = [50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65]  
    DEF_SOLO_STRICT_MacroIdx : Integer Array = [66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81]
@@ -54,12 +54,11 @@ Var
    DEF_QUANTIZE_MacroIdx    : Integer Array = [162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177]
    DEF_SUSTAIN_MacroIdx     : Integer Array = [178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193]
    
-   // --- DISPLAY & NAVIGATION ORDER (Reihenfolge frei wählbar!) ---
+   // --- DISPLAY & NAVIGATION ORDER (display order is configurable) ---
    MacroGroup_Names   : String Array  = ["Global Scope", "Hardware Sliders", "Looper", "Smart Solo", "Strict Solo", "User Mute", "Velocity Range", "Root/Chord", "Octaver", "Humanizer", "Scale Quantizer", "Auto Sustain"]
    MacroGroup_Anchors : Integer Array = [-1,             0,                  34,       50,           66,            82,          98,               114,          130,       146,         162,               178]
 
-   // --- ENGINE DATA: RAM für die Macro-Zuweisung (aktuelle Map) ---
-   // (Füge die neuen Arrays unter den bestehenden hinzu)
+   // --- ENGINE DATA: RAM for macro assignment (active map) ---
    VELRANGE_MacroIdx, VELRANGE_CCIdx : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
    ROOT_MacroIdx,     ROOT_CCIdx     : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
    OCTAVER_MacroIdx,  OCTAVER_CCIdx  : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
@@ -151,12 +150,12 @@ Var
    DeviceIn_2, DeviceIn_3 : MidiInBlock
    BLK_VSTControl      : MidiInBlock
    
-   // --- VST Instrumente ---
+   // --- VST Instruments ---
    VST1_GRS, VST2_GRS, VST3_GRS, VST4_GRS, VST5_GRS : PluginBlock
    VST6_GRS, VST7_GRS, VST8_GRS, VST9_GRS, VST10_GRS : PluginBlock
    BLK_VST : PluginBlock Array
    
-   // Speichert für jedes VST den aktuellen absoluten Patch-Index
+   // Stores the current absolute patch index for each VST
    Current_PC_Absolute : Integer Array = [0,0,0,0,0,0,0,0,0,0]
    
    // --- Midi In Blocks ---
@@ -563,12 +562,12 @@ Function Wait(ms : Double)
 End
 
 Function Trace(msg : String)
-   // 1. Normale Text-Ausgabe (nur im DebugMode)
+   // 1. Text output (only in DebugMode)
    if DebugMode then
       Print("[" + DoubleToString(TimeSinceStartup(), 1) + "] GLB: " + msg)
    end
    
-   // 2. DER WÄCHTER (Immer aktiv, unabhängig vom DebugMode)
+   // 2. WATCHDOG (always active, independent of DebugMode)
    if (TimeSinceStartup() - TraceLastTime) > 100.0 then
       TraceLoopCount = 0
    end
@@ -576,13 +575,13 @@ Function Trace(msg : String)
    TraceLastTime = TimeSinceStartup()
    TraceLoopCount = TraceLoopCount + 1
    
-   // Limit auf 250 erhöht für den schnellen Text-Parser
+   // Limit raised to 250 for the fast text parser
    if TraceLoopCount > 250 then
-      Print("!!! NOTBREMSE: Todes-Schleife erkannt! Letzter Trace: " + msg)
+      Print("!!! EMERGENCY: Infinite loop detected! Last trace: " + msg)
       
       EmergencyKillSwitch = true 
      
-      // BLACKBOX: Schreibt den Fehler direkt in deine Zwischenablage!
+      // BLACKBOX: Write the error directly to clipboard
       SendToClipboard("GP DEATH LOOP TRACE:" + NEW_LINE + msg)
       
       TraceLoopCount = 0 
@@ -622,7 +621,7 @@ Function GetSnapshotPath(fileName : String) Returns String
       sep = "/" 
    End
    
-   // Automatisch .ini anhängen, falls vergessen
+   // Auto-append .ini if missing
    if IndexOfSubstring(fileName, ".ini", false) == -1 then 
       fileName = fileName + ".ini" 
    end
@@ -631,7 +630,7 @@ Function GetSnapshotPath(fileName : String) Returns String
 End
 
 // ---------------------------------------------------------
-// HELPER: HIGH-SPEED SPACER (Verhindert String-Overhead)
+// HELPER: HIGH-SPEED SPACER (avoids string overhead)
 // ---------------------------------------------------------
 Function GetSpaces(count : Integer) Returns String
     var res : String = ""
@@ -653,7 +652,7 @@ Function GetSpaces(count : Integer) Returns String
 End
 
 // ---------------------------------------------------------
-// HELPER: PAD INTEGER WITH ZEROS (z.B. 1 -> "001")
+// HELPER: PAD INTEGER WITH ZEROS (e.g. 1 -> "001")
 // ---------------------------------------------------------
 Function PadInt(val : Integer, length : Integer) Returns String
     var s : String = IntToString(val)
@@ -664,7 +663,7 @@ Function PadInt(val : Integer, length : Integer) Returns String
 End
 
 // ---------------------------------------------------------
-// HELPER: SPLIT STRING FÜR CONTROLLER / MORPHING
+// HELPER: SPLIT STRING FOR CONTROLLER / MORPHING
 // ---------------------------------------------------------
 
 Function SplitString(text : String, delimiter : String) Returns String Array
@@ -686,36 +685,36 @@ Function SplitString(text : String, delimiter : String) Returns String Array
 End
 
 // ----------------------------------------------------------------------
-// --- HELPER: Setzt die Farbe und den Selektions-Status eines Kanals ---
+// --- HELPER: Sets channel color and selection state ---
 // ----------------------------------------------------------------------
 
 Function SetChannelState(chIdx : Integer, colorCode : Integer)
    var isSelected : Double = 0.0
       
-   // Prüfen, ob der Kanal gerade im Scope (selektiert) ist
+   // Check whether the channel is currently in scope (selected)
    if OutputScope[chIdx] then isSelected = 1.0 else isSelected = 0.0 end
    
-   // 1. Alle Layer verstecken (Reset) - WICHTIG: Auch Orange!
-   SetWidgetHideOnPresentation(W_Out_Layer_Bl[chIdx], true) // Blau (Off)
-   SetWidgetHideOnPresentation(W_Out_Layer_Ye[chIdx], true) // Gelb (Std)
-   SetWidgetHideOnPresentation(W_Out_Layer_Gr[chIdx], true) // Grün (Custom)
-   SetWidgetHideOnPresentation(W_Out_Layer_Re[chIdx], true) // Rot (Merge)
+   // 1. Hide all layers (reset) - includes Orange
+   SetWidgetHideOnPresentation(W_Out_Layer_Bl[chIdx], true) // Blue (Off)
+   SetWidgetHideOnPresentation(W_Out_Layer_Ye[chIdx], true) // Yellow (Std)
+   SetWidgetHideOnPresentation(W_Out_Layer_Gr[chIdx], true) // Green (Custom)
+   SetWidgetHideOnPresentation(W_Out_Layer_Re[chIdx], true) // Red (Merge)
    SetWidgetHideOnPresentation(W_Out_Layer_Or[chIdx], true) // Orange (Dirty)
    
-   // 2. Den richtigen Layer aufdecken & Wert setzen (fürs Leuchten)
-   if colorCode == 0 then       // BLAU (Kein Signal / Off / Clean Mute)
+   // 2. Show the correct layer and set its value (for illumination)
+   if colorCode == 0 then       // BLUE (No signal / Off / Clean Mute)
       SetWidgetHideOnPresentation(W_Out_Layer_Bl[chIdx], false)
       SetWidgetValue(W_Out_Layer_Bl[chIdx], isSelected)
       
-   elsif colorCode == 1 then    // GELB (Standard Signal / Factory)
+   elsif colorCode == 1 then    // YELLOW (Standard Signal / Factory)
       SetWidgetHideOnPresentation(W_Out_Layer_Ye[chIdx], false)
       SetWidgetValue(W_Out_Layer_Ye[chIdx], isSelected)
       
-   elsif colorCode == 2 then    // ROT (Merge / Chaos)
+   elsif colorCode == 2 then    // RED (Merge / Chaos)
       SetWidgetHideOnPresentation(W_Out_Layer_Re[chIdx], false)
       SetWidgetValue(W_Out_Layer_Re[chIdx], isSelected)
       
-   elsif colorCode == 3 then    // GRÜN (Custom Signal)
+   elsif colorCode == 3 then    // GREEN (Custom Signal)
       SetWidgetHideOnPresentation(W_Out_Layer_Gr[chIdx], false)
       SetWidgetValue(W_Out_Layer_Gr[chIdx], isSelected)
 
@@ -726,7 +725,7 @@ Function SetChannelState(chIdx : Integer, colorCode : Integer)
 End
 
 // ----------------------------------------------------------------------
-// --- LOOPER HELPER: TAKTZÄHLER WENN SYNC OFF ---
+// --- LOOPER HELPER: BAR COUNTER WHEN SYNC IS OFF ---
 // ----------------------------------------------------------------------
 
 Function GetCountInDurationMS() Returns Double
@@ -737,7 +736,7 @@ Function GetCountInDurationMS() Returns Double
     if num <= 0 then num = 4 end
     if currentBpm < 1.0 then currentBpm = 120.0 end
     
-    // Die Profi-Grenze: Ab 140 BPM geben wir dem Musiker automatisch 2 Takte Vorlaufzeit!
+    // Above 140 BPM, automatically give the performer a 2-bar count-in
     if currentBpm >= 140.0 then barsToWait = 2 end
     
     result = (60000.0 / currentBpm) * IntToFloat(num * barsToWait)
@@ -750,7 +749,7 @@ Function ResetState()
    CurrentState = 0
 End
 
-// Sucht den ERSTEN aktiven Kanal im Scope
+// Returns the first active channel in scope
 Function GetFirstActiveScope() Returns Integer
     var i : Integer = 0
     result = -1
@@ -761,7 +760,7 @@ Function GetFirstActiveScope() Returns Integer
 End
 
 // ---------------------------------------------------------
-// HELPER FÜR INJECTION 
+// HELPER FOR INJECTION
 // ---------------------------------------------------------
 
 Function GetNoteName(noteNum : Integer) Returns String
@@ -798,7 +797,7 @@ Function GetMusicTheoryString(semitones : Integer) Returns String
    if semitones == 0 then
       finalStr = "C -> C (Original Pitch)"
    else
-      // Absolute Werte für die Berechnung
+      // Absolute values for calculation
       if semitones < 0 then 
          absVal = -semitones 
       else 
@@ -807,7 +806,7 @@ Function GetMusicTheoryString(semitones : Integer) Returns String
       octaves = absVal / 12
       remainder = absVal % 12
       
-      // Ziel-Note berechnen (Modulo mit Wrap-Around für negative Zahlen)
+      // Calculate target note (modulo with wrap-around for negative values)
       noteIndex = semitones % 12
       if noteIndex < 0 then noteIndex = noteIndex + 12 end
       targetNote = notes[noteIndex]
@@ -833,7 +832,7 @@ End
 // ---------------------------------------------------------
 
 Function GetLuxusLabel(noteNum : Integer) Returns String
-   // Ergebnis: "C-2 (0)" oder "G8 (127)"
+   // Result: "C-2 (0)" or "G8 (127)"
    result = GetNoteName(noteNum) + " (" + noteNum + ")"
 End
 
@@ -841,14 +840,14 @@ End
 // CHANNEL USAGE LOGIC
 // ---------------------------------------------------------
 
-// Sucht das ERSTE VST (0-9), das diesem Kanal zugewiesen ist
+// Returns the first VST (0-9) assigned to this channel
 Function GetPrimaryVSTForChannel(chIdx : Integer) Returns Integer
    var v : Integer = 0
-   result = -1 // Fallback (Kein VST zugewiesen)
+   result = -1 // Fallback (no VST assigned)
    
-   // SICHERHEIT: Nur abfragen, wenn die Matrix schon fertig gebaut ist!
+   // Safety: only query if the matrix is fully built
    if Size(RoutingMatrix) == 160 then
-       // Sichere Schleife: Läuft nur solange wir unter MAX_VSTS sind UND noch nichts gefunden haben
+       // Safe loop: runs only while under MAX_VSTS and nothing found yet
        While v < MAX_VSTS and result == -1 Do
           if RoutingMatrix[(v * 16) + chIdx] == true then
              result = v
@@ -859,7 +858,7 @@ Function GetPrimaryVSTForChannel(chIdx : Integer) Returns Integer
 End
 
 // ---------------------------------------------------------
-// LOOPER: BASE HELPERS (Haben keine Abhängigkeiten)
+// LOOPER: BASE HELPERS (no dependencies)
 // ---------------------------------------------------------
 
 Function IsChannelActiveForLooper(chIdx : Integer) Returns Boolean
@@ -870,7 +869,7 @@ Function IsChannelActiveForLooper(chIdx : Integer) Returns Boolean
    end
 End
 
-// Sucht den ERSTEN aktiven Looper-Kanal im Scope
+// Returns the first active looper channel in scope
 Function GetActiveLooperScope() Returns Integer
     var i : Integer = 0
     result = -1
@@ -901,14 +900,14 @@ End
 // --- SMART CONFIG CHECK ---
 // ----------------------------------------------------------------------
 
-// Gibt TRUE zurück, wenn der Kanal vom Standard abweicht (Custom ist)
+// Returns TRUE if the channel deviates from the default (is custom)
 Function IsChannelCustom(chIdx : Integer) Returns Boolean
-   // CheckBlock liefert 'false', wenn es eine Abweichung gibt. 'not' dreht es um.
+   // CheckBlock returns false on deviation; invert to get custom flag
    result = not CheckBlock(BLK_NoteProcessor[chIdx], DEF_NoteProcessor, "IsCust NP")
 End
 
 Function IsChannelFactory(chIdx : Integer) Returns Boolean
-   // Gibt 'true' zurück, wenn alles exakt dem Factory-Array entspricht
+   // Returns true if all values match the factory array exactly
    result = CheckBlock(BLK_NoteProcessor[chIdx], FACT_NoteProcessor, "IsFact NP")
 End
 
@@ -947,10 +946,10 @@ Function GetStandardCCName(cc : Integer) Returns String
 End
 
 // -------------------------------------------------------------
-// APPENDER FUNKTIONEN FÜR CONTROLLER MAP (VST/Channels to Scope
+// APPENDER FUNCTIONS FOR CONTROLLER MAP (VST/Channels to Scope
 // -------------------------------------------------------------
 
-// Validiert den Namen grob vorab
+// Rough pre-validation of block name
 Function IsBlockNameValid(name : String) Returns Boolean
     result = false
     if IndexOfSubstring(name, "VST", false) == 0 then result = true
@@ -979,7 +978,7 @@ Function UpdateTagInLine(line : String, tagName : String, newVal : String) Retur
 End
 
 Function StartMacroAnimation(macroID : Integer, targetVal : Double, durMS : Double)
-   // macroID kommt aus dem Text-File (1 bis 16). Unser Array ist 0-basiert.
+   // macroID comes from the text file (1-16); array is 0-based
    var mIdx : Integer = macroID - 1 
    
    if mIdx >= 0 and mIdx <= 15 then
@@ -988,14 +987,14 @@ Function StartMacroAnimation(macroID : Integer, targetVal : Double, durMS : Doub
        Anim_Duration[mIdx] = durMS
        Anim_StartTime[mIdx] = TimeSinceStartup()
        
-       Anim_Active[mIdx] = true // Zündung!
+       Anim_Active[mIdx] = true // Fire!
        
        Trace("ANIMATION: Started Macro " + macroID + " -> " + targetVal + " over " + durMS + "ms")
    end
 End
 
 // ---------------------------------------------------------
-// HELPER FÜR CHORD VIEWER
+// HELPER FOR CHORD VIEWER
 // ---------------------------------------------------------
 
 Function JoinStringArray(arr : String Array, delimiter : String) Returns String
@@ -1019,7 +1018,7 @@ Function IsDigitsOnly(s : String) Returns Boolean
    While i < len and isNum Do 
       c = CopySubstring(s, i, 1)
       If c < "0" or c > "9" Then 
-         isNum = false // Legal: Bricht die Schleife im nächsten Durchlauf ab!
+         isNum = false // Terminates the loop on the next iteration
       End
       i = i + 1 
    End
@@ -1058,7 +1057,7 @@ Function MyToUpper(s : String) Returns String
 End
 
 // ---------------------------------------------------------
-// TRANSPOSE ENGINE FÜR CHORD VIEWER
+// TRANSPOSE ENGINE FOR CHORD VIEWER
 // ---------------------------------------------------------
 
 Function GetNoteIndex(note : String) Returns Integer
@@ -1148,8 +1147,8 @@ Function SuperCleanPath(raw : String) Returns String
    len = Length(raw)
    For i = 0; i < len; i = i + 1 Do
        c = CopySubstring(raw, i, 1)
-       // MAGIE: Verwirft alle unsichtbaren Steuerzeichen (0-31, inkl. \r und \n).
-       // Erlaubt alles ab Leerzeichen (32) aufwärts, inkl. Sonderzeichen und Umlaute!
+       // Discard invisible control characters (0-31, including \r and \n).
+       // Allow all printable characters (32+), including special characters and accented letters.
        if c >= " " and c != "\"" then
            res = res + c
        end
@@ -1418,7 +1417,7 @@ Function GetParamIdxByName(blk : PluginBlock, targetName : String) Returns Integ
 End
 
 // ---------------------------------------------------------
-// HELPER: FILTER FÜR CONFIG-PARAMETER
+// HELPER: FILTER FOR CONFIG PARAMETERS
 // ---------------------------------------------------------
 Function IsNPConfigParam(blk : PluginBlock, pIdx : Integer) Returns Boolean
    var pName : String = GetParameterName(blk, pIdx)
@@ -1453,12 +1452,11 @@ Function CheckBlock(blk : PluginBlock, arr : Double Array, context : String) Ret
          if IsNPConfigParam(blk, p) then
             val = GetParameter(blk, p)
             
-            // ---> DIE PANZERUNG <---
-            // Greife nur auf das Array zu, wenn der Index auch existiert!
+            // Bounds check: only access array if index exists
             if p < arrSize then
                 refVal = arr[p]
             else
-                refVal = 0.0 // Fallback-Sicherheit, falls Plugin > Array
+                refVal = 0.0 // Fallback if plugin has more params than array
             end
             
             if Abs(val - refVal) > 0.001 then 
@@ -1476,17 +1474,17 @@ End
 // ----------------------------------------------------------------------
 Function CaptureFactoryDefaults()
    var p, pCount, resetIdx : Integer
-   var probeIdx : Integer = 15 // Wir nutzen Kanal 16 als Sonde
+   var probeIdx : Integer = 15 // Use channel 16 as probe
    var soloMuteIdx, userMuteIdx : Integer
    
    FACT_NoteProcessor = [] 
    DEF_NoteProcessor = []
    
-   // 1. Hard-Reset des Probe-Kanals (Zwingt das Scriptlet auf Standard)
+   // 1. Hard-reset of the probe channel (forces the scriptlet to defaults)
    resetIdx = GetParamIdxByName(BLK_NoteProcessor[probeIdx], "p_FactoryReset")
    if resetIdx > -1 then
        SetParameter(BLK_NoteProcessor[probeIdx], resetIdx, 1.0)
-       // TIMING LÜCKE SCHLIESSEN: Wir geben dem Scriptlet Zeit, die Parameter intern zu nullen!
+       // Close timing gap: give the scriptlet time to zero out parameters internally
        Wait(100.0) 
    end
    
@@ -1547,7 +1545,7 @@ End
 Function InjectFilterToggle(paramName : String, uiVal : Double)
    var i, pIdx : Integer
    
-   Trace(">>> INJECT: Button '" + paramName + "' gedrückt (Zielwert: " + uiVal + ")")
+   Trace(">>> INJECT: Button '" + paramName + "' pressed (target: " + uiVal + ")")
    
    For i = 0; i < 16; i = i + 1 Do
       if OutputScope[i] then
@@ -1555,9 +1553,9 @@ Function InjectFilterToggle(paramName : String, uiVal : Double)
          
          if pIdx > -1 then 
              SetParameter(BLK_NoteProcessor[i], pIdx, uiVal) 
-             Trace("    [OK] Kanal " + (i+1) + ": Parameter an Index " + pIdx + " gefunden -> Geschaltet!")
+             Trace("    [OK] Ch " + (i+1) + ": Parameter at index " + pIdx + " found -> Toggled!")
          else
-             Trace("    [FEHLER] Kanal " + (i+1) + ": Parameter '" + paramName + "' EXISTIERT HIER NICHT! (Alte Scriptlet-Version?)")
+             Trace("    [ERROR] Ch " + (i+1) + ": Parameter '" + paramName + "' DOES NOT EXIST! (Old scriptlet version?)")
          end
       end
    End
@@ -1571,7 +1569,7 @@ Function InjectTranspose(steps : Integer)
    var i, newVal, pIdx : Integer
    var paramVal : Double = 0.0
    
-   Trace(">>> INJECT: Transpose gedrückt (Steps: " + steps + ")")
+   Trace(">>> INJECT: Transpose pressed (Steps: " + steps + ")")
    
    For i = 0; i < 16; i = i + 1 Do
       if OutputScope[i] then
@@ -1587,9 +1585,9 @@ Function InjectTranspose(steps : Integer)
          pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_Transpose")
          if pIdx > -1 then 
              SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) 
-             Trace("    [OK] Kanal " + (i+1) + ": Transpose an Index " + pIdx + " gefunden -> Geschaltet!")
+             Trace("    [OK] Ch " + (i+1) + ": Transpose at index " + pIdx + " found -> Applied!")
          else
-             Trace("    [FEHLER] Kanal " + (i+1) + ": Parameter 'p_Transpose' EXISTIERT HIER NICHT!")
+             Trace("    [ERROR] Ch " + (i+1) + ": Parameter 'p_Transpose' DOES NOT EXIST!")
          end
          
          if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
@@ -1612,11 +1610,11 @@ Function InjectUserMuteToggle(uiVal : Double)
       if OutputScope[i] then
          Mem_UserMute[i] = intVal
          
-         // Dynamische Suche
+         // Dynamic lookup
          idx_mute = GetParamIdxByName(BLK_NoteProcessor[i], "p_UserMute")
          if idx_mute > -1 then SetParameter(BLK_NoteProcessor[i], idx_mute, uiVal) end
          
-         // Falls wir muten, sicherstellen dass keine Noten hängen
+         // If muting, ensure no notes are stuck
          if intVal == 1 and not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
       end
    End
@@ -1630,7 +1628,7 @@ End
 Function HandleInjectBypassClick(btnIdx : Integer, val : Double)
     var i, count, firstScopeIdx, targetVstIdx : Integer
     
-    // Der GPScript-konforme Türsteher:
+    // GPScript-compliant guard:
     if not IsUpdatingBypassUI then
         
         // ---> UNSER SAUBERER SCOPE-HELPER <---
@@ -1640,7 +1638,7 @@ Function HandleInjectBypassClick(btnIdx : Integer, val : Double)
             count = 0
             targetVstIdx = -1
             
-            // Welches VST gehört zu diesem Button?
+            // Which VST belongs to this button?
             if Size(RoutingMatrix) == 160 then
                 i = 0
                 // ---> DIE SICHERE WHILE-SCHLEIFE <---
@@ -1651,11 +1649,11 @@ Function HandleInjectBypassClick(btnIdx : Integer, val : Double)
                         end
                         count = count + 1
                     end
-                    i = i + 1 // Immer artig hochzählen
+                    i = i + 1 // Always increment
                 End
             end
 
-            // Wert in RAM schreiben und ausführen
+            // Write value to RAM and execute
             if targetVstIdx > -1 then
                 if val > 0.5 then
                     Mem_ManualVSTBypass[targetVstIdx] = true  // Bypass AN (Button leuchtet)
@@ -1663,36 +1661,36 @@ Function HandleInjectBypassClick(btnIdx : Integer, val : Double)
                     Mem_ManualVSTBypass[targetVstIdx] = false // Bypass AUS (Button dunkel)
                 end
                 
-                // Sofortige Neu-Evaluierung erzwingen!
+                // Force immediate re-evaluation
                 ExecuteSmartBypass()
             end
         end
         
-    end // Ende des Türsteher-Blocks
+    end // End of guard block
 End
 
 // ---------------------------------------------------------
-// RESET HELPER (Muss VOR ResetToDefault stehen!)
+// RESET HELPER (must precede ResetToDefault)
 // ---------------------------------------------------------
 
 Function ResetChannelToStandard(chIdx : Integer)
     var resetIdx, idx : Integer 
     
-    // 1. HARDWARE RESET IM SCRIPTLET AUSLÖSEN (Dynamisch!)
+    // 1. TRIGGER HARDWARE RESET IN SCRIPTLET (dynamic)
     resetIdx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_FactoryReset")
     if resetIdx > -1 then
         SetParameter(BLK_NoteProcessor[chIdx], resetIdx, 1.0)
-        Wait(10.0) // Ein Millisekunden-Atemzug für das Scriptlet
+        Wait(10.0) // Brief pause for the scriptlet
         SetParameter(BLK_NoteProcessor[chIdx], resetIdx, 0.0)
     end
     
-    // 2. DYNAMISCHER PLUGIN-RESET (Die absolute Panzerung!)
-    // Wir setzen jeden wichtigen Parameter direkt über seinen Namen auf den logischen GP-Standard!
+    // 2. DYNAMIC PLUGIN RESET
+    // Set each critical parameter by name to the logical GP default
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_SplitMin"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_SplitMax"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 1.0) end
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_Transpose"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.5) end // 0.5 = 0 ST Offset!
     
-    // DIE NEUEN FILTER (Exakte Namen!)
+    // FILTER PARAMETERS (exact names)
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_PassSustain"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_PassPitchBend"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_PassModWheel"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
@@ -1739,7 +1737,7 @@ Function ResetChannelToStandard(chIdx : Integer)
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_QuantKey"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_QuantScale"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
     
-    // 3. RAM HART AUF LOGISCHE STANDARDS SETZEN!
+    // 3. HARD-RESET RAM TO LOGICAL DEFAULTS
     Mem_MinNote[chIdx] = 0.0; Mem_MaxNote[chIdx] = 1.0; Mem_Transpose[chIdx] = 0
     Mem_FadeIn[chIdx] = 0; Mem_FadeOut[chIdx] = 0
     Mem_NP_ChordMode[chIdx] = 0; Mem_NP_LatchMode[chIdx] = 0; Mem_NP_Engine[chIdx] = 0
@@ -1754,10 +1752,10 @@ Function ResetChannelToStandard(chIdx : Integer)
 End
 
 // ---------------------------------------------------------
-// Setzt ALLE Parameter eines Blocks auf 0.0 (Tabula Rasa)
+// Sets ALL parameters of a block to 0.0 (clean slate)
 // ---------------------------------------------------------
 
-// Variante 1: Für normale Plugins (Filter, MT, ChordM)
+// Variant 1: For normal plugins (Filter, MT, ChordM)
 Function ResetPluginParams(mb : PluginBlock)
    var p, count : Integer
    count = GetParameterCount(mb)
@@ -1766,7 +1764,7 @@ Function ResetPluginParams(mb : PluginBlock)
    End
 End
 
-// Variante 2: Speziell für MidiInBlock (KBSplit)
+// Variant 2: Specifically for MidiInBlock (KBSplit)
 Function ResetMidiInParams(mb : MidiInBlock)
    var p, count : Integer
    count = GetParameterCount(mb)
@@ -1775,7 +1773,7 @@ Function ResetMidiInParams(mb : MidiInBlock)
    End
 End
 
-// Spezieller Reset für MIDI Filter: Setzt alles auf "PassThru" (0.094...)
+// Special reset for MIDI Filter: sets all to PassThru (0.094...)
 Function ResetFilterParams(mb : PluginBlock)
    var p, count : Integer
    count = GetParameterCount(mb)
@@ -1788,14 +1786,14 @@ End
 // SMART COPY & COMPARE HELPERS
 // ---------------------------------------------------------
 
-// Vergleicht zwei Plugins (gibt true zurück, wenn ALLES > 0.001 identisch ist)
+// Compares two plugins (returns true if all params match within 0.001 tolerance)
 Function ArePluginParamsEqual(b1 : PluginBlock, b2 : PluginBlock) Returns Boolean
    var p, count : Integer
    var v1, v2 : Double = 0.0
    var isEqual : Boolean = true
    
    count = GetParameterCount(b1)
-   // Sicherheitscheck: Gleiche Plugin-Typen?
+   // Safety check: same plugin types?
    if count != GetParameterCount(b2) then 
       result = false
    else
@@ -1803,7 +1801,7 @@ Function ArePluginParamsEqual(b1 : PluginBlock, b2 : PluginBlock) Returns Boolea
       While p < count and isEqual Do
          v1 = GetParameter(b1, p)
          v2 = GetParameter(b2, p)
-         // Wir tolerieren winzige Abweichungen (Floating Point)
+         // Tolerate tiny deviations (floating point)
          if Abs(v1 - v2) > 0.001 then 
              isEqual = false
          end
@@ -1813,7 +1811,7 @@ Function ArePluginParamsEqual(b1 : PluginBlock, b2 : PluginBlock) Returns Boolea
    end
 End
 
-// Dasselbe für MidiInBlock
+// Same for MidiInBlock
 Function AreMidiParamsEqual(b1 : MidiInBlock, b2 : MidiInBlock) Returns Boolean
    var p, count : Integer
    var v1, v2 : Double = 0.0
@@ -1824,7 +1822,7 @@ Function AreMidiParamsEqual(b1 : MidiInBlock, b2 : MidiInBlock) Returns Boolean
       While p < count and isEqual Do
          v1 = GetParameter(b1, p)
          v2 = GetParameter(b2, p)
-         // Wir tolerieren winzige Abweichungen (Floating Point)
+         // Tolerate tiny deviations (floating point)
          if Abs(v1 - v2) > 0.001 then 
              isEqual = false
          end
@@ -1851,7 +1849,7 @@ End
 Function SyncKBSplitWatchdog()
    var i : Integer; var pMin, pMax : Double = 0.0
    
-   // Nur prüfen, wenn NICHT geladen wird
+   // Only check when not loading
    If not IsLoadingSnapshot Then
       
       For i = 0; i < 16; i = i + 1 Do
@@ -1859,12 +1857,12 @@ Function SyncKBSplitWatchdog()
          pMin = GetParameter(BLK_MidiIn[i], 16)
          pMax = GetParameter(BLK_MidiIn[i], 17)
          
-         // 2. MIN prüfen
+         // 2. Check MIN
          if Abs(pMin - Mem_MinNote[i]) > 0.001 then 
             UpdateChannelFade(i, 4, 0, 0.0) 
          end
          
-         // 3. MAX prüfen (Muss ZWINGEND in der Schleife stehen!)
+         // 3. Check MAX (must remain inside the loop)
          if Abs(pMax - Mem_MaxNote[i]) > 0.001 then 
             UpdateChannelFade(i, 4, 0, 0.0)
          end
@@ -1901,7 +1899,7 @@ Function InjectNPToggle(paramType : Integer, paramName : String, uiVal : Double)
          if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
       end
    End
-   // Das UI-Update lagern wir absichtlich aus, damit es nicht flackert!
+   // UI update is intentionally deferred to avoid flickering
    UpdateMetaColors() 
 End
 
@@ -1940,13 +1938,13 @@ Function InjectNPStep(paramType : Integer, paramName : String, direction : Integ
          elsif paramType == 6 then // MinVel (0-127)
             newVal = Mem_NP_MinVel[i] + direction
             if newVal < 0 then newVal = 0 elsif newVal > 127 then newVal = 127 end
-            // Verhindern, dass Min größer als Max wird
+            // Prevent Min from exceeding Max
             if newVal > Mem_NP_MaxVel[i] then newVal = Mem_NP_MaxVel[i] end
             Mem_NP_MinVel[i] = newVal; pluginVal = IntToFloat(newVal) / 127.0 
          elsif paramType == 7 then // MaxVel (0-127)
             newVal = Mem_NP_MaxVel[i] + direction
             if newVal < 0 then newVal = 0 elsif newVal > 127 then newVal = 127 end
-            // Verhindern, dass Max kleiner als Min wird
+            // Prevent Max from going below Min
             if newVal < Mem_NP_MinVel[i] then newVal = Mem_NP_MinVel[i] end
             Mem_NP_MaxVel[i] = newVal; pluginVal = IntToFloat(newVal) / 127.0 
          elsif paramType == 8 then // HumVel (0-100)
@@ -1959,11 +1957,11 @@ Function InjectNPStep(paramType : Integer, paramName : String, direction : Integ
             Mem_NP_HumTime[i] = newVal; pluginVal = IntToFloat(newVal) / 100.0 
          elsif paramType == 10 then // QuantKey (0-11)
             newVal = Mem_NP_QuantKey[i] + direction
-            if newVal < 0 then newVal = 11 elsif newVal > 11 then newVal = 0 end // Endlos blättern!
+            if newVal < 0 then newVal = 11 elsif newVal > 11 then newVal = 0 end // Wrap around
             Mem_NP_QuantKey[i] = newVal; pluginVal = IntToFloat(newVal) / 11.0 
          elsif paramType == 11 then // QuantScale (0-5)
             newVal = Mem_NP_QuantScale[i] + direction
-            if newVal < 0 then newVal = 5 elsif newVal > 5 then newVal = 0 end // Endlos blättern!
+            if newVal < 0 then newVal = 5 elsif newVal > 5 then newVal = 0 end // Wrap around
             Mem_NP_QuantScale[i] = newVal; pluginVal = IntToFloat(newVal) / 5.0 
          end
          
@@ -2002,7 +2000,7 @@ Function UpdateSubbarLEDs(currentBeat : Integer)
 End
 
 // =========================================================
-// FORENSIC X-RAY: Löst das Geheimnis des toten Kanals
+// FORENSIC X-RAY: Diagnoses a dead channel
 // =========================================================
 Function TraceForensicChannelDump()
     var i : Integer
@@ -2010,9 +2008,9 @@ Function TraceForensicChannelDump()
     
     if activeCh > -1 then
         Trace("=========================================================")
-        Trace("🔴 FORENSIC DUMP: CHANNEL " + (activeCh + 1) + " 🔴")
+        Trace("FORENSIC DUMP: CHANNEL " + (activeCh + 1))
         Trace("---------------------------------------------------------")
-        Trace("1. SCRIPTLET PARAMETER (Die absolute Wahrheit):")
+        Trace("1. SCRIPTLET PARAMETERS (ground truth):")
         Trace("   -> p_SoloMute (Idx 25) : " + GetParameter(BLK_NoteProcessor[activeCh], 25))
         Trace("   -> p_UserMute (Idx 26) : " + GetParameter(BLK_NoteProcessor[activeCh], 26))
         Trace("   -> p_SplitMin (Idx 0)  : " + GetParameter(BLK_NoteProcessor[activeCh], 0))
@@ -2020,7 +2018,7 @@ Function TraceForensicChannelDump()
         Trace("   -> p_Panic    (Idx 24) : " + GetParameter(BLK_NoteProcessor[activeCh], 24))
         Trace("   -> GP Bypass Status    : " + IsPluginBypassed(BLK_NoteProcessor[activeCh]))
         Trace("---------------------------------------------------------")
-        Trace("2. RAM GEDÄCHTNIS (Was das Skript glaubt):")
+        Trace("2. RAM STATE (what the script believes):")
         Trace("   -> OutputScope         : " + OutputScope[activeCh])
         Trace("   -> LooperSoloMute Arr  : " + LooperSoloMute[activeCh])
         Trace("   -> Mem_SoloStrict      : " + Mem_SoloStrict[activeCh])
@@ -2028,13 +2026,13 @@ Function TraceForensicChannelDump()
         Trace("   -> Mem_UserMute        : " + Mem_UserMute[activeCh])
         Trace("=========================================================")
     else
-        Trace("FORENSIC: Kein Kanal im Scope!")
+        Trace("FORENSIC: No channel in scope!")
     end
 End
 
 // ---------------------------------------------------------
 // CUSTOM SCROLLBAR DISPLAY
-// Zeigt 4 Kanäle basierend auf der Position des Sliders an
+// Shows 4 channels based on the slider position
 // ---------------------------------------------------------
 Function RefreshDiagDisplay()
    var scrollVal : Double = GetWidgetValue(SLD_MIDIConfiguration)
@@ -2065,7 +2063,7 @@ Function ScrollToCurrentChannel()
 
     activeIdx = GetFirstActiveScope()
 
-    // 2. Ziel-Scrollposition berechnen
+    // 2. Calculate target scroll position
     if activeIdx > -1 then
         maxStart = 44 // 48 Gesamtzeilen - 4 sichtbare Zeilen
         targetLine = activeIdx * 3 // Jeder Kanal belegt jetzt 3 Zeilen
@@ -2097,7 +2095,7 @@ Function RefreshVstInfoDisplay()
        finalText = NEW_LINE + NEW_LINE + "    >>> --- PRESS REPLACE --- <<<" + NEW_LINE + "    To load: " + Filtered_VstNames[CurrentFavIndex]
        SetWidgetLabel(LBL_VSTConfiguration, finalText)
        
-   // 2. OVERLAY CHECK (Hält das Display für X Sekunden besetzt, z.B. bei Success)
+   // 2. OVERLAY CHECK (holds display for X seconds, e.g. on success)
    elsif VST_OverlayTimer > 0.0 and TimeSinceStartup() < VST_OverlayTimer then
        finalText = NEW_LINE + NEW_LINE + "    >>> " + VST_OverlayMsg + " <<<"
        SetWidgetLabel(LBL_VSTConfiguration, finalText)
@@ -2222,11 +2220,11 @@ Function UpdateInjectionSplitDisplay()
    if firstScopeIdx == -1 then
       SetWidgetLabel(LBL_Injection_Split, "-")
    else
-      // Wir holen die Integer-Werte (0-127) aus unserem Gedächtnis
+      // Read integer values (0-127) from memory
       noteMin = Round(Mem_MinNote[firstScopeIdx] * 127.0)
       noteMax = Round(Mem_MaxNote[firstScopeIdx] * 127.0)
       
-      // Nutzt deine bestehende LuxusLabel Funktion!
+      // Uses the LuxusLabel formatter
       txt = GetLuxusLabel(noteMin) + " - " + GetLuxusLabel(noteMax)
       SetWidgetLabel(LBL_Injection_Split, txt)
    end
@@ -2255,7 +2253,7 @@ Function UpdateInjectionFadeDisplay()
       SetWidgetLabel(LBL_Inject_FadeIn, "-")
       SetWidgetLabel(LBL_Inject_FadeOut, "-")
    else
-      // Wir holen die Werte direkt aus dem Kanal-Gedächtnis
+      // Read values directly from channel memory
       SetWidgetLabel(LBL_Inject_FadeIn, IntToString(Mem_FadeIn[firstScopeIdx]) + " ST")
       SetWidgetLabel(LBL_Inject_FadeOut, IntToString(Mem_FadeOut[firstScopeIdx]) + " ST")
    end
@@ -2447,7 +2445,7 @@ Function UpdateVstInfoDisplay()
        end
        if chStr == "" then chStr = "None" end
 
-       // Zurück zu 4 Zeilen (Info-Zeile ist raus!)
+       // 4 lines per VST entry
        VstInfo_Lines <-- "VST " + (i + 1) + ": [" + vstName + "] " + statusStr
        VstInfo_Lines <-- "   Preset: " + presetStr
        VstInfo_Lines <-- "   Channels: " + chStr
@@ -2468,7 +2466,7 @@ Function UpdateUsageLabelDisplay()
       SetWidgetLabel(LBL_ChannelUsage, "No Scope")
       SetWidgetLabel(LBL_VSTRouting, "-")
       
-      // Keine Auswahl -> Buttons verstecken
+      // No selection -> hide buttons
       For i = 0; i < 3; i = i + 1 Do SetWidgetHideOnPresentation(W_Inject_Bypass[i], true) End
    else
       SetWidgetLabel(LBL_ChannelUsage, ChannelUsage[firstScopeIdx])
@@ -2484,7 +2482,7 @@ Function UpdateUsageLabelDisplay()
                       
                       // Status-String bauen
                       if Mem_ManualVSTBypass[vstIdx] then 
-                          bypassStr = " [MAN OFF]" // Eindeutige Anzeige für den manuellen Override
+                          bypassStr = " [MAN OFF]" // Manual override indicator
                       elsif IsPluginBypassed(BLK_VST[vstIdx]) then 
                           bypassStr = " [Bypassed]" 
                       else 
@@ -2531,7 +2529,7 @@ Function UpdateScopeVelocityMeter()
    var i : Integer
    var currentVal, maxVal : Double = 0.0
    
-   // Wir suchen den lautesten Anschlag innerhalb der selektierten Kanäle
+   // Find the loudest velocity across all selected channels
    For i = 0; i < 16; i = i + 1 Do
       if OutputScope[i] then
          // Da deine Scriptlet-Parameter 0 bis 15 genau Ch 1 bis 16 entsprechen:
@@ -2652,10 +2650,10 @@ End
 
 // ---------------------------------------------------------
 // REFRESH ALL INJECTION DISPLAYS
-// Aktualisiert die gesamte untere UI-Hälfte basierend auf dem Scope
+// Refreshes the entire lower UI half based on scope
 // ---------------------------------------------------------
 Function RefreshAllInjectionDisplays()
-   // Falls du noch andere Displays hast, kommen die hier mit rein!
+   // Add any additional displays here
    UpdateInjectionSplitDisplay()
    UpdateInjectionFadeDisplay()
    UpdateInjectionTransposeDisplay()
@@ -2668,7 +2666,7 @@ Function RefreshAllInjectionDisplays()
 End
 
 // ---------------------------------------------------------
-// STATUSABHÄNGIGE FARBEN --> OUTPUT
+// STATE-DEPENDENT COLORS --> OUTPUT
 // ---------------------------------------------------------
 Function UpdateMetaColors()
    var i, colorCode, inCh : Integer
@@ -2704,7 +2702,7 @@ Function SyncInputFeedback()
    // 1.0 = Alle verbunden
    // 0.5 = Gemischt (Manche verbunden, manche nicht)
    
-   // --- LOOP KILLER: Wir ignorieren das UI-Echo der Widgets für 150ms ---
+   // --- LOOP KILLER: Ignore UI echo from widgets for 150ms ---
    InputSyncTimer = TimeSinceStartup() + 150.0
 
    scopeCount = 0
@@ -2743,7 +2741,7 @@ Function UpdateMidiConfigLabel()
    var i : Integer = 0
    var isDirty : Boolean = false
    
-   // Vergleicht aktuelle Matrix mit unserem Foto (Sichere While-Schleife!)
+   // Compare current matrix with our snapshot (safe while-loop)
    While i < 256 and not isDirty Do
       if Abs(GetParameter(RECH, i) - Loaded_RECH_State[i]) > 0.5 then
          isDirty = true
@@ -2751,7 +2749,7 @@ Function UpdateMidiConfigLabel()
       i = i + 1
    End
    
-   // Label entsprechend setzen
+   // Set label accordingly
    if isDirty then
       SetWidgetLabel(LBL_MidiConfig, "Custom (Unsaved)")
    else
@@ -2760,7 +2758,7 @@ Function UpdateMidiConfigLabel()
 End
 
 // ---------------------------------------------------------
-// MASTER LABELS UPDATE (Füllt leere Displays mit Songnamen)
+// MASTER LABELS UPDATE (fills empty displays with song names)
 // ---------------------------------------------------------
 Function UpdateMasterLabels(sName : String)
    var prefix, cleanName : String
@@ -2852,7 +2850,7 @@ Function RefreshCtrlInfoDisplay()
     var startIdx, i : Integer
     var finalText : String = ""
 
-    // ---> 1. OVERLAY CHECK (Fehlermeldungen für X Sekunden zeigen) <---
+    // ---> 1. OVERLAY CHECK (show error messages for X seconds) <---
     if Ctrl_OverlayTimer > 0.0 and TimeSinceStartup() < Ctrl_OverlayTimer then
         finalText = "=== [ LOOPER WARNING ] ===" + NEW_LINE
         finalText = finalText + "---------------------------------" + NEW_LINE + NEW_LINE + NEW_LINE
@@ -2868,7 +2866,7 @@ Function RefreshCtrlInfoDisplay()
             finalText = "--- MAPPING: " + CurrentCtrlMapName + " ---" + NEW_LINE 
         end
         
-        // Warnung ggf. anheften
+        // Append warning if applicable
         if MapMismatch then
             finalText = finalText + "!!! WARNING: MAP MISMATCH !!!" + NEW_LINE
             finalText = finalText + "Song expected: '" + ExpectedMapName + "'" + NEW_LINE + NEW_LINE
@@ -2990,7 +2988,7 @@ Function ScrollToCurrentCtrlScope()
                 end
             else
                 // Bei Einzel-Macros: Die Zeile muss exakt mit "Macro X:" oder "Macro X [" beginnen!
-                // (Verhindert, dass "Macro 1" fälschlicherweise bei "Macro 10" hängenbleibt)
+                // (Prevents "Macro 1" from falsely matching "Macro 10")
                 if IndexOfSubstring(CtrlInfo_Lines[i], searchStr, false) == 0 or 
                    IndexOfSubstring(CtrlInfo_Lines[i], searchStrAlt, false) == 0 then
                     targetLine = i
@@ -3049,11 +3047,11 @@ Function TriggerMacroFeedback(sourceIdx : Integer, isCC : Boolean, val : Double)
     var isJitter : Boolean = false
     
     // ========================================================
-    // DER CPU-RETTUNGS-ANKER (Jitter Gate)
+    // CPU SAVER (Jitter Gate)
     // ========================================================
-    // Prüfen, ob derselbe Regler/Pedal nochmal feuert
+    // Check if the same controller/pedal is firing again
     if sourceIdx == Last_HUD_Source and isCC == Last_HUD_IsCC then
-        // Wenn sich der Wert um weniger als 0.5% ändert, ist es Zittern!
+        // If value changes by less than 0.5%, it is jitter
         if Abs(val - Last_HUD_Val) < 0.005 then
            isJitter = true
         end
@@ -3061,7 +3059,7 @@ Function TriggerMacroFeedback(sourceIdx : Integer, isCC : Boolean, val : Double)
     
     // Nur weitermachen, wenn es eine ECHTE Bewegung war
     if not isJitter then
-        // Neuen validen Wert für diesen Regler merken
+        // Store new valid value for this controller
         Last_HUD_Source = sourceIdx
         Last_HUD_IsCC = isCC
         Last_HUD_Val = val
@@ -3069,7 +3067,7 @@ Function TriggerMacroFeedback(sourceIdx : Integer, isCC : Boolean, val : Double)
         msg = ""
 
         // ========================================================
-        // 1. SONDERFUNKTIONEN PRÜFEN
+        // 1. CHECK SPECIAL FUNCTIONS
         // ========================================================
         if (not isCC and sourceIdx == CF_MacroIdx) or (isCC and sourceIdx == CF_CCIdx) then
             msg = "Global Audio Balance: " + Round(val * 100.0) + "%"
@@ -3078,7 +3076,7 @@ Function TriggerMacroFeedback(sourceIdx : Integer, isCC : Boolean, val : Double)
         else
             // 2. NORMALE PARAMETER LINKS SUCHEN
             For i = 0; i < Link_Count; i = i + 1 Do
-                // Wir schnappen uns den ERSTEN aktiven Link, der zu diesem Regler gehört
+                // Grab the FIRST active link belonging to this controller
                 if not linkFound and Link_Active[i] and Link_SourceIdx[i] == sourceIdx and Link_SourceIsCC[i] == isCC then
                     
                     // A) Echten Plugin-Namen auslesen
@@ -3099,23 +3097,23 @@ Function TriggerMacroFeedback(sourceIdx : Integer, isCC : Boolean, val : Double)
                     linkFound = true 
                 end
             End
-        end // <--- FIX: DIESES END HAT GEFEHLT! (Schließt das "else" von Schritt 1)
+        end // Closes the "else" of step 1
         
         // 3. AN DISPLAY SENDEN & TIMER STARTEN
         // (Das machen wir sinnvollerweise nur, wenn es kein Jitter war)
         if linkFound then
-            // ---> DIE NEUE SPERRE FÜR DEN MAP-WECHSEL <---
+            // ---> MAP-CHANGE LOCK <---
             if TimeSinceStartup() > MacroFeedbackLockTimer then
                 Trace("HUD PUSH: Sende '" + msg + "' an Display!") 
                 OSC_SendStringSpecific("/UI/SetMacroFeedback", msg, Local_IP, Local_PORT)
                 MacroFeedbackTimer = TimeSinceStartup() + 1500.0
             else
-                // Wenn die Sperre aktiv ist, verschweigen wir die Fader-Bewegungen einfach!
+                // While lock is active, silently discard fader movements
                 Trace("HUD PUSH BLOCKED: Map-Change LockTimer ist noch aktiv.")
             end
         end
         
-    end // <--- FIX: Schließt den "if not isJitter" Block!
+    end // Closes the "if not isJitter" block
 End
 
 // ---------------------------------------------------------
@@ -3279,7 +3277,7 @@ Function UpdateControllerInfoDisplay()
                        realName = Link_ExpectedName[idx]
                        if realName == "" then realName = "Param " + Link_TargetParam[idx] end
                        
-                       // Gewünschtes Format: VST1_GRS:1 Global Filt Cut
+                       // Desired format: VST1_GRS:1 Global Filt Cut
                        if l == 0 then
                            CtrlInfo_Lines <-- mainLine + Link_BlockName[idx] + ":" + realName + valStr
                        else
@@ -3291,8 +3289,8 @@ Function UpdateControllerInfoDisplay()
        End
    End
 
-   // --- DYNAMISCHE SAMMEL-EINTRÄGE FÜR DIE LISTE ---
-   // Die Schleife durchläuft exakt die Sortierung, die du in MacroGroup_Names festgelegt hast!
+   // --- DYNAMIC GROUPED ENTRIES FOR THE LIST ---
+   // Loop iterates in the exact order defined in MacroGroup_Names
    For g = 0; g < Grp_Count; g = g + 1 Do
        if Grp_Has[g] then
            CtrlInfo_Lines <-- ""
@@ -3315,7 +3313,7 @@ End
 Function UpdateEditScopeDisplay()
    var txt : String
    
-   // Vorrang für den "Leeren Zustand"
+   // Priority for empty state
    if CurrentCtrlMapName == "-" or CurrentCtrlMapName == "None" or CurrentCtrlMapName == "" then
        txt = "Scope: -"
        
@@ -3345,7 +3343,7 @@ Function CycleEditScope(dir : Integer)
        nextScope = -1
        isValid = true
    else
-       // Wir suchen den nächsten belegten Scope. 
+       // Search for the next occupied scope
        While not isValid and loopGuard <= MAX_MACROS + 2 Do
            loopGuard = loopGuard + 1
            nextScope = nextScope + dir
@@ -3355,7 +3353,7 @@ Function CycleEditScope(dir : Integer)
            elsif nextScope >= MAX_MACROS then nextScope = -1
            end
 
-           // 1. Ist es der Global Scope? (Immer gültig)
+           // 1. Is it the Global Scope? (always valid)
            if nextScope == -1 then
                isValid = true
                      
@@ -3385,7 +3383,7 @@ Function CycleEditScope(dir : Integer)
                    i = i + 1
                End
                
-               // 4. Gibt es aktive Links für diesen Regler?
+               // 4. Are there active links for this controller?
                if not isValid then
                    i = 0
                    While i < Link_Count and not isValid Do
@@ -3399,11 +3397,11 @@ Function CycleEditScope(dir : Integer)
        End
    end
 
-   // Wenn ein gültiger Scope gefunden wurde, anwenden!
+   // If a valid scope was found, apply it
    if isValid then
        CurrentEditScope = nextScope
        
-       // Hardware-Slider Position ans Morph-Widget senden (nur für Genos Fader 1-16)
+       // Send hardware slider position to morph widget (arranger faders 1-16 only)
        if CurrentEditScope > -1 and CurrentEditScope <= 15 then
            SetWidgetValue(SLD_Morph, GetParameter(ExternalArranger, CurrentEditScope))
        else
@@ -3428,7 +3426,7 @@ Function AppendLinkEncoded(name : String, paramId : Integer, sliderIdx : Integer
    var isSleep : Boolean
    var numPart, char : String = ""
    
-   // ---> HIER GEHÖRT DAS FLAG HIN (Ganz nach oben!) <---
+   // Parse-stop flag (must be at top)
    var stopParse : Boolean = false 
    
    typeFound = -1; idxFound = 0
@@ -3600,7 +3598,7 @@ Function LoadHardwareMap()
 End
 
 // ---------------------------------------------------------
-// GELERNTE HARDWARE AN MACRO FÜR CONTROLLER MAP ZUWEISEN
+// ASSIGN LEARNED HARDWARE TO MACRO FOR CONTROLLER MAP
 // ---------------------------------------------------------
 
 Function AssignHardware(mIdx : Integer, ch : Integer, id : Integer, isNote : Boolean)
@@ -3608,7 +3606,7 @@ Function AssignHardware(mIdx : Integer, ch : Integer, id : Integer, isNote : Boo
     var found : Boolean = false
     
     For i = 0; i < HW_Count; i = i + 1 Do
-        // Überschreiben, wenn Kanal, ID UND Typ (Note/CC) identisch sind!
+        // Overwrite if channel, ID AND type (Note/CC) are identical
         if HW_Channel[i] == ch and HW_CC[i] == id and HW_IsNote[i] == isNote then
             HW_MacroIdx[i] = mIdx 
             found = true
@@ -3623,7 +3621,7 @@ Function AssignHardware(mIdx : Integer, ch : Integer, id : Integer, isNote : Boo
 End
 
 // ---------------------------------------------------------
-// UNLEARN MACRO FÜR CONTROLLER 
+// UNLEARN MACRO FOR CONTROLLER
 // ---------------------------------------------------------
 
 Function UnlearnHardware(mIdx : Integer)
@@ -3634,7 +3632,7 @@ Function UnlearnHardware(mIdx : Integer)
    var tempCC : Integer Array
    var tempIsNote : Boolean Array // <--- NEU
 
-   // Wir kopieren alle Einträge in ein neues Array, AUSSER die, die zum aktuellen Macro gehören
+   // Copy all entries to a new array, EXCEPT those belonging to the current macro
    For i = 0; i < HW_Count; i = i + 1 Do
        if HW_MacroIdx[i] != mIdx then
            tempMacro <-- HW_MacroIdx[i]
@@ -3657,7 +3655,7 @@ Function UnlearnHardware(mIdx : Integer)
 End
 
 // ---------------------------------------------------------------------
-// APPLY EDITOR-TEST // Führt die Logik des "Test-Faders" im Editor aus
+// APPLY EDITOR-TEST // Executes the test fader logic in the editor
 // ---------------------------------------------------------------------
 
 Function ApplyEditorTest(val : Double)
@@ -3670,7 +3668,7 @@ Function ApplyEditorTest(val : Double)
             if Link_Active[i] then ExecuteLink(i, val) end
         End
     else
-        // ---> DER TÜRSTEHER <---
+        // ---> GUARD <---
         if CurrentEditScope >= 0 and CurrentEditScope <= 15 then
             SetParameter(ExternalArranger, CurrentEditScope, val)
         end
@@ -3690,13 +3688,13 @@ Function ProcessMidiLearn(m : NoteMessage)
    var noteNum, pIdx, vel, i : Integer
    var paramVal : Double = 0.0
    
-   // Wir reagieren NUR, wenn wir lernen und die Taste GEDRÜCKT wird
+   // Only respond when learning and the key is pressed
    if (IsLearningMin or IsLearningMax) and IsNoteOn(m) then
        
        noteNum = GetNoteNumber(m)
-       paramVal = noteNum / 127.0 // Umrechnen auf 0.0 - 1.0 für das Plugin
+       paramVal = noteNum / 127.0 // Convert to 0.0-1.0 for the plugin
        
-       // INJECTION: Wir schießen den Wert in alle selektierten Kanäle
+       // INJECTION: Push the value to all selected channels
        For i = 0; i < 16; i = i + 1 Do
           if OutputScope[i] then
              
@@ -3708,10 +3706,10 @@ Function ProcessMidiLearn(m : NoteMessage)
                 SetParameter(BLK_NoteProcessor[i], 1, paramVal)
              end
              
-             // Gedächtnis und Plugin synchronisieren
+             // Sync memory and plugin
              UpdateChannelFade(i, 4, 0, 0.0) 
              
-             // NEU: Notenhänger beim Transponieren verhindern!
+             // Prevent stuck notes when transposing
              if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
           end
        End
@@ -3725,7 +3723,7 @@ Function ProcessMidiLearn(m : NoteMessage)
        
        // UI aktualisieren
        UpdateInjectionSplitDisplay()
-       UpdateMetaColors() // Da sich der Split geändert hat, könnte der Kanal nun [CUST] sein!
+       UpdateMetaColors() // Split changed, channel may now be [CUST]
        
        Trace("LEARN SUCCESS: Injected Note " + noteNum + " to Scope.")
    end
@@ -3779,7 +3777,7 @@ Function LoadControllerMap(mapName : String)
    var remainingContent, sectionContent : String
    var chNum : Integer
    
-   // Temp Vars für CC Logik
+   // Temp vars for CC logic
    var isCC : Boolean
    var finalID : Integer
    var isSrcCC : Boolean
@@ -3850,7 +3848,7 @@ Function LoadControllerMap(mapName : String)
                // 1. Schneide alles VOR und INKLUSIVE dem Header ab
                remainingContent = CopySubstring(content, startPos + Length(header), Length(content) - (startPos + Length(header)))
                
-               // 2. Suche den Start der NÄCHSTEN Map
+               // 2. Find the start of the NEXT map
                endPos = IndexOfSubstring(remainingContent, "[Map:", false)
                
                if endPos > -1 then
@@ -3864,7 +3862,7 @@ Function LoadControllerMap(mapName : String)
                // JETZT ERST SPLITTEN! (Geht blitzschnell, da nur ~40 Zeilen)
                lines = SplitString(sectionContent, NEW_LINE)
                
-               // SCHNELLE SCHLEIFE ÜBER KURZEN BLOCK
+               // FAST LOOP OVER SHORT BLOCK
                For i = 0; i < Size(lines); i = i + 1 Do
                    line = TrimString(lines[i])
                    
@@ -4044,7 +4042,7 @@ Function EvaluateSmartAdapt()
     var i, activeVSTs, targetVstIdx : Integer
     var targetMap : String = ""
 
-    // 1. TÜRSTEHER: Ist das Feature überhaupt aktiviert?
+    // 1. GUARD: Is the feature enabled?
     if GetWidgetValue(BTN_SmartAdapt) > 0.5 then
         
         // 2. WIE VIELE VSTS SIND GERADE WACH? (Die universelle Wahrheit)
@@ -4075,18 +4073,18 @@ Function EvaluateSmartAdapt()
                 Trace("SMART ADAPT: VST " + (targetVstIdx + 1) + " spielt alleine. Lade " + targetMap)
                 LoadControllerMap(targetMap)
                 
-                // Hardware Sync minimal verzögern (Debounce 400ms)
+                // Slightly delay hardware sync (debounce 400ms)
                 HardwareSyncTimer = TimeSinceStartup() + 400.0 
                 
                 OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> AUTO-MAP: " + targetMap + " <<<", Local_IP, Local_PORT)
                 MacroFeedbackTimer = TimeSinceStartup() + 2000.0
             end
             
-        // 4. ISOLATION INAKTIV (>1 VST wach oder alle stumm): Zurück zur alten Map!
+        // 4. ISOLATION INACTIVE (>1 VST awake or all muted): Revert to previous map!
         else
             if IsAutoSoloMapActive then
                 if PreSoloMapName != "" and PreSoloMapName != CurrentCtrlMapName then
-                    Trace("SMART ADAPT: Isolation beendet (" + activeVSTs + " VSTs aktiv). Kehre zurück zu -> " + PreSoloMapName)
+                    Trace("SMART ADAPT: Isolation ended (" + activeVSTs + " VSTs active). Reverting to -> " + PreSoloMapName)
                     LoadControllerMap(PreSoloMapName)
                     
                     HardwareSyncTimer = TimeSinceStartup() + 400.0
@@ -4098,11 +4096,11 @@ Function EvaluateSmartAdapt()
             end
         end
         
-    // 5. FEATURE AUSGESCHALTET: Eventuellen Geister-Status aufräumen!
+    // 5. FEATURE DISABLED: Clean up any ghost state!
     else
         if IsAutoSoloMapActive then
             if PreSoloMapName != "" and PreSoloMapName != CurrentCtrlMapName then
-                Trace("SMART ADAPT: Feature deaktiviert. Kehre zurück zu -> " + PreSoloMapName)
+                Trace("SMART ADAPT: Feature disabled. Reverting to -> " + PreSoloMapName)
                 LoadControllerMap(PreSoloMapName)
                 HardwareSyncTimer = TimeSinceStartup() + 400.0
             end
@@ -4155,7 +4153,7 @@ Function RefreshCtrlMapList()
            // Schneide alles vor dem Map-Tag ab
            tempContent = CopySubstring(tempContent, pos, Length(tempContent) - pos)
            
-           // Suche das schließende Bracket
+           // Find the closing bracket
            closePos = IndexOfSubstring(tempContent, "]", false)
            if closePos > -1 then
                mapName = CopySubstring(tempContent, 5, closePos - 5)
@@ -4168,7 +4166,7 @@ Function RefreshCtrlMapList()
                tempContent = "" // Fallback Notausgang
            end
            
-           // Suche die nächste Map
+           // Find the next map
            pos = IndexOfSubstring(tempContent, "[Map:", false)
        End
    end
@@ -4221,11 +4219,11 @@ Function SyncArrangerToCurrentMap()
            if DebugMode then Trace("  -> Analyzing Link " + i + " | SourceIdx (Macro/CC): " + hwIdx) end
            
            // ========================================================
-           // ---> DIE 50% REGEL FÜR EINBAHNSTRASSEN (MIDI CC) 
+           // ---> 50% RULE FOR ONE-WAY CONTROLS (MIDI CC)
            // ========================================================
            if Link_IsCC[i] then
                faderVal = 0.5 
-               if DebugMode then Trace("     [IS CC] Einbahnstraße erkannt! Setze faderVal hart auf 0.5 (50%)") end
+               if DebugMode then Trace("     [IS CC] One-way control detected! Setting faderVal to 0.5 (50%)") end
            else
                // WENN ES EIN VST-PARAMETER IST: Frage den Host nach dem echten Wert!
                if Link_Type[i] == 0 then 
@@ -4254,13 +4252,13 @@ Function SyncArrangerToCurrentMap()
            
            // An die Hardware senden (Nur wenn der Sender ein Genos-Macro ist)
            if not Link_SourceIsCC[i] then
-               // ---> DER TÜRSTEHER <---
+               // ---> GUARD <---
                if hwIdx >= 0 and hwIdx <= 15 then
                    SetParameter(ExternalArranger, hwIdx, faderVal)
                    Mem_Fader_Buffer[hwIdx] = faderVal
-                   if DebugMode then Trace("     [HARDWARE] Türsteher PASSIERT! Genos Motorfader " + (hwIdx+1) + " fährt auf " + faderVal) end
+                   if DebugMode then Trace("     [HARDWARE] Guard PASSED! Arranger motorfader " + (hwIdx+1) + " moving to " + faderVal) end
                else
-                   if DebugMode then Trace("     [HARDWARE] Türsteher BLOCKIERT! Index " + hwIdx + " ist kein physikalischer Genos-Fader (0-15).") end
+                   if DebugMode then Trace("     [HARDWARE] Guard BLOCKED! Index " + hwIdx + " is not a physical arranger fader (0-15).") end
                end
            else
                if DebugMode then Trace("     [HARDWARE] Ignoriert. Quelle ist selbst ein CC, kein physikalischer Genos-Fader.") end
@@ -4274,12 +4272,12 @@ End
 // AUTO SWITCH MAP ON BYPASS
 // ---------------------------------------------------------
 
-// Diese Funktion prüft, ob wir uns im "Standard-Modus" befinden 
+// Checks whether we are in default mode
 // und passt die Map sofort an den neuen VST-Status an.
 Function AutoSwitchMapOnBypass()
     // Wir schalten nur automatisch um, wenn die aktuelle Map 
     // entweder "Standard" ist oder bereits eine der dynamischen VST-Maps.
-    // So verhindern wir, dass eine speziell geladene Song-Map überschrieben wird.
+    // Prevents a specifically loaded song map from being overwritten.
     if CurrentCtrlMapName == "Standard" or IndexOfSubstring(CurrentCtrlMapName, "Standard_VST", false) == 0 then
         LoadControllerMap(GetDynamicStandardMap())
     end
@@ -4289,7 +4287,7 @@ Function AutoSwitchMapOnBypass()
 End
 
 // ---------------------------------------------------------
-// MORPH SEND // Sendet Slider-Wert an ALLE verknüpften Parameter
+// MORPH SEND // Sends slider value to ALL linked parameters
 // ---------------------------------------------------------
 
 Function MorphSend(sliderIdx : Integer, val : Double)
@@ -4314,10 +4312,10 @@ Function CaptureSmartRanges(isMin : Boolean)
            sIdx = Link_SourceIdx[i]
            if CurrentEditScope == -1 or CurrentEditScope == sIdx then
                
-               // ---> BUGFIX: Reine MIDI CCs überspringen wir komplett! <---
+               // ---> BUGFIX: Skip pure MIDI CCs entirely! <---
                if not Link_IsCC[i] then
                    
-                   currentVal = 0.0 // Sauberer Reset für jeden Durchlauf
+                   currentVal = 0.0 // Clean reset for each iteration
                    
                    if Link_Type[i] == 0 then currentVal = GetParameter(BLK_VST[Link_BlockIdx[i]], Link_TargetParam[i])
                    elsif Link_Type[i] == 1 then currentVal = GetParameter(BLK_NoteProcessor[Link_BlockIdx[i]], Link_TargetParam[i])
@@ -4343,7 +4341,7 @@ Function CaptureSmartRanges(isMin : Boolean)
 End
 
 // --------------------------------------------------------------------
-// EXPORT SMART CONFIG // Überschreibt die Map direkt in der Datei!
+// EXPORT SMART CONFIG // Overwrites the map directly in the file
 // --------------------------------------------------------------------
 
 Function ExportSmartConfig()
@@ -4438,7 +4436,7 @@ Function ExportSmartConfig()
                        if isCC or s != DEF_SUSTAIN_MacroIdx[susChFound] then newBlock = newBlock + line + " = SUSTAIN_CH" + (susChFound + 1) + NEW_LINE end
 
                    else
-                       // --- NORMALE PARAMETER LINKS PRÜFEN ---
+                       // --- CHECK NORMAL PARAMETER LINKS ---
                        line = line + " = "
                        For lnk = 0; lnk < Link_Count; lnk = lnk + 1 Do
                            if Link_Active[lnk] and Link_SourceIdx[lnk] == s and Link_SourceIsCC[lnk] == isCC then
@@ -4491,7 +4489,7 @@ Function ExportSmartConfig()
                if IndexOfSubstring(currentLine, "[Map:", false) == 0 then
                    if currentLine == "[Map:" + CurrentCtrlMapName + "]" then
                        inTargetSection = true
-                       finalContent = finalContent + newBlock // Neuen Block einfügen
+                       finalContent = finalContent + newBlock // Insert new block
                        replaced = true
                    else
                        inTargetSection = false
@@ -4511,7 +4509,7 @@ Function ExportSmartConfig()
            finalContent = finalContent + NEW_LINE + newBlock
        end
        
-       // 3. ZURÜCK IN DIE DATEI SCHREIBEN!
+       // 3. WRITE BACK TO FILE!
        if SaveStringToTextFile(ControllerMapFilePath, finalContent) then
            Trace("EXPORT: Successfully saved map '" + CurrentCtrlMapName + "' to file.")
        else
@@ -4525,7 +4523,7 @@ End
 
 // ---------------------------------------------------------
 // PREVIEW ACTIVE CONTROLLER MAPS (JOYSTICK SYS MODE)
-// Blättert durch die Base-Map und alle aktiven VST-Maps
+// Cycles through the base map and all active VST maps
 // ---------------------------------------------------------
 Function PreviewActiveControllerMaps(direction : Integer)
     var i, j, currIdx : Integer
@@ -4535,10 +4533,10 @@ Function PreviewActiveControllerMaps(direction : Integer)
     
     validMaps = []; uniqueMaps = []
     
-    // 1. Ausgangspunkt bestimmen (Entweder die laufende Map oder die schon vorgewählte)
+    // 1. Determine starting point (running map or pre-selected one)
     if PendingMapName != "" then startMap = PendingMapName else startMap = CurrentCtrlMapName end
     
-    // 2. Liste der verfügbaren Maps bauen (Base + Aktive VSTs)
+    // 2. Build list of available maps (base + active VSTs)
     if ExpectedMapName != "" and ExpectedMapName != "-" then validMaps <-- ExpectedMapName else validMaps <-- "Standard" end
     For i = 0; i < MAX_VSTS; i = i + 1 Do
         if not IsPluginBypassed(BLK_VST[i]) and GetPluginInfo(BLK_VST[i], 0) != "Element" then
@@ -4557,7 +4555,7 @@ Function PreviewActiveControllerMaps(direction : Integer)
        if not isDup then uniqueMaps <-- validMaps[i] end
    End
    
-   // 4. Index finden und blättern
+   // 4. Find index and cycle
    currIdx = -1
    i = 0
    While i < Size(uniqueMaps) and currIdx == -1 Do
@@ -4575,7 +4573,7 @@ Function PreviewActiveControllerMaps(direction : Integer)
     
     // Sofortiges visuelles Feedback
     OSC_SendStringSpecific("/UI/SetMacroFeedback", ">> SELECT: " + PendingMapName + " <<", Local_IP, Local_PORT)
-    MacroFeedbackTimer = TimeSinceStartup() + 3000.0 // Länger anzeigen während des Blätterns
+    MacroFeedbackTimer = TimeSinceStartup() + 3000.0 // Show longer while cycling
 End
 
 
@@ -4800,7 +4798,7 @@ Function GetLoopProgressString(ch : Integer) Returns String
             finalResult = " | " + beatString
         end
         
-        // DER ENTSCHEIDENDE TRACE FÜR EBENE 3:
+        // THE CRITICAL TRACE FOR LEVEL 3:
         if DebugMode then 
             Trace("LOOP-MATH [Ch" + (ch+1) + "]: GP_Tick=" + currentTotalTicks + " | Anker=" + anchorTotalTicks + " | Diff=" + diffTicks + " -> Display: " + beatString) 
         end
@@ -5147,7 +5145,7 @@ Function ValidateLooperScopeConfig(testTarget : Integer, testOut : Integer) Retu
    var i, scopeCount : Integer = 0
    var isAllowed : Boolean = true
    
-   // 1. Wie viele Kanäle sind aktuell im Scope?
+   // 1. How many channels are currently in scope?
    For i = 0; i < 16; i = i + 1 Do
       if OutputScope[i] and IsChannelActiveForLooper(i) then 
           scopeCount = scopeCount + 1 
@@ -5161,7 +5159,7 @@ Function ValidateLooperScopeConfig(testTarget : Integer, testOut : Integer) Retu
        if testTarget != -1 then isAllowed = false end
        
        // Bei Multi-Kanal-Scope ist Loop Out = GLOBAL (1) strengstens verboten!
-       // (Würde sonst in der RECH-Matrix zu exponentiellem MIDI-Loopback führen)
+       // (Would otherwise cause exponential MIDI loopback in the RECH matrix)
        if testOut == 1 then isAllowed = false end
    end
    
@@ -5234,11 +5232,11 @@ Function CycleLoopTarget(direction : Integer)
       End
       
       if foundValid then 
-         // TÜRSTEHER FRAGEN: Dürfen wir dieses Target im aktuellen Scope setzen?
+         // GUARD: Is this target allowed in the current scope?
          scopeValid = ValidateLooperScopeConfig(nextTarget, Mem_Loop_OutMode[firstScopeIdx])
          
          if scopeValid then
-             // Erlaubt! Auf alle Kanäle im Scope anwenden.
+             // Allowed! Apply to all channels in scope.
              For i = 0; i < 16; i = i + 1 Do
                  if OutputScope[i] and IsChannelActiveForLooper(i) then Mem_Loop_Target[i] = nextTarget end
              End
@@ -5246,7 +5244,7 @@ Function CycleLoopTarget(direction : Integer)
          else
              // Verboten! 
              ShowCtrlOverlay("NOT ALLOWED: TARGET CONFLICT", 1500.0)
-             if DebugMode then Trace("LOOPER UI: Multi-Scope blockiert Target-Änderung!") end
+             if DebugMode then Trace("LOOPER UI: Multi-scope blocked target change!") end
          end
       end
    end
@@ -5264,7 +5262,7 @@ Function CycleLoopOutMode(direction : Integer)
       if newVal < 0 then newVal = 1
       elsif newVal > 1 then newVal = 0 end
       
-      // TÜRSTEHER FRAGEN
+      // GUARD CHECK
       scopeValid = ValidateLooperScopeConfig(Mem_Loop_Target[firstScopeIdx], newVal)
       
       if scopeValid then
@@ -5315,7 +5313,7 @@ Function GetLooperEventCount(ch : Integer) Returns Integer
 End
 
 // ---------------------------------------------------------
-// LOOPER: MASTER TRANSPORT WEICHE (MULTI-SCOPE FÄHIG)
+// LOOPER: MASTER TRANSPORT SWITCH (MULTI-SCOPE CAPABLE)
 // ---------------------------------------------------------
 Function TriggerFocusLooperTransport(isRecAction : Boolean)
    var i, currentState, newState : Integer
@@ -5323,7 +5321,7 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
    var scopeIsValid : Boolean = true
 
    // ========================================================
-   // TÜRSTEHER: Konflikt-Prüfung VOR Aufnahme!
+   // GUARD: Conflict check BEFORE recording!
    // ========================================================
    if isRecAction then
        For i = 0; i < 16; i = i + 1 Do
@@ -5344,7 +5342,7 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
    // Nur weitermachen, wenn der Scope legal ist (oder es nur ein Play/Stop Klick ist)
    if scopeIsValid then
    
-       // Wir iterieren über ALLE 16 Kanäle
+       // Iterate over ALL 16 channels
        For i = 0; i < 16; i = i + 1 Do
           // Ist der Kanal im UI markiert UND hat er ein Looper-VST?
           if OutputScope[i] and IsChannelActiveForLooper(i) then
@@ -5353,7 +5351,7 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
              
              if isRecAction == true then
                 // ==========================================
-                // --- CASE: REC-BUTTON GEDRÜCKT ---
+                // --- CASE: REC-BUTTON PRESSED ---
                 // ==========================================
                 Select
                    currentState == 0 Do // EMPTY -> START REC
@@ -5364,7 +5362,7 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
                          newState = 5 // -> ARM REC
                       end
                    
-                   currentState == 1 Do // REC LÄUFT -> MANUELL BEENDEN
+                   currentState == 1 Do // REC RUNNING -> MANUAL STOP
                       CloseLooperBuffer(i)
                       if Mem_Loop_Length[i] == 0 then LoopLengthMS[i] = TimeSinceStartup() - LoopStartTime[i] end
                       newState = 2 // -> WECHSLE ZU PLAY
@@ -5392,10 +5390,10 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
 
              else
                 // ==========================================
-                // --- CASE: PLAY-BUTTON GEDRÜCKT ---
+                // --- CASE: PLAY-BUTTON PRESSED ---
                 // ==========================================
                 Select
-                   currentState == 1 Do // REC LÄUFT -> FORCE PLAY
+                   currentState == 1 Do // REC RUNNING -> FORCE PLAY
                       CloseLooperBuffer(i)
                       if Mem_Loop_Length[i] == 0 then LoopLengthMS[i] = TimeSinceStartup() - LoopStartTime[i] end
                       newState = 2 // -> WECHSLE ZU PLAY
@@ -5410,7 +5408,7 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
                           newState = 7 // PENDING STOPP (Wartet auf Taktende)
                       end
                       
-                   currentState == 7 Do // User drückt noch einmal -> NOTBREMSE
+                   currentState == 7 Do // User presses again -> EMERGENCY STOP
                       newState = 4
                       Trigger_NotesOff(i + 1)
                    
@@ -5431,7 +5429,7 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
                 End
              end
              
-             // Status für diesen Kanal übernehmen
+             // Apply state for this channel
              if newState != -1 then
                 Mem_Loop_State[i] = newState
                 stateChanged = true
@@ -5440,7 +5438,7 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
           end
        End
        
-       // UI und Labels nur 1x am Ende aktualisieren, wenn sich mindestens 1 Kanal geändert hat
+       // Update UI and labels once at the end, only if at least 1 channel changed
        if stateChanged then
           UpdateSoloMuteState()
           BuildLooperConfigLines()
@@ -5494,7 +5492,7 @@ Function InjectLooperEvent(ch : Integer, msg : MidiMessage)
     // ---> DER PLAYBACK OVERRIDE <---
     // Wenn der Kanal im aktiven Scope liegt UND irgendein Solo-Modus an ist,
     // zwingen wir die Ausgabe auf LOCAL. Das verhindert, dass der Looper 
-    // plötzlich die ganze RECH-Matrix befeuert, während wir eigentlich Solo hören wollen!
+    // would otherwise fire the entire RECH matrix while we want solo playback!
     if OutputScope[ch] and Mem_SoloStrict[ch] == 1 or Mem_SoloSmart[ch] == 1 then
         forceLocal = true
     end
@@ -5521,9 +5519,9 @@ Function ProcessLooperPlayback()
          While needsWrap Do
             currentTimeInLoop = TimeSinceStartup() - LoopStartTime[ch]
             lastTime = LoopPlayheadMS[ch] // Wo standen wir beim letzten Tick?
-            sz = LoopNextEventIdx[ch]     // Der Grenzwächter (versteckt Overdubs bis zum nächsten Takt)
+            sz = LoopNextEventIdx[ch]     // The sentinel (hides overdubs until next bar)
 
-            // Wir prüfen alle alten Noten: Fällt ihre Zeit in unser Fenster?
+            // Check all old notes: does their time fall within our window?
             Select
                ch == 0 Do
                   For i = 0; i < sz; i = i + 1 Do
@@ -5609,7 +5607,7 @@ Function ProcessLooperPlayback()
 
             LoopPlayheadMS[ch] = currentTimeInLoop
 
-            // ZURÜCKSPULEN (Wrap-Around)
+            // REWIND (Wrap-Around)
             if currentTimeInLoop >= LoopLengthMS[ch] then
                if state == 7 and Mem_Loop_StopMode[ch] == 2 then
                    Mem_Loop_State[ch] = 4
@@ -5620,7 +5618,7 @@ Function ProcessLooperPlayback()
                else
                    LoopStartTime[ch] = LoopStartTime[ch] + LoopLengthMS[ch]
                    
-                   // WICHTIG: Fenster zurücksetzen und die neuen Overdubs für den nächsten Takt freigeben!
+                   // IMPORTANT: Reset window and release new overdubs for the next bar!
                    LoopPlayheadMS[ch] = -1.0 
                    LoopNextEventIdx[ch] = GetLooperEventCount(ch) 
                    
@@ -5649,7 +5647,7 @@ Function FeedLooper_Note(m : NoteMessage)
          if GetParameter(RECH, (hwChan * 16) + outCh) > 0.5 then
             currentState = Mem_Loop_State[outCh]
             
-            // 2. TÜRSTEHER: Wir verarbeiten das MIDI Event für den Looper NUR, 
+            // 2. GUARD: Process the MIDI event for the looper ONLY
             // wenn der Looper auch wirklich im Aufnahme-Modus ist! (Ghost-Mode)
             if currentState == 1 or currentState == 3 then
                
@@ -5675,13 +5673,13 @@ End
 Function FeedLooper_CC(m : ControlChangeMessage)
    var hwChan : Integer = GetChannel(m) - 1 
    var outCh : Integer
-   var mappedMsg : MidiMessage // Generischer Typ für unser Array
+   var mappedMsg : MidiMessage // Generic type for our array
    
    if hwChan >= 0 and hwChan <= 15 then
       For outCh = 0; outCh < 16; outCh = outCh + 1 Do
          if GetParameter(RECH, (hwChan * 16) + outCh) > 0.5 then
             
-            // Status-Byte für CC ist 176 (+ Zielkanal)
+            // Status byte for CC is 176 (+ target channel)
             mappedMsg = MakeMidiMessage3(176 + outCh, GetCCNumber(m), GetCCValue(m))
             RecordLoopEvent(outCh, mappedMsg)
             
@@ -5691,7 +5689,7 @@ Function FeedLooper_CC(m : ControlChangeMessage)
 End
 
 // ---------------------------------------------------------
-// LOOPER: HELPER FÜR NAMEN
+// LOOPER: NAME HELPERS
 // ---------------------------------------------------------
 
 Function GetLoopModeName(modeId : Integer) Returns String
@@ -5719,12 +5717,12 @@ Function TraceTimeDomains()
     // 2. Schicht 2: Virtual Song Time (Der Playhead)
     songStr = "SONG: " + CurrentBar + "." + CurrentBeat + " (Offset: " + GlobalBarOffset + " Bars)"
     
-    // 3. Schicht 3: Looper Status (Wir scannen kurz, ob einer läuft)
+    // 3. Layer 3: Looper status (quick scan for active loopers)
     loopStr = "LOOPER: "
     activeLoopers = 0
     For ch = 0; ch < 16; ch = ch + 1 Do
         if Mem_Loop_State[ch] == 1 or Mem_Loop_State[ch] == 2 or Mem_Loop_State[ch] == 3 then
-            // Nutzt deine bestehende Funktion für den String
+            // Uses existing function for the string
             loopStr = loopStr + "[Ch" + (ch+1) + " " + TrimString(GetLoopProgressString(ch)) + "] "
             activeLoopers = activeLoopers + 1
         end
@@ -5733,7 +5731,7 @@ Function TraceTimeDomains()
     if activeLoopers == 0 then loopStr = loopStr + "Idle" end
     
     // Ausgabe
-    Trace("🕒 TIME SYNC | " + gpStr + " | " + songStr + " | " + loopStr)
+    Trace("TIME SYNC | " + gpStr + " | " + songStr + " | " + loopStr)
 End
 
 // =========================================================
@@ -5776,7 +5774,7 @@ Function BuildRecDisplayLines()
             RecDisplayLines <-- line
         end
         
-        // 2. NEUE AUFNAHMEN UNTEN ANHÄNGEN (Live-Feedback)
+        // 2. APPEND NEW RECORDINGS AT BOTTOM (live feedback)
         if Size(Arr_Rec_Bar) > 0 then
             RecDisplayLines <-- "--- NEW EVENTS ---"
             for i = 0; i < Size(Arr_Rec_Bar); i = i + 1 do
@@ -5814,7 +5812,7 @@ Function RefreshRecDisplay(scrollVal : Double)
     var startIdx, i : Integer
     var finalText, stateHeader : String = ""
 
-    // 1. OVERLAY CHECK (Fehlermeldungen für X Sekunden zeigen)
+    // 1. OVERLAY CHECK (show error messages for X seconds)
     if Rec_OverlayTimer > 0.0 and TimeSinceStartup() < Rec_OverlayTimer then
         finalText = "=== [ SYSTEM MESSAGE ] ===" + NEW_LINE
         finalText = finalText + "---------------------------------" + NEW_LINE + NEW_LINE + NEW_LINE
@@ -5901,8 +5899,8 @@ Function CalculateEffectiveTranspose()
 End
 
 Function TriggerStyleAction(styleId : Integer)
-   // Sicherheit: Max Index für Sende-Trigger ist 28 (Trig_Fade). 
-   // Alles darüber ist Out of Bounds oder unser HW-Eingang (Index 29).
+   // Safety: Max index for send triggers is 28 (Trig_Fade).
+   // Anything above is out of bounds or our HW input (index 29).
    if styleId >= 0 and styleId <= 28 then
        if DebugMode then Trace("STYLE: Triggering ID " + styleId) end
        
@@ -5915,12 +5913,12 @@ Function TriggerStyleAction(styleId : Integer)
        // Taster wieder loslassen (Note Off)
        SetParameter(BLK_ArrangerSync, styleId, 0.0)
    else
-       if DebugMode then Trace("STYLE ERROR: Ungültige ID (" + styleId + ") ignoriert! Max ist 28.") end
+       if DebugMode then Trace("STYLE ERROR: Invalid ID (" + styleId + ") ignored! Max is 28.") end
    end
 End
 
 // ---------------------------------------------------------
-// DISPLAY ENGINE & PROMPTER PUSH FÜR CHORD VIEWER
+// DISPLAY ENGINE & PROMPTER PUSH FOR CHORD VIEWER
 // ---------------------------------------------------------
 
 Function UpdatePrompter(moveSlider : Boolean)
@@ -5946,10 +5944,10 @@ Function UpdatePrompter(moveSlider : Boolean)
        If CurrentState == 9 Then
           OSC_SendStringSpecific("/UI/SetLyrics", "LOADING SCRIPT...", Local_IP, Local_PORT)
        Elsif CurrentState == 2 Then
-          // Das ist dein gewünschter Status: File ist da, aber leer (Warten auf Clipboard)
+          // Expected state: file exists but is empty (waiting for clipboard)
           OSC_SendStringSpecific("/UI/SetLyrics", "WAITING FOR CHORDS..." + NEW_LINE + "Paste from Clipboard to complete.", Local_IP, Local_PORT)
        Else
-          // Fallback für unvorhergesehene Zustände
+          // Fallback for unforeseen states
           OSC_SendStringSpecific("/UI/SetLyrics", "READY." + NEW_LINE + "(State " + CurrentState + ")", Local_IP, Local_PORT)
        End
        OSC_SendStringSpecific("/UI/SetChords", "", Local_IP, Local_PORT)
@@ -5971,7 +5969,7 @@ Function UpdatePrompter(moveSlider : Boolean)
            if Length(cueText) > 0 Then footerStr = footerStr + "Cue: " + cueText End
        End
        
-       // Hier schicken wir die sauberen Zebra-Blöcke an den Monitor!
+       // Send the clean zebra-striped blocks to the monitor
        If currentIndex < Size(Arr_Text_Lyrics) Then OSC_SendStringSpecific("/UI/SetLyrics", Arr_Text_Lyrics[currentIndex], Local_IP, Local_PORT) End
        If currentIndex < Size(Arr_Text_Chords) Then OSC_SendStringSpecific("/UI/SetChords", Arr_Text_Chords[currentIndex], Local_IP, Local_PORT) End
    End
@@ -5986,7 +5984,7 @@ Function UpdatePrompter(moveSlider : Boolean)
    currentBPM = GetBPM()
    if currentBPM < 1.0 then currentBPM = 120.0 end
 
-   // 2. Gesamtlänge berechnen
+   // 2. Calculate total length
    totalSecs = Round((IntToFloat(SongDurationBars * num) * 60.0) / currentBPM)
    tMin = totalSecs / 60
    tSec = totalSecs % 60
@@ -6031,7 +6029,7 @@ Function UpdatePrompter(moveSlider : Boolean)
        OSC_SendDoubleSpecific("/UI/SetScrubber", sliderPos, Local_IP, Local_PORT)
        SetWidgetValue(SLD_CurrentState, sliderPos)
        
-       // ---> DER FIX: Taub-Timer auf 1 Sekunde erhöhen! <---
+       // ---> FIX: Increase deaf timer to 1 second! <---
        ScrubberTaubTimer = TimeSinceStartup() + 1000.0 
        
        if SCRUB_MacroIdx >= 0 and SCRUB_MacroIdx <= 15 then
@@ -6073,7 +6071,7 @@ Function HasRealLyrics(line : String) Returns Boolean
       Else 
          If insideBracket == false Then 
             If c != " " and c != "-" and c != "–" and c != "_" Then 
-               hasContent = true // Legal: Bricht die Schleife im nächsten Durchlauf ab!
+               hasContent = true // Terminates the loop on the next iteration
             End 
          End 
       End
@@ -6150,7 +6148,7 @@ Function BuildZebraBlocks()
          originalBlock = Arr_PartText_Raw[i]
          lines = SplitString(originalBlock, NEW_LINE)
          
-         // Initialisierung der Blöcke für diesen Part
+         // Initialize blocks for this part
          finalBlockChords = ""; 
          finalBlockLyrics = ""; 
          
@@ -6181,18 +6179,18 @@ Function BuildZebraBlocks()
                   j = j + 1
                End
                
-               // Längen-Ausgleich (High-Speed)
+               // Length equalization (high-speed)
                if Length(tempChordLine) < Length(tempLyricLine) then
                    tempChordLine = tempChordLine + GetSpaces(Length(tempLyricLine) - Length(tempChordLine))
                elsif Length(tempLyricLine) < Length(tempChordLine) then
                    tempLyricLine = tempLyricLine + GetSpaces(Length(tempChordLine) - Length(tempLyricLine))
                end
                
-               // Reißverschluss-Zusammenbau
+               // Interleave assembly
                finalBlockChords = finalBlockChords + tempChordLine + NEW_LINE + " " + NEW_LINE
                
                // FIX: Wir zwingen Lyric-Zeilen IMMER zu Inhalten (Leerzeichen), 
-               // damit alte "LOADING..." Texte verdrängt werden.
+               // so that old "LOADING..." text gets replaced.
                if hasLyrics Then 
                    finalBlockLyrics = finalBlockLyrics + " " + NEW_LINE + tempLyricLine + NEW_LINE 
                Else 
@@ -6220,8 +6218,8 @@ Function RecordTimelineEvent(eventType : String, eventVal : Integer)
     var recBar : Integer
 
     // ========================================================
-    // TÜRSTEHER: Nur aufnehmen, wenn RecordMode scharf ist 
-    // UND der Transport (IsPerformanceActive) WIRKLICH läuft!
+    // GUARD: Only record when RecordMode is armed
+    // AND the transport (IsPerformanceActive) is actually running!
     // ========================================================
     if RecordMode > 0 and IsPerformanceActive then 
         recBar = CurrentBar
@@ -6233,7 +6231,7 @@ Function RecordTimelineEvent(eventType : String, eventVal : Integer)
             currentOffsetMS = 0 
         end
 
-        // "Vorgezogene" Events auf den nächsten Takt schieben
+        // Push early events to the next bar
         if currentBPM > 0.0 and currentOffsetMS > (60000.0 / currentBPM * 3.5) then
             currentOffsetMS = currentOffsetMS - Round(60000.0 / currentBPM * 4.0)
             recBar = recBar + 1
@@ -6269,7 +6267,7 @@ Function RecalculateTextDisplay()
 End
 
 Function TriggerNextSongPart()
-    // Nur reagieren, wenn Aufnahme scharf UND Transport läuft!
+    // Only respond when recording is armed AND transport is running!
     if RecordMode > 0 and IsPerformanceActive then
         if NextRecPartIdx >= 0 and NextRecPartIdx < Size(Arr_SectionNames) then
             
@@ -6322,7 +6320,7 @@ Function DecodeDeviceSysExName(sysExString : String) Returns String
           decoded = decoded + IntToChar(val) 
       end 
       
-      i = i + 1 // Immer artig hochzählen
+      i = i + 1 // Always increment
    End
    
    result = decoded
@@ -6456,7 +6454,7 @@ Function GetDynamicStandardMap() Returns String
     activeCount = 0
     lastActiveIdx = -1
     
-    // Zähle aktive VSTs direkt über den Plugin-Status
+    // Count active VSTs directly via plugin status
     For i = 0; i < MAX_VSTS; i = i + 1 Do
         // IsPluginBypassed == false bedeutet: Plugin ist AN!
         if IsPluginBypassed(BLK_VST[i]) == false then
@@ -6492,7 +6490,7 @@ Function ValidateMapping() Returns Boolean
       if Link_Active[i] then
          linkOk = true
          
-         // Wir prüfen nur, wenn es KEIN CC ist und wir einen Namen erwarten
+         // Only check when it is NOT a CC and we expect a name
          if Link_IsCC[i] == false and Length(Link_ExpectedName[i]) > 0 then
              
              realName = ""
@@ -6549,14 +6547,14 @@ Function IsHeaderLine(line : String) Returns Boolean
     result = isH
 End
 
-// Erkennt, ob eine Zeile nur Akkorde enthält
+// Detects whether a line contains only chords
 Function IsChordLine(line : String) Returns Boolean
     var words : String Array = SplitString(line, " ")
     var i, wordCount : Integer = 0
     var w, firstChar : String
     var isChord : Boolean = true
     
-    // ---> NEU: Spürt auf, ob mindestens ein ECHTER Akkord in der Zeile steht
+    // Detect whether at least one real chord appears in the line
     var hasRealChord : Boolean = false 
     
     if IndexOfSubstring(line, "Chorus", false) > -1 or IndexOfSubstring(line, "CHORUS", false) > -1 then isChord = false
@@ -6572,12 +6570,12 @@ Function IsChordLine(line : String) Returns Boolean
                 wordCount = wordCount + 1
                 firstChar = CopySubstring(w, 0, 1)
                 
-                // 1. Ist das Wort ein echter Akkord? (A-H, plus 'N' für N.C.)
+                // 1. Is the word a real chord? (A-H, plus 'N' for N.C.)
                 if IndexOfSubstring("ABCDEFGHNabcdefghn", firstChar, false) > -1 then
                     hasRealChord = true
                 end
                 
-                // 2. Erlaubte Startzeichen für ALLE Wörter in einer Akkordzeile (Akkorde + Beifahrer)
+                // 2. Allowed start characters for ALL words in a chord line (chords + annotations)
                 if IndexOfSubstring("ABCDEFGHNabcdefghnxX(0123456789*", firstChar, false) == -1 then
                     isChord = false
                 end
@@ -6590,7 +6588,7 @@ Function IsChordLine(line : String) Returns Boolean
         
         if wordCount == 0 then isChord = false end 
         
-        // ---> HIER SCHLÄGT DIE FALLE ZU: 
+        // ---> THE TRAP TRIGGERS HERE:
         // Waren da nur 'x4' oder 'X' in der Zeile, aber kein A-G? -> Dann ist es nur Text!
         if not hasRealChord then isChord = false end
     end
@@ -6624,12 +6622,12 @@ Function AutoTagSections(lines : String Array) Returns String Array
     var firstBlockFound : Boolean = false
     var line : String
 
-    // 1. Hat der Song überhaupt eigene [Titel]?
+    // 1. Does the song have its own [headers]?
     For i = 0; i < Size(lines); i = i + 1 Do
         if IsHeaderLine(lines[i]) then hasAnyHeader = true end
     End
 
-    // 2. Text in Blöcke aufteilen und Header injizieren
+    // 2. Split text into blocks and inject headers
     For i = 0; i < Size(lines); i = i + 1 Do
         line = lines[i]
         
@@ -6686,7 +6684,7 @@ Function IsTabLine(line : String) Returns Boolean
     result = isTab
 End
 
-// --- FILTER: Erkennt Gitarren-Tabs, Web-Müll und Legenden ---
+// --- FILTER: Detects guitar tabs, web junk, and legends ---
 Function IsJunkLine(line : String) Returns Boolean
     var tLine : String = TrimString(line)
     var junk : Boolean = false
@@ -6694,7 +6692,7 @@ Function IsJunkLine(line : String) Returns Boolean
     // Tabulatur-Linien
     if IsTabLine(line) then junk = true
     
-    // UG-Metadaten & Web-Müll
+    // UG metadata & web junk
     elsif IndexOfSubstring(tLine, "Tuning:", false) > -1 then junk = true
     elsif IndexOfSubstring(tLine, "Key:", false) > -1 then junk = true
     elsif IndexOfSubstring(tLine, "Capo", false) == 0 then junk = true 
@@ -6704,7 +6702,7 @@ Function IsJunkLine(line : String) Returns Boolean
     elsif IndexOfSubstring(tLine, "Alternates:", false) > -1 then junk = true
     elsif IndexOfSubstring(tLine, " = ", false) > -1 then junk = true
     
-    // UG-Legenden-Müll & Pfeile
+    // UG legend junk & arrows
     elsif IndexOfSubstring(tLine, "***", false) > -1 then junk = true
     elsif IndexOfSubstring(tLine, "| /", false) == 0 then junk = true
     elsif IndexOfSubstring(tLine, "| \\", false) == 0 then junk = true
@@ -6713,7 +6711,7 @@ Function IsJunkLine(line : String) Returns Boolean
     
     // ---> DER NEUE, SCHLAUE KLAMMER-FILTER <---
     elsif IndexOfSubstring(tLine, "(", false) == 0 then 
-        // Wir löschen die Zeile NUR, wenn typische Anweisungs-Wörter drinstehen,
+        // Only delete the line if it contains typical instruction words,
         // ODER wenn es ein ganz kurzer Multiplikator wie (x4) ist.
         // (Ho!) und (Hey!) Lyrics bleiben damit am Leben!
         if IndexOfSubstring(tLine, "note", true) > -1 then junk = true
@@ -6733,7 +6731,7 @@ Function CleanChordName(raw : String) Returns String
     var res : String = ""
     var i : Integer
     var c : String
-    // ---> FIX: Sternchen (*) hinzugefügt! <---
+    // ---> FIX: Added asterisk (*) <---
     var allowed : String = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#/+-().*" 
     
     For i = 0; i < Length(raw); i = i + 1 Do
@@ -6808,7 +6806,7 @@ Function WeaveChords(chordLine : String, lyricLine : String) Returns String
     result = woven
 End
 
-// Virtuelles Maßband (Misst die ECHTE Breite nach dem Zusammenfügen)
+// Virtual ruler (measures ACTUAL width after merging)
 Function GetEffectiveLength(cLine : String, lLine : String) Returns Integer
     var woven : String = WeaveChords(cLine, lLine)
     // Wir ziehen die Klammern ab, da Gig Performer diese nicht anzeigt!
@@ -6858,7 +6856,7 @@ Function GetSmartWrapIndex(cLine : String, lLine : String, maxLen : Integer) Ret
             end
         end
         
-        if bestIdx == -1 then idx = idx - 1 end // Weiter rückwärts suchen
+        if bestIdx == -1 then idx = idx - 1 end // Continue searching backwards
     End
     
     // Notfall-Fallback (falls ein Wort allein schon zu lang ist)
@@ -6870,7 +6868,7 @@ Function GetSmartWrapIndex(cLine : String, lLine : String, maxLen : Integer) Ret
     result = bestIdx
 End
 
-// SMART PAGE-FLIP: Zerschneidet zu lange Textblöcke intelligent
+// SMART PAGE-FLIP: Intelligently splits overly long text blocks
 Function FlushSection(secName : String, secLines : String Array) Returns String Array
     var res : String Array = []
     var pageStart, pageEnd, i, searchIdx, pageNum : Integer
@@ -6933,7 +6931,7 @@ Function FlushSection(secName : String, secLines : String Array) Returns String 
                 if Length(secName) > 0 then res <-- secName + " (Pt " + pageNum + ")" end
             end
 
-            // --- PAGE ANALYZER (Löst § von unten nach oben auf) ---
+            // --- PAGE ANALYZER (resolves page breaks from bottom to top) ---
             tempLines = []
             textBelowOnPage = false
             
@@ -6945,7 +6943,7 @@ Function FlushSection(secName : String, secLines : String Array) Returns String 
                     if textBelowOnPage then
                         pLine = ReplaceString(pLine, "§", "_", false) // Anker setzen!
                     else
-                        pLine = ReplaceString(pLine, "§", "", false)  // Spurlos löschen!
+                        pLine = ReplaceString(pLine, "§", "", false)  // Remove without trace
                     end
                 else
                     if Length(TrimString(pLine)) > 0 then
@@ -6973,7 +6971,7 @@ Function FlushSection(secName : String, secLines : String Array) Returns String 
     result = res
 End
 
-// Der Master-Waschsalon für das Clipboard (GOD-MODE TRIMMER)
+// Master clipboard cleaner (GOD-MODE TRIMMER)
 Function WashClipboardText(rawText : String) Returns String
     var cleanRaw : String = rawText
     var rawLines, lines, cleanLines : String Array
@@ -7024,7 +7022,7 @@ Function WashClipboardText(rawText : String) Returns String
                 end
                 
                 if IsChordLine(RemoveInlineComments(rawLines[i])) and isTabAhead then
-                    // Akkord über Tab -> Eliminieren
+                    // Chord over tab -> eliminate
                 else
                     lines <-- rawLines[i]
                 end
@@ -7166,9 +7164,9 @@ Function ExecuteScrub(newValue : Double, fromOSC : Boolean)
    if fromOSC and TimeSinceStartup() < ScrubberTaubTimer then
        Trace("[SCRUB-IN] Ignoriert: OSC-Echo durch Taub-Timer geblockt.")
    elsif IsPerformanceActive and fromOSC then
-       Trace("[SCRUB-IN] Ignoriert: OSC-Echo während Playback blockiert.")
+       Trace("[SCRUB-IN] Ignored: OSC echo blocked during playback.")
    else
-       // Ab hier geht die normale Ausführung weiter...
+       // Normal execution continues from here...
        if not IsLoadingSnapshot and not IsLoading then
            if not fromOSC then
                OSC_SendDoubleSpecific("/UI/SetScrubber", newValue, Local_IP, Local_PORT)
@@ -7182,7 +7180,7 @@ Function ExecuteScrub(newValue : Double, fromOSC : Boolean)
            
            if newValue > 0.95 Then
                if IsPerformanceActive == true and CurrentBar >= 5 Then
-                   Trace("PROMPTER: >>> MANUELLER NOTSTOPP AUSGELÖST! (Takt " + CurrentBar + ") <<<")
+                   Trace("PROMPTER: >>> MANUAL EMERGENCY STOP TRIGGERED! (Bar " + CurrentBar + ") <<<")
                    IsPerformanceActive = false 
                    EnablePlayhead(false) 
                    
@@ -7274,8 +7272,8 @@ Function EvaluateTransportSync()
     elsif CurrentSyncMode == 1 then 
         IsPerformanceActive = playing
         if not isHW then
-            // VERBOTEN: GUI hat GP gestartet/gestoppt! Zwingen GP sofort zurück.
-            Trace("ETS: [X] ETS: GENOS LEADS: GUI hat illegal agiert! Zwinge GP zurück...")
+            // FORBIDDEN: GUI started/stopped GP! Force GP back immediately.
+            Trace("ETS: [X] ETS: ARRANGER LEADS: GUI acted illegally! Forcing GP back...")
             IsCorrectingPlayhead = true; EnablePlayhead(not playing) 
         else
             Trace("ETS: [OK] ETS: GENOS LEADS: Genos Aktion. GP lief nativ mit.")
@@ -7301,17 +7299,17 @@ Function EvaluateTransportSync()
     elsif CurrentSyncMode == 3 then 
         IsPerformanceActive = playing
         if not isHW then
-            // Es war ein reiner Maus-Klick! Wir müssen den Genos nachziehen!
+            // It was a pure mouse click! We need to sync the arranger!
             Trace("ETS: [OK] FULL SYNC: GUI Aktion. Sende Befehl an Genos...")
             SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
             StyleTriggerResetTimer = TimeSinceStartup() + 60.0
             
-            // WICHTIG: Setze den Puls künstlich in die Zukunft, damit das 
+            // IMPORTANT: Set the pulse artificially into the future so that
             // unvermeidliche Echo des Genos beim Stoppen uns nicht verwirrt!
             LastHardwarePulseTime = TimeSinceStartup() + 1000.0
         else
-            // Es war ein Hardware-Klick! GP hat nativ reagiert. Das Skript hält die Klappe!
-            Trace("ETS: [OK] FULL SYNC: Genos Aktion. GP lief nativ mit. (Kein Echo nötig)")
+            // It was a hardware click! GP responded natively. Script stays silent.
+            Trace("ETS: [OK] FULL SYNC: Arranger action. GP ran natively. (No echo needed)")
         end
         
     // --- MODUS 4: INITIAL LATCH ---
@@ -7328,7 +7326,7 @@ Function EvaluateTransportSync()
                 LastHardwarePulseTime = TimeSinceStartup() + 1000.0
             end
         else
-            // Bei Stop ignorieren wir den Genos komplett, damit GP unbeeindruckt durchläuft!
+            // On stop, ignore the arranger entirely so GP continues unaffected!
             if isHW then
                 Trace("ETS: [X] INITIAL LATCH: Genos hat gestoppt. Wird ignoriert! Re-Start GP.")
                 IsCorrectingPlayhead = true; EnablePlayhead(true)
@@ -7352,7 +7350,7 @@ End
 // ---------------------------------------------------------
 Function FireDirectArrangerTransport()
     // Feuert Note 14 direkt an das physische MIDI Out, ohne Loopback-Gefahr!
-    // (Kanal 16 = 0x9F / 0x8F, da GP Kanäle 0-basiert zählt)
+    // (Channel 16 = 0x9F / 0x8F, since GP uses 0-based channels)
     
     // Note ON
     if arrangerDevIdx >= 0 and IsDeviceConnected(arrangerDevIdx) then
@@ -7405,7 +7403,7 @@ Function ParkFadersForVST(vstIdx : Integer)
     if count == 0 then Trace("PARK: No Links found for VST " + vstIdx + " in current Map!") end
 End
 
-// 2. RESTORE: Werte wiederherstellen (aus Plugin oder Gedächtnis)
+// 2. RESTORE: Restore values (from plugin or memory)
 Function RestoreFadersForVST(vstIdx : Integer)
     var i, s : Integer
     var currentVal, faderVal : Double = 0.0
@@ -7484,8 +7482,8 @@ Function GetStoredPreset(blockName : String, oldNames : String Array, oldPresets
 End
 
 // ---------------------------------------------------------
-// REVERSE LOOKUP FÜR VST-ROUTING
-// Sucht den ersten MIDI-Kanal (1-16), der zu diesem VST führt
+// REVERSE LOOKUP FOR VST ROUTING
+// Finds the first MIDI channel (1-16) routed to this VST
 // ---------------------------------------------------------
 Function GetChannelForVST(vstIdx : Integer) Returns Integer
    var i : Integer = 0
@@ -7512,7 +7510,7 @@ Function CyclePluginPreset(pluginIndex : Integer, direction : Integer)
     var idx, i, newIdx : Integer
     var isActive : Boolean
     
-    // Wir hüllen den gesamten Logik-Teil in ein IF, um den Abbruch zu simulieren
+    // Wrap the entire logic in an IF to simulate early return
     if ReplaceTargetIdx == -1 and EmergencyKillSwitch == false then
         
         if pluginIndex >= 0 and pluginIndex < MAX_VSTS then
@@ -7553,7 +7551,7 @@ End
 
 
 // ---------------------------------------------------------
-// Aktualisiert die Hardware-Fader am Genos für ein bestimmtes VST
+// Updates the hardware faders on the arranger for a specific VST
 // ---------------------------------------------------------
 Function ResetHardwareFadersForVST(vstIdx : Integer)
    var i, s : Integer
@@ -7588,10 +7586,10 @@ Function SendProgramChangeToVst(vstIdx : Integer, direction : Integer)
     var msgMSB, msgLSB : ControlChangeMessage
     var msgPC : ProgramChangeMessage
     
-    // 1. Zähler hoch/runter drehen
+    // 1. Increment/decrement counter
     absVal = Current_PC_Absolute[vstIdx] + direction
     
-    // Limits (Damit Du nicht unter 0 oder über 3000 drehst)
+    // Limits (clamp to 0-3000 range)
     if absVal < 0 then absVal = 0 
     elsif absVal > 3000 then absVal = 3000 end // Passe das Max-Limit an Dein VST an
     
@@ -7652,16 +7650,16 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
         if found then
             if DebugMode then Trace("VST BROWSE: Scope=" + (Active_VST_Scope+1) + " | Plugin=" + loadedName + " | Type=" + cType) end
             
-            // --- A: STEUERUNG ÜBER PLUGIN PARAMETER (Arturia, Omnisphere) ---
+            // --- A: CONTROL VIA PLUGIN PARAMETERS (Arturia, Omnisphere) ---
             if cType == "PARAM" then
                 if direction == 1 and pUp > 0 then
                     // 1. Sicherheitshalber Nullen (falls Arturia den letzten Off-Befehl verschluckt hat)
                     SetParameter(BLK_VST[Active_VST_Scope], pUp, 0.0) 
                     
-                    // 2. Brutal reindrücken
+                    // 2. Force inject
                     SetParameter(BLK_VST[Active_VST_Scope], pUp, 1.0)
                     
-                    // 3. Deutlich länger halten, damit fette VSTs das registrieren!
+                    // 3. Hold significantly longer so heavy VSTs register it!
                     Wait(150.0) 
                     
                     // 4. Wieder loslassen
@@ -7676,18 +7674,18 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
                     feedbackMsg = ">> " + loadedName + " : Prev Patch <<"
                 end
                 
-            // --- B: STEUERUNG ÜBER GIG PERFORMER HOST LISTE ---
+            // --- B: CONTROL VIA GIG PERFORMER HOST LIST ---
             elsif cType == "HOST" then
                 CyclePluginPreset(Active_VST_Scope, direction)
                 
-                // MAGIE: Nach dem Cycle() steht der tatsächliche Name in unserem Array!
+                // After Cycle(), the actual name is in our array
                 feedbackMsg = ">> " + loadedName + " : " + LoadedPresets[Active_VST_Scope] + " <<"
                 
-            // --- C: STEUERUNG ÜBER PROGRAM CHANGE (Korg etc.) ---
+            // --- C: CONTROL VIA PROGRAM CHANGE (Korg etc.) ---
             elsif cType == "PC" then
                 SendProgramChangeToVst(Active_VST_Scope, direction)
                 
-                // Wir rechnen kurz zurück, um die Zahlen im Display zu zeigen!
+                // Convert back to show the numbers in the display
                 absVal = Current_PC_Absolute[Active_VST_Scope]
                 bankLSB = absVal / 128
                 pcVal = absVal % 128
@@ -7698,11 +7696,11 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
             end
             
             // ========================================================
-            // --- DIREKTES HUD FEEDBACK FÜR PRESETS ---
+            // --- DIRECT HUD FEEDBACK FOR PRESETS ---
             // ========================================================
             if feedbackMsg != "" then
                 OSC_SendStringSpecific("/UI/SetMacroFeedback", feedbackMsg, Local_IP, Local_PORT)
-                MacroFeedbackTimer = TimeSinceStartup() + 2500.0 // Etwas länger anzeigen!
+                MacroFeedbackTimer = TimeSinceStartup() + 2500.0 // Show slightly longer
                 if DebugMode then Trace("HUD PUSH: " + feedbackMsg) end
             end
              
@@ -7775,10 +7773,10 @@ Function SyncBrowserToLoadedPlugin(loadedName : String)
     
     found = false
     
-    // Wir führen den Code NUR aus, wenn die Datenbank überhaupt existiert!
+    // Only execute if the database actually exists
     if Size(DB_VstNames) > 0 then
         
-        // ---> DIE ÄUSSERE SICHERE WHILE-SCHLEIFE <---
+        // ---> OUTER SAFE WHILE-LOOP <---
         i = 0
         While i < Size(DB_VstNames) and not found Do
             if DB_VstNames[i] == loadedName then
@@ -7812,7 +7810,7 @@ Function SyncBrowserToLoadedPlugin(loadedName : String)
                 
                 found = true
             end
-            i = i + 1 // Den äußeren Zähler nicht vergessen!
+            i = i + 1 // Don't forget the outer counter!
         End
         
         // 4. Fallback, falls das Plugin nicht gefunden wurde
@@ -7824,7 +7822,7 @@ Function SyncBrowserToLoadedPlugin(loadedName : String)
 End
 
 // =========================================================
-// HIERARCHIE-SYNC: Zwingt das UI, der Realität zu entsprechen
+// HIERARCHY SYNC: Forces the UI to match reality
 // MAP -> Publisher -> VST -> Preset
 // =========================================================
 Function FocusBrowserOnCurrentSlot()
@@ -7841,7 +7839,7 @@ Function FocusBrowserOnCurrentSlot()
         
         realSlotIdx = ReplaceableSlots[CurrentMapSlotIndex]
         
-        // 3. Realität auslesen (Was ist WIRKLICH geladen?)
+        // 3. Read reality (what is ACTUALLY loaded?)
         loadedName = GetPluginInfo(BLK_VST[realSlotIdx], 0)
         
         // 4. Datenbank-Zeiger ausrichten (Publisher & VST)
@@ -7861,26 +7859,26 @@ Function FocusBrowserOnCurrentSlot()
 End
 
 // =========================================================
-// RECOVERY ENGINE FÜR UI NACH REPLACE REBOOT
+// RECOVERY ENGINE FOR UI AFTER REPLACE REBOOT
 // =========================================================
 Function RebuildBrowserStateAfterReboot()
    var activeSlot : Integer
    var loadedName : String
    
    if Size(ReplaceableSlots) > 0 then
-       // 1. Sicherheit: Ist der Slot-Index gültig?
+       // 1. Safety: Is the slot index valid?
        if CurrentMapSlotIndex < 0 or CurrentMapSlotIndex >= Size(ReplaceableSlots) then 
            CurrentMapSlotIndex = 0 
        end
        
-       // 2. Realität prüfen: Welches Plugin ist WIRKLICH im aktuellen Slot?
+       // 2. Check reality: Which plugin is ACTUALLY in the current slot?
        activeSlot = ReplaceableSlots[CurrentMapSlotIndex]
        loadedName = GetPluginInfo(BLK_VST[activeSlot], 0)
        
-       // 3. Browser-Variablen (Publisher, Index) mit der Realität synchronisieren
+       // 3. Sync browser variables (publisher, index) with reality
        SyncBrowserToLoadedPlugin(loadedName)
        
-       // 4. Preset-Gedächtnis absichern (Fallback gegen Null-Strings)
+       // 4. Secure preset memory (fallback against null strings)
        if LoadedPresets[activeSlot] == "" then LoadedPresets[activeSlot] = "-" end
        
        // 5. Lock aufheben & UI sauber zeichnen
@@ -7902,7 +7900,7 @@ Function AddJobToQueue(vstIdx : Integer, targetName : String, targetPath : Strin
    elsif targetPath != "" then
        if isManualUpdate then manualStr = "true" else manualStr = "false" end
        
-       // Neu: targetPreset an den Queue-String anhängen!
+       // Append targetPreset to the queue string
        newJob = IntToString(vstIdx) + "|" + targetName + "|" + manualStr + "|" + targetPath + "|" + targetPreset
        
        if GlobalReplaceQueue == "EMPTY" or GlobalReplaceQueue == "" then
@@ -7921,22 +7919,22 @@ End
 
 Function ContinueActualReplace(success : Boolean, slotIdx : Integer, path : String, isManual : Boolean)
     if success then
-        Trace("HARD-FIRE: Geisterhand erfolgreich. Starte Weckruf für Slot " + (slotIdx + 1))
+        Trace("HARD-FIRE: Ghost hand successful. Starting wake-up for slot " + (slotIdx + 1))
     else
-        Trace("HARD-FIRE: TIMEOUT! Geisterhand stumm. Versuche Weckruf auf gut Glück...")
+        Trace("HARD-FIRE: TIMEOUT! Ghost hand silent. Attempting wake-up blindly...")
     end
 
     // Den Weckruf absetzen
     SetPluginBypassed(BLK_VST[slotIdx], false)
     
-    // Den TimerTick-Wächter aktivieren
+    // Activate the TimerTick watchdog
     IsWaitingForWakeUp = true
     WakeUpRetryCount = 0
     WakeUpCheckTimer = TimeSinceStartup() + 200.0 
 End
 
 Function FireActualReplace(slotIdx : Integer, path : String, isManual : Boolean)
-   Trace("HARD-FIRE: Start Sequence für Slot " + (slotIdx + 1))
+   Trace("HARD-FIRE: Start sequence for slot " + (slotIdx + 1))
    EmergencyKillSwitch = true
    
    if InSetlistMode() then
@@ -7948,11 +7946,11 @@ Function FireActualReplace(slotIdx : Integer, path : String, isManual : Boolean)
        // Kurze Pause, damit die Grafik den Fullscreen-Switch verarbeitet
        Wait(800.0) 
        
-       // Jetzt in die Panels-View (erzwingt lokalen Fokus für den folgenden Toggle)
+       // Switch to Panels view (forces local focus for the following toggle)
        SwitchToPanelView()
        Wait(500.0)
        
-       // Daten für Python speichern
+       // Save data for Python
        PendingReplaceSlotIdx = slotIdx
        PendingReplacePath = path
        PendingReplaceIsManual = isManual
@@ -7971,7 +7969,7 @@ Function TriggerNextQueueJob()
    var jobs, parts : String Array
    var nextIdx : Integer
    var targetName, cleanPath : String
-   var isManual : Boolean // <--- NEU: Variable für das Flag deklarieren
+   var isManual : Boolean // Variable for the flag
    
    if GlobalReplaceQueue != "EMPTY" and GlobalReplaceQueue != "" then
        jobs = SplitString(GlobalReplaceQueue, ";")
@@ -8013,7 +8011,7 @@ Function ExecuteVSTReplace(vstIdx : Integer, targetName : String, targetPath : S
 End
 
 // ---------------------------------------------------------
-// HELPER: GET PATH FOR VST (Für die .vst3 Variante!)
+// HELPER: GET PATH FOR VST (for the .vst3 variant)
 // ---------------------------------------------------------
 Function GetPathForVst(vstName : String) Returns String
    var i : Integer = 0
@@ -8028,7 +8026,7 @@ Function GetPathForVst(vstName : String) Returns String
          result = DB_VstPaths[i]
          found = true
       end
-      i = i + 1 // Immer artig hochzählen
+      i = i + 1 // Always increment
    End
 End
 
@@ -8145,7 +8143,7 @@ End
 
 // ---------------------------------------------------------
 // REALTIME SMART BYPASS
-// Überwacht live die Matrix und legt unbenutzte VSTs & Kanäle schlafen
+// Monitors the matrix live and puts unused VSTs & channels to sleep
 // ---------------------------------------------------------
 Function ExecuteSmartBypass()
    var i, vstIdx, k, activeInputs : Integer
@@ -8163,7 +8161,7 @@ Function ExecuteSmartBypass()
            // Kanal wird genutzt -> NoteProcessor aufwecken!
            if IsPluginBypassed(BLK_NoteProcessor[i]) then SetPluginBypassed(BLK_NoteProcessor[i], false) end
            
-           // MULTI-VST CHECK (Welches VST hängt an diesem Kanal?)
+           // MULTI-VST CHECK (which VST is connected to this channel?)
            if Size(RoutingMatrix) == 160 then
                For vstIdx = 0; vstIdx < MAX_VSTS; vstIdx = vstIdx + 1 Do
                    if RoutingMatrix[(vstIdx * 16) + i] == true then
@@ -8244,7 +8242,7 @@ Function AnalyzeChannel(chIdx : Integer) Returns Integer
    
    if not isFact_Total and not isUser_Total then isCustom_Total = true end
 
-   // 3. TAGS BAUEN (Für die 3. Zeile)
+   // 3. BUILD TAGS (for the 3rd line)
    suffixString = ""
    tagString = "["
    if activeInputs == 0 then tagString = tagString + "OFF" elsif activeInputs == 1 then tagString = tagString + "ON" else tagString = tagString + "MERGE" end
@@ -8270,14 +8268,14 @@ Function AnalyzeChannel(chIdx : Integer) Returns Integer
    
    if Mem_UserMute[chIdx] == 1 then suffixString = suffixString + " [MUTED]" end 
    
-   // 4. VST SAMMLER (Für die 2. Zeile)
+   // 4. VST COLLECTOR (for the 2nd line)
    count = 0
    routingText = ""
    if Size(RoutingMatrix) == 160 then
        For vstIdx = 0; vstIdx < MAX_VSTS; vstIdx = vstIdx + 1 Do
            if RoutingMatrix[(vstIdx * 16) + chIdx] == true then
                if count < 3 then
-                   // Priorität 1: Manual Bypass, Priorität 2: CPU Bypass
+                   // Priority 1: Manual Bypass, Priority 2: CPU Bypass
                    if Mem_ManualVSTBypass[vstIdx] then bypassStr = " [MAN OFF]"
                    elsif IsPluginBypassed(BLK_VST[vstIdx]) then bypassStr = " [Bypassed]"
                    else bypassStr = " [Active]" end
@@ -8291,10 +8289,10 @@ Function AnalyzeChannel(chIdx : Integer) Returns Integer
    end
    if count == 0 then routingText = "- None -" end
 
-   // 5. KANAL STATUS (Für die 1. Zeile)
+   // 5. CHANNEL STATUS (for the 1st line)
    if IsPluginBypassed(BLK_NoteProcessor[chIdx]) then chActiveStr = "[Bypassed]" else chActiveStr = "[Active]" end
 
-   // 6. BLOCK ZUSAMMENSETZEN (3 getrennte Array-Einträge für flüssiges Scrollen!)
+   // 6. ASSEMBLE BLOCK (3 separate array entries for smooth scrolling)
    Diag_Lines[chIdx * 3] = "CH " + (chIdx+1) + ": " + chActiveStr + " | " + ChannelUsage[chIdx]
    Diag_Lines[(chIdx * 3) + 1] = " |- " + routingText
    Diag_Lines[(chIdx * 3) + 2] = " L- " + tagString + " NP:" + s_NP + suffixString
@@ -8440,7 +8438,7 @@ End
 // CROSSFADER FUNKTIONEN
 // ---------------------------------------------------------
 
-// Überträgt den Zustand der Matrix-Buttons an das Scriptlet
+// Transfers the matrix button state to the scriptlet
 Function SyncMatrixToScriptlet()
     var i : Integer
     var paramIdx : Integer
@@ -8460,7 +8458,7 @@ Function ApplyCrossfade(x_val : Double)
    var vol_GP : Double = 0.0
    var i, paramID : Integer 
    
-   // 1. AUDIO (GP Intern - Unverändert)
+   // 1. AUDIO (GP internal - unchanged)
    angle = x_val * 1.57079632679 
    vol_GP = Cos(angle)      
    
@@ -8487,7 +8485,7 @@ Function SyncRechUI()
     var arraySize : Integer
     var limit : Integer
     
-    // Hilfsvariablen für die Matrix-Berechnung
+    // Helper variables for matrix calculation
     var row : Integer
     var col : Integer
     var transposedIdx : Integer
@@ -8508,7 +8506,7 @@ Function SyncRechUI()
         // Spalte (Output Channel 0-15)
         col = i % 16
         
-        // 2. Wir berechnen den Index für den Parameter-Zugriff (Transponiert / Column-Major)
+        // 2. Calculate the index for parameter access (transposed / column-major)
         // Ziel: Spalte * 16 + Zeile
         transposedIdx = (col * 16) + row
 
@@ -8536,13 +8534,13 @@ Function ApplyVstFocusBypass()
 
     if DebugMode then Trace("=== START HARD-TRACE: VST SURGEON ===") end
 
-    // 1. AUFWECKEN (Nur wenn Focus Mode OFF geht, wachen die temporären auf!)
+    // 1. WAKE UP (only when Focus Mode turns OFF, temporary bypasses are restored)
     if GetWidgetValue(BTN_Focus_Mode) < 0.5 or GlobalSystemMode != 0 then
         For v = 0; v < MAX_VSTS; v = v + 1 Do
             if Focus_Temp_Bypassed[v] then
                 SetPluginBypassed(BLK_VST[v], false)
                 Focus_Temp_Bypassed[v] = false
-                if DebugMode then Trace("  -> WAKE UP: VST " + (v+1) + " aus dem temporären Bypass geholt.") end
+                if DebugMode then Trace("  -> WAKE UP: VST " + (v+1) + " restored from temporary bypass.") end
             end
         End
         if DebugMode then Trace("  -> Surgeon inactive. Focus is OFF.") end
@@ -8551,7 +8549,7 @@ Function ApplyVstFocusBypass()
     else
         if DebugMode then Trace("  -> Focus is ON. Active VST: " + (Active_VST_Scope+1)) end
         
-        // Zuerst die temporären Markierungen zurücksetzen, damit wir sie neu berechnen können!
+        // First reset temporary markers so we can recalculate them
         For v = 0; v < MAX_VSTS; v = v + 1 Do Focus_Temp_Bypassed[v] = false End
         
         // A) Welche Hardware-Inputs befeuern unser gerade fokussiertes VST?
@@ -8608,7 +8606,7 @@ Function ApplyVstFocusBypass()
             For v = 0; v < MAX_VSTS; v = v + 1 Do
                 if toKill[v] then
                     SetPluginBypassed(BLK_VST[v], true)
-                    Focus_Temp_Bypassed[v] = true // <--- Hier merken wir uns: "Der Surgeon hat ihn getötet!"
+                    Focus_Temp_Bypassed[v] = true // Mark as temporarily killed by the surgeon
                     if DebugMode then Trace("  -> KILLED: VST " + (v+1) + " bypassed.") end
                 end
             End
@@ -8624,35 +8622,35 @@ End
 Function SyncChannelScopeToVst(vstIdx : Integer)
     var i : Integer
     var changed : Boolean = false
-    var firstFound : Boolean = false // <--- NEU: Der Merkzettel für den ersten Kanal
+    var firstFound : Boolean = false // Flag for the first channel
     
     if vstIdx >= 0 and vstIdx < MAX_VSTS then
         For i = 0; i < 16; i = i + 1 Do
-            // Gehört der Kanal zum VST?
+            // Does the channel belong to this VST?
             if RoutingMatrix[(vstIdx * 16) + i] then
                 
-                // SONDERREGEL FÜR VOICE SELECTOR (0): Nur der ERSTE Kanal!
+                // SPECIAL RULE FOR VOICE SELECTOR (0): Only the FIRST channel!
                 if GlobalSystemMode == 0 then
                     if not firstFound then
                         // Der erste Kanal wird aktiviert
                         if not OutputScope[i] then OutputScope[i] = true; changed = true end
                         firstFound = true
                     else
-                        // Alle weiteren Kanäle dieses VSTs werden aus dem UI-Scope verbannt
+                        // All further channels of this VST are removed from UI scope
                         if OutputScope[i] then OutputScope[i] = false; changed = true end
                     end
                 else
-                    // Normales Verhalten (z.B. in Controller Map Modus): Alle Kanäle aktivieren
+                    // Normal behavior (e.g. in Controller Map mode): activate all channels
                     if not OutputScope[i] then OutputScope[i] = true; changed = true end
                 end
                 
             else
-                // Kanal gehört ohnehin nicht zum VST -> Raus aus dem Scope
+                // Channel does not belong to this VST -> remove from scope
                 if OutputScope[i] then OutputScope[i] = false; changed = true end
             end
         End
         
-        // Wenn Lämpchen umgeschaltet wurden, UI komplett aktualisieren!
+        // If LEDs were toggled, fully update the UI
         if changed then
             UpdateMetaColors()
             SyncInputFeedback()
@@ -8664,7 +8662,7 @@ Function SyncChannelScopeToVst(vstIdx : Integer)
 End
 
 // ---------------------------------------------------------
-// AUTO-SWITCH SYS MODE (Die Prioritäten-Weiche)
+// AUTO-SWITCH SYS MODE (priority routing)
 // ---------------------------------------------------------
 Function EvaluateAutoSysMode()
    var i, newMode : Integer
@@ -8746,12 +8744,12 @@ Function UpdateSoloMuteState()
        // --- SZENARIO B: VOICE SELECTOR (0) -> VST Jam Focus (Auto-Smart-Solo) ---
        elsif GlobalSystemMode == 0 then
            For outCol = 0; outCol < 16; outCol = outCol + 1 Do
-               // Wir untersuchen alle Kanäle, die NICHT im Fokus stehen
+               // Examine all channels NOT in focus
                if not OutputScope[outCol] then
                    fedBySameInput = false
                    
                    For inRow = 0; inRow < 16; inRow = inRow + 1 Do
-                       // Hängt dieser fremde Kanal an einem Input?
+                       // Is this foreign channel connected to an input?
                        if GetParameter(RECH, (inRow * 16) + outCol) > 0.5 then
                            
                            // Check: Feuert dieser Input gerade unseren fokussierten Kanal an?
@@ -8806,10 +8804,10 @@ Function UpdateSoloMuteState()
    // A) Zuerst weckt der SmartBypass alles auf, was Routings hat
    ExecuteSmartBypass()
    
-   // B) DANACH legt der Surgeon die störenden VSTs wieder schlafen!
+   // B) THEN the surgeon puts interfering VSTs back to sleep
    ApplyVstFocusBypass()
    
-   // C) ZULETZT prüft SmartAdapt die resultierende Realität und lädt ggf. die Map!
+   // C) FINALLY SmartAdapt checks the resulting reality and loads the map if needed
    EvaluateSmartAdapt()
 End
 
@@ -8837,12 +8835,12 @@ Function ChangeVstScope(direction : Integer, directIdx : Integer)
            
            if pName != "Element" and pName != "" and pName != "-" then
                
-               // Fall 1: VST ist ganz normal wach -> Wählbar!
+               // Case 1: VST is normally awake -> selectable
                if not IsPluginBypassed(BLK_VST[newScope]) then
                    foundActive = true
                    
-               // Fall 2: Die Focus-Falle! VST schläft zwar (durch den Surgeon), 
-               // hat aber ein aktives Kabel in der RECH-Matrix! -> Wählbar!
+               // Case 2: Focus trap! VST is asleep (by surgeon),
+               // but has an active cable in the RECH matrix -> selectable
                elsif GetWidgetValue(BTN_Focus_Mode) > 0.5 and GlobalSystemMode == 0 then
                    isRoutActive = false
                    
@@ -8946,12 +8944,12 @@ Function CycleChannelUsage(direction : Integer)
    // ---> UNSER SAUBERER SCOPE-HELPER <---
    firstScopeIdx = GetFirstActiveScope()
    
-   // --- DER ZAUN (Kein böses 'return'!) ---
+   // --- THE FENCE (no return statement!) ---
    if firstScopeIdx > -1 then 
    
        // 2. Aktuellen Index in der Kategorie-Liste finden
        currentUsage = ChannelUsage[firstScopeIdx]
-       catIdx = -1 // Startwert für die sichere Suche
+       catIdx = -1 // Initial value for safe search
        
        // ---> DIE SICHERE WHILE-SCHLEIFE <---
        i = 0
@@ -8965,7 +8963,7 @@ Function CycleChannelUsage(direction : Integer)
        // Fallback, falls die Kategorie (warum auch immer) nicht existiert
        if catIdx == -1 then catIdx = 0 end
        
-       // 3. Blättern (mit Wrap-Around)
+       // 3. Cycle (with wrap-around)
        catIdx = catIdx + direction
        if catIdx < 0 then catIdx = Size(UsageCategories) - 1
        elsif catIdx >= Size(UsageCategories) then catIdx = 0
@@ -8973,7 +8971,7 @@ Function CycleChannelUsage(direction : Integer)
        
        newUsage = UsageCategories[catIdx]
        
-       // 4. Auf ALLE selektierten Scope-Kanäle anwenden
+       // 4. Apply to ALL selected scope channels
        // (Hier ist For richtig, da wirklich alle 16 durchsucht werden sollen!)
        For i = 0; i < 16; i = i + 1 Do
           if OutputScope[i] then
@@ -8983,7 +8981,7 @@ Function CycleChannelUsage(direction : Integer)
        
        // 5. UI Updates
        RefreshAllInjectionDisplays()
-       UpdateMetaColors() // Aktualisiert sofort die große Anzeige!
+       UpdateMetaColors() // Immediately update the main display
        
    end // Ende vom Zaun
 End
@@ -9001,7 +8999,7 @@ Function CycleScopeSection(direction : Integer)
         elsif currentIdx >= 0 and currentIdx <= 15 then
             if MacroGroup_Anchors[i] == 0 then foundAnchor = i end
         else
-            // Da unsere Gruppen exakt 16 Kanäle umfassen, prüfen wir die Range (Anker bis Anker+15):
+            // Since our groups span exactly 16 channels, check the range (anchor to anchor+15):
             if currentIdx >= MacroGroup_Anchors[i] and currentIdx <= MacroGroup_Anchors[i] + 15 then
                 foundAnchor = i
             end
@@ -9047,7 +9045,7 @@ Function SetDefaultChannelScope()
    // 2. DAS GEHIRN WASCHEN (Active_VST_Scope auf ersten legalen Wert setzen)
    firstActiveVST = -1
    
-   // Welches VST hängt an Kanal 1 (Index 0)?
+   // Which VST is connected to channel 1 (index 0)?
    if Size(RoutingMatrix) == 160 then
        i = 0
        // ---> DIE ERSTE SICHERE WHILE-SCHLEIFE <---
@@ -9055,7 +9053,7 @@ Function SetDefaultChannelScope()
            if RoutingMatrix[(i * 16) + 0] == true then
                firstActiveVST = i
            end
-           i = i + 1 // Immer artig hochzählen
+           i = i + 1 // Always increment
        End
    end
    
@@ -9067,7 +9065,7 @@ Function SetDefaultChannelScope()
            if not IsPluginBypassed(BLK_VST[i]) and GetPluginInfo(BLK_VST[i], 0) != "Element" then
                firstActiveVST = i
            end
-           i = i + 1 // Immer artig hochzählen
+           i = i + 1 // Always increment
        End
    end
    
@@ -9101,7 +9099,7 @@ Function ScanGlobalInstruments()
          EffectiveInstrumentName[i] = pName
       else
          // Es ist ein lokales VST (-1) -> Vorerst als LRS markieren
-         // (Wird später durch den OSC-Handshake überschrieben)
+         // (Will be overwritten later by the OSC handshake)
          EffectiveInstrumentName[i] = "[LRS]" 
       end
    End
@@ -9114,17 +9112,17 @@ End
 // (Wird beim Laden und bei Injection-Wechsel genutzt)
 // ---------------------------------------------------------
 Function DeactivateChannel(chIdx : Integer)
-   // 1. Auf User-Standard zurücksetzen (Werte bereinigen)
+   // 1. Reset to user defaults (clean up values)
    ResetChannelToStandard(chIdx)
    
    // 2. HARD PLUGIN BYPASS (CPU SAVER)
-   // Wir schalten den NoteProcessor komplett aus -> 0% CPU Last für diesen Kanal
+   // Fully bypass the NoteProcessor -> 0% CPU load for this channel
    SetPluginBypassed(BLK_NoteProcessor[chIdx], true)
    
-   // 3. Notes Off sicherstellen (Verhindert Hänger vor dem Schlafenlegen)
+   // 3. Ensure Notes Off (prevents stuck notes before sleep)
    Trigger_NotesOff(chIdx + 1)
    
-   // 4. Kanalnutzung zurücksetzten
+   // 4. Reset channel usage
    ChannelUsage[chIdx] = "Free"
    
    if DebugMode then Trace("DeactivateChannel: Ch" + (chIdx+1) + " deep sleep (CPU Saved).") end
@@ -9195,7 +9193,7 @@ End
 // ============================================================================
 
 Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
-   var mName : String = "" // Für das System Toggle HUD
+   var mName : String = "" // For the System Toggle HUD
    var looperTrigCh : Integer = -1
    var i, cState, nState, beatsPerBar : Integer
    var strictSoloCh, smartSoloCh, userMuteCh : Integer
@@ -9233,7 +9231,7 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
                TriggerNextSongPart()
                Last_RecPart_Val = val
                
-               // Auto-Center für Knobs/Fader senden
+               // Send auto-center for knobs/faders
                SetParameter(ExternalArranger, matchedMacro, 0.5)
                Last_RecPart_Val = 0.5 // Neue Mittelstellung merken!
            elsif val < Last_RecPart_Val - 0.05 then 
@@ -9265,7 +9263,7 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
            Trace("SYS-MODE: OFF") 
        end
     
-   // --- DREHREGLER ODER DIREKT-KNÖPFE ---
+   // --- ENCODERS OR DIRECT BUTTONS ---
    elsif matchedMacro == VST_SCOPE_MacroIdx then
        ChangeVstScope(-1, Round(val * (MAX_VSTS - 1)))                
     
@@ -9293,7 +9291,7 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
         End
        
        if looperTrigCh > -1 then
-           if val > 0.5 then // Nur reagieren, wenn das Pad GEDRÜCKT wird
+           if val > 0.5 then // Only respond when the pad is PRESSED
                // ... (Dein existierender Looper Select-Block ... )
                cState = Mem_Loop_State[looperTrigCh]
                nState = -1
@@ -9426,7 +9424,7 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
    ch = GetChannel(m)
    cc = GetCCNumber(m)
    
-   // Standard-Skalierung (0-127) für ALLE Hardware-Controller (Pedale, Knobs etc.)
+   // Standard scaling (0-127) for ALL hardware controllers (pedals, knobs, etc.)
    val = IntToFloat(GetCCValue(m)) / 127.0 
    
    // --- UNIVERSAL FEEDBACK ANFEUERN ---
@@ -9483,7 +9481,7 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
        elsif VST_SCOPE_CCIdx == cc and val > 0.5 then 
            ChangeVstScope(-1, Round(val * (MAX_VSTS - 1)))
            
-       // SYSTEM TOGGLE FÜR DIREKTE CCs
+       // SYSTEM TOGGLE FOR DIRECT CCs
        elsif SYSTEM_TOGGLE_CCIdx == cc then
            SystemModeActive = (val > 0.5)
            if SystemModeActive then 
@@ -9500,14 +9498,14 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
            end
        end 
        
-       // --- B: GIBT ES PARAMETER-LINKS FÜR DIESEN CC? ---
+       // --- B: ARE THERE PARAMETER LINKS FOR THIS CC? ---
        For i = 0; i < Link_Count; i = i + 1 Do
            if Link_Active[i] and Link_SourceIsCC[i] and Link_SourceIdx[i] == cc then
                ExecuteLink(i, val) 
            end
        End
        
-       // --- C: HAL-DATENBANK (Übersetzung von CC -> Macro) ---
+       // --- C: HAL DATABASE (translation from CC -> Macro) ---
        For i = 0; i < HW_Count; i = i + 1 Do
            if not HW_IsNote[i] and HW_Channel[i] == ch and HW_CC[i] == cc then
                ExecuteHardwareMacro(HW_MacroIdx[i], val)
@@ -9535,13 +9533,13 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
             ChangeVstScope(dir, -1) // KNOPF = VST-Scope wechseln
             ApplyVstFocusBypass() 
         elsif actionType == "ENCODER" then
-            TriggerVstPresetChange(dir) // RAD = Presets blättern
+            TriggerVstPresetChange(dir) // Wheel = cycle presets
         end
         
     // --- 1: LOOPER CONTROL ---
     elsif GlobalSystemMode == 1 then 
         if actionType == "Y_AXIS" or actionType == "ENCODER" then
-            CycleChannelScope(dir) // Rad / Y-Achse = Kanäle wechseln
+            CycleChannelScope(dir) // Wheel / Y-axis = switch channels
         elsif actionType == "X_AXIS" then
             if dir == 1 then ClickWidget(BTN_Loop_Rec)
             elsif dir == -1 then ClickWidget(BTN_Loop_Clear) end
@@ -9559,7 +9557,7 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
             
         // MINILAB 3
         elsif actionType == "ENCODER" then
-            TriggerVstPresetChange(dir) // RAD = Presets blättern
+            TriggerVstPresetChange(dir) // Wheel = cycle presets
         elsif actionType == "BUTTON" then
             CycleCtrlMap(dir) // KNOPF = Maps wechseln
         end
@@ -9572,7 +9570,7 @@ Function ProcessHardwareNote(m : NoteMessage)
     var val : Double = 0.0
     var i : Integer
     
-    // 1. LERNMODUS FÜR NOTEN
+    // 1. LEARN MODE FOR NOTES
     if IsHardwareLearning then
         if IsNoteOn(m) then
             Trace("HAL Learn: Received Ch" + chan + ":Note" + noteNum + " -> Assigned to Macro " + (CurrentEditScope + 1))
@@ -9582,7 +9580,7 @@ Function ProcessHardwareNote(m : NoteMessage)
             UpdateControllerInfoDisplay()
         end
         
-    // 2. AUSFÜHRUNGSMODUS (Execute)
+    // 2. EXECUTION MODE
     else
         // Wandle NoteOn/Off in 1.0 und 0.0 um
         if IsNoteOn(m) then val = IntToFloat(GetVelocity(m)) / 127.0 else val = 0.0 end
@@ -9621,8 +9619,8 @@ Function PerformSystemReset()
    // 1. MATRIX RESET
    For i = 0; i < 256; i = i + 1 Do SetParameter(RECH, i, DEF_RECH[i]) End
    
-   // 2. KANÄLE & GENOS RESET
-   // Wir nutzen unser mächtiges DeactivateChannel (macht Reset, Bypass & Usage=Free)
+   // 2. CHANNELS & ARRANGER RESET
+   // Use DeactivateChannel (performs reset, bypass & usage=Free)
    For i = 0; i < 16; i = i + 1 Do DeactivateChannel(i) End
    For j = 0; j < 16; j = j + 1 Do SetParameter(ExternalArranger, P_ARRANGER_FLAGS_START + j, 0.0) End
 
@@ -9659,10 +9657,10 @@ Function PerformSystemReset()
    
    For i=0; i<MAX_VSTS; i=i+1 Do Mem_ManualVSTBypass[i] = false End
 
-   // (Schritt 6 wurde restlos gelöscht, das erledigt jetzt Schritt 2!)
+   // (Step 6 was removed; step 2 now handles this)
    
    // --- DER GPScript ZAUN (Reboot vs. Normaler Ablauf) ---
-   // Wir fragen unsere verzögerungsfreie RAM-Variable ab!
+   // Query our zero-latency RAM variable
    if GlobalReplaceQueue != "EMPTY" and GlobalReplaceQueue != "" then
        Trace("SYS: Reset requires VST changes. Starting Multi-Reboot Queue...")
        TriggerNextQueueJob()
@@ -9718,12 +9716,12 @@ Function AnalyzeStructure()
    While i < Size(Arr_FileLines) and not hasContent Do
        line = Arr_FileLines[i]
        
-       // Prüfen, ob es ECHTEN Text gibt (Keine Tags, kein Config-Block, keine Kommentare)
+       // Check for real text (no tags, no config blocks, no comments)
        if IndexOfSubstring(line, "# Config", false) == -1 and IndexOfSubstring(line, "{", false) != 0 and Length(TrimString(line)) > 0 and IndexOfSubstring(line, "#", false) != 0 Then 
            hasContent = true 
        End
        
-       i = i + 1 // Immer artig hochzählen
+       i = i + 1 // Always increment
    End
    
    if Size(Arr_FileLines) > 0 Then
@@ -9743,12 +9741,12 @@ Function ResetData()
    Arr_Text_Chords = []; Arr_Text_Lyrics = []
    
    FileTranspose = 0 
-   ManualTranspose = 0 // <--- DER FIX: Manuellen Offset zwingend löschen!
+   ManualTranspose = 0 // FIX: Must clear manual offset
    IsEmptyMode = true
    
    CurrentState = 9 // 9 = LOADING
    
-   // Takt und Timeline zurücksetzen
+   // Reset bar and timeline
    CurrentBar = 1
    LastFiredBar = -1
    GlobalBarOffset = 0
@@ -9763,7 +9761,7 @@ Function ResetData()
    // FIX: Wir zwingen den Slider explizit auf 1.0 (ganz oben)
    OSC_SendDoubleSpecific("/UI/SetScrubber", 1.0, Local_IP, Local_PORT)
    
-   // ---> Looper: Wir machen den Empfänger für 1 Sekunde taub! <---
+   // ---> Looper: Make the receiver deaf for 1 second <---
    ScrubberTaubTimer = TimeSinceStartup() + 1000.0
    
    // Das Global-Panel Offset-Display sofort nullen
@@ -9786,7 +9784,7 @@ Function JumpToRegMemAnchor(regNum : Integer)
 
     // ---> DIE SICHERE WHILE-SCHLEIFE <---
     i = 0
-    // Wir durchsuchen das Timeline-Array nach der gedrückten RegMem
+    // Search the timeline array for the pressed RegMem
     While i < Size(Arr_TL_Bar) and not found Do
         if Arr_TL_Type[i] == "RegMem" and Arr_TL_Val[i] == regNum then
             // Wir merken uns das allererste Vorkommen im Song (als Fallback)
@@ -9798,7 +9796,7 @@ Function JumpToRegMemAnchor(regNum : Integer)
                 found = true
             end
         end
-        i = i + 1 // Immer artig hochzählen
+        i = i + 1 // Always increment
     End
 
     // Wenn wir in der Zukunft nichts finden, fangen wir beim ersten Vorkommen (Fallback) an
@@ -9807,7 +9805,7 @@ Function JumpToRegMemAnchor(regNum : Integer)
         found = true
     end
 
-    // === AUSFÜHRUNG DES SPRUNGS ===
+    // === EXECUTE THE JUMP ===
     if found then
         Trace("PROMPTER: PAUSE Navigation -> Springe zu Takt " + targetBar)
         
@@ -9835,7 +9833,7 @@ Function CheckRegMemAutopilot(pressedRegNum : Integer)
     nextRegNum = -1
     nextBar = -1
 
-    // 1. WO SIND WIR? (Aktuelle und NÄCHSTE RegMem ermitteln)
+    // 1. WHERE ARE WE? (Determine current and NEXT RegMem)
     for i = 0; i < Size(Arr_TL_Bar); i = i + 1 do
         if Arr_TL_Type[i] == "RegMem" then
             if Arr_TL_Bar[i] <= CurrentBar then
@@ -9847,10 +9845,10 @@ Function CheckRegMemAutopilot(pressedRegNum : Integer)
         end
     end
 
-// 2. REGEL A: Absichtlicher Vorwärtssprung (TimeJump)?
+// 2. RULE A: Intentional forward jump (TimeJump)?
     if pressedRegNum == nextRegNum then
         if GetWidgetValue(BTN_TimeJump) > 0.5 then
-            Trace("PROMPTER: TimeJump -> Absichtlicher Vorwärtssprung erkannt. Ziehe GP nach vorne!")
+Trace("PROMPTER: TimeJump -> Intentional forward jump detected. Pulling GP forward!")
             CurrentBar = nextBar
             GlobalBarOffset = nextBar - LastSystemBar
             UpdatePrompter(false)
@@ -9858,7 +9856,7 @@ Function CheckRegMemAutopilot(pressedRegNum : Integer)
             if SongDurationBars > 0 then sliderPos = 1.0 - (IntToFloat(CurrentBar) / IntToFloat(SongDurationBars)) end
             OSC_SendDoubleSpecific("/UI/SetScrubber", sliderPos, Local_IP, Local_PORT)
         else
-            Trace("PROMPTER: TimeJump -> Deaktiviert. Ignoriere Vorwärtssprung.")
+Trace("PROMPTER: TimeJump -> Disabled. Ignoring forward jump.")
         end
 
     // 3. REGEL B: Fehlerkorrektur (Autopilot) 
@@ -9896,16 +9894,16 @@ Function FinishRecording()
     var tempBar, tempVal, tempOffset : Integer Array
     var tempType : String Array
     
-    // Variablen für den Pfad
+    // Path variables
     var currentSongName : String
     var snapshotPath, iniPath : String
     
-    // Variablen für das Datei-Schreiben
+    // File writing variables
     var lines : String Array
     var newContent : String
     var inTimeline : Boolean
     
-    // Variablen für den Sortier-Algorithmus
+    // Sort algorithm variables
     var swapped : Boolean
     var t_bar, t_val, t_off : Integer
     var t_type : String
@@ -9940,7 +9938,7 @@ Function FinishRecording()
         Arr_TL_Bar = tempBar; Arr_TL_Type = tempType; Arr_TL_Val = tempVal; Arr_TL_Offset = tempOffset
     end
 
-    // Neue aufgenommene Events anhängen
+    // Append newly recorded events
     for i = 0; i < Size(Arr_Rec_Bar); i = i + 1 do
         Arr_TL_Bar <-- Arr_Rec_Bar[i]; Arr_TL_Type <-- Arr_Rec_Type[i]
         Arr_TL_Val <-- Arr_Rec_Val[i]; Arr_TL_Offset <-- Arr_Rec_Offset[i]
@@ -9964,12 +9962,12 @@ Function FinishRecording()
     End
 
     // ---> DAS SPEICHERN WURDE HIER ENTFERNT <---
-    Trace("PROMPTER: Take in den RAM gemischt. Bereit zum Anhören oder Speichern.")
+    Trace("PROMPTER: Take merged into RAM. Ready for playback or save.")
     RecordMode = 0
 End
 
 // ---------------------------------------------------------
-// PARSER & LOADER FÜR CHORD VIEWER (CLEAN TEXT EDITION)
+// PARSER & LOADER FOR CHORD VIEWER (CLEAN TEXT EDITION)
 // ---------------------------------------------------------
 
 Function ParseSongData()
@@ -9986,7 +9984,7 @@ Function ParseSongData()
    Arr_BarTriggers = []; Arr_PartText_Raw = []; Arr_SectionNames = []; Arr_Cues = []
    Arr_PartAnchors = []; Arr_SectionLineIndices = []
    
-   // (Alte Arrays sicherheitshalber leeren, auch wenn sie nicht mehr befüllt werden)
+   // (Clear old arrays as safety measure, even if they are no longer populated)
    Arr_Anim_Bar = []; Arr_Anim_MacroIdx = []; Arr_Anim_Target = []; Arr_Anim_DurMS = []
    Arr_Style_Bar = []; Arr_Style_ID = []
    
@@ -10033,7 +10031,7 @@ Function ParseSongData()
                  end
 
                  if isNewSectionMarker then
-                     // Wir speichern den alten Part ab, wenn er Text enthält oder der Name wechselt
+                     // Save the previous part if it contains text or the name changes
                      if Length(TrimString(currentBlockText)) > 0 or (currentSectionName != tempNewName and currentSectionName != "Start" and currentSectionName != "") then
                          
                          Arr_BarTriggers <-- currentBarTrigger
@@ -10044,11 +10042,11 @@ Function ParseSongData()
                          
                          // ---> DAS MAGISCHE GUMMIBAND <---
                          // Jeder gefundene Part bekommt provisorisch 10 Takte Platz.
-                         // Das wird später durch LoadSongTimeline mit echten Werten überschrieben!
+                         // Will be overwritten later by LoadSongTimeline with real values
                          currentBarTrigger = currentBarTrigger + 10 
                          
                          currentBlockText = ""
-                         currentCue = "" // Cue nach dem Speichern zurücksetzen!
+                         currentCue = "" // Reset cue after saving
                      end
                      
                      currentSectionName = tempNewName
@@ -10097,8 +10095,8 @@ Function ParseSongData()
            Arr_Cues <-- currentCue
        End
        
-       // Längenberechnung (Wird später durch die .ini korrigiert)
-       SongDurationBars = currentBarTrigger + 10 // Puffer für das Ende
+       // Length calculation (will be corrected later by the .ini)
+       SongDurationBars = currentBarTrigger + 10 // Buffer for the end
        
        // Reset auf Start
        CurrentBar = 1; GlobalBarOffset = 1 - LastSystemBar; LastFiredBar = -1; CurrentState = 4 
@@ -10136,7 +10134,7 @@ Function CreateSkeletonFile()
 
     If SaveStringToTextFile(filePath, skeleton) Then 
         Trace("PROMPTER: Skeleton File firmly written to disk.")
-        // Kein OSC mehr nötig! LoadSongText setzt danach den State auf 2 (Waiting).
+        // No more OSC needed! LoadSongText then sets state to 2 (Waiting).
     Else 
         Trace("PROMPTER: CRITICAL ERROR - Could not create Skeleton File!") 
     End
@@ -10152,7 +10150,7 @@ Function LoadSongText(songName : String)
    var content : String
    
    Trace("---------------------------------------------------")
-   Trace("PROMPTER: Song-Check für: '" + cleanName + "'")
+   Trace("PROMPTER: Song check for: '" + cleanName + "'")
    
    ResetData() // Setzt Status initial auf 9 (Loading)
    
@@ -10239,7 +10237,7 @@ Function SaveSongSnapshot()
                content = content + "VST" + (i+1) + "_Format=VST3" + NEW_LINE
                content = content + "VST" + (i+1) + "_Preset=" + vstName + NEW_LINE 
                
-               // Wenn der manuelle Bypass aktiv ist, diese Info als Delta anfügen
+               // If manual bypass is active, append this info as delta
                if Mem_ManualVSTBypass[i] == true then
                    content = content + "VST" + (i+1) + "_ManualBypass=1" + NEW_LINE
                end
@@ -10254,7 +10252,7 @@ Function SaveSongSnapshot()
        End
 
        // 5. CHANNELS
-       pCount = GetParameterCount(BLK_NoteProcessor[0]) // Dynamische Länge holen
+       pCount = GetParameterCount(BLK_NoteProcessor[0]) // Get dynamic length
        
        For i = 0; i < 16; i = i + 1 Do
           // A. Routing Check: Ist der Kanal aktiv?
@@ -10296,7 +10294,7 @@ Function SaveSongSnapshot()
                     if IsNPConfigParam(BLK_NoteProcessor[i], p) then
                         val = GetParameter(BLK_NoteProcessor[i], p)
                         
-                        // Sicherheits-Check: Ist unser FACT Array groß genug?
+                        // Safety check: Is our FACT array large enough?
                         if p < Size(DEF_NoteProcessor) then
                             stdVal = DEF_NoteProcessor[p]
                         else
@@ -10332,7 +10330,7 @@ Function SaveSongSnapshot()
            end
        End
        
-       // 6. TIMELINE ANHÄNGEN
+       // 6. APPEND TIMELINE
        content = content + NEW_LINE + "[Timeline]" + NEW_LINE
        for i = 0; i < Size(Arr_TL_Bar); i = i + 1 do
            content = content + "Event_" + (i+1) + "=" + Arr_TL_Bar[i] + ", " + Arr_TL_Type[i] + ", " + Arr_TL_Val[i] + ", " + Arr_TL_Offset[i] + NEW_LINE
@@ -10412,13 +10410,13 @@ Function LoadSongTimeline(songFilePath : String)
                     Arr_TL_Val <-- eVal
                     Arr_TL_Offset <-- eOffset
                     
-                    // ZEBRA-SYNC FÜR SONGPARTS (MARKER)
+                    // ZEBRA SYNC FOR SONGPARTS (MARKERS)
                     if eType == "Marker" then
-                        // eVal enthält die Part-Nummer (0 = Intro, 1 = Verse, etc.)
+                        // eVal contains the part number (0 = Intro, 1 = Verse, etc.)
                         if eVal >= 0 and eVal < Size(Arr_BarTriggers) then
                             Arr_BarTriggers[eVal] = eBar
                             
-                            // ---> NEU: Song-Länge dem letzten Marker anpassen! <---
+                            // ---> Adjust song length to last marker <---
                             if eBar > SongDurationBars then SongDurationBars = eBar end
                         end
                     end
@@ -10443,7 +10441,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
    
    var fileContent, currentLine, key, chStr, blockType, presetName, currentPreset, valStr : String 
    var targetCtrlMap : String = "" 
-   var paramNameOrIdx : String // <--- NEU für Name-Parsing
+   var paramNameOrIdx : String // For name parsing
    
    var parts, subParts : String Array
    var targetPresets : String Array = ["-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
@@ -10504,7 +10502,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
        // 1. RECH (Matrix) wieder exakt auf den System-Standard setzen
        For i = 0; i < 256; i = i + 1 Do SetParameter(RECH, i, DEF_RECH[i]) End
        
-       // 2. Alle Kanäle putzen und auf System-Standard setzen
+       // 2. Clean all channels and set to system defaults
        For i = 0; i < 16; i = i + 1 Do ResetChannelToStandard(i) End
        
        // 3. Genos Flags resetten
@@ -10772,7 +10770,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                 if targetChannelActive[i] == true then
                    SetPluginBypassed(BLK_NoteProcessor[i], false)
                    
-                   // Wir lesen das RAM ab sofort komplett dynamisch über die Namen aus!
+                   // Read RAM completely dynamically via parameter names
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_SplitMin"); if idx > -1 then Mem_MinNote[i] = GetParameter(BLK_NoteProcessor[i], idx) end
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_SplitMax"); if idx > -1 then Mem_MaxNote[i] = GetParameter(BLK_NoteProcessor[i], idx) end
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_Transpose"); if idx > -1 then Mem_Transpose[i] = Round((GetParameter(BLK_NoteProcessor[i], idx) * 96.0) - 48.0) end
@@ -10810,7 +10808,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                    Mem_SoloSmart[i]  = 0 //targetSoloSmart[i]
                    Mem_UserMute[i]   = 0 //targetUserMute[i]
                    
-                   // Mute Status ans Plugin übergeben
+                   // Pass mute status to the plugin
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_UserMute"); if idx > -1 then SetParameter(BLK_NoteProcessor[i], idx, IntToFloat(targetUserMute[i])) end
                 else
                    DeactivateChannel(i)
@@ -10932,7 +10930,7 @@ Function SwitchToSongByName_Safe(name : String) Returns Boolean
             found = SwitchToSongByIndex(i, 0)
             isDone = true // Break loop gracefully!
         end
-        i = i + 1 // Immer artig hochzählen
+        i = i + 1 // Always increment
     End
     
     result = found
@@ -10953,7 +10951,7 @@ Function SaveStructureFromClipboard()
        // 1. Waschsalon 
        washedClipboard = WashClipboardText(rawClipboard)
 
-       // 2. Bestehende Datei auslesen (NUR für Header)
+       // 2. Read existing file (ONLY for header)
        headerStr = ""
        If FileExists(filePath) Then
            fileContent = LoadStringFromTextFile(filePath)
@@ -10969,7 +10967,7 @@ Function SaveStructureFromClipboard()
                    stopSearch = true // <--- ECHTER TEXT GEFUNDEN -> SICHERER ABBRUCH!
                end
                
-               // Nur hochzählen, wenn wir nicht abbrechen, schützt den Index!
+               // Only increment when not aborting; protects the index
                if not stopSearch then
                    i = i + 1
                end
@@ -11002,7 +11000,7 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
     var jobs, parts : String Array
     var targetIdx, k, viewSafety : Integer
     var targetName, actualName, remainingQueue : String
-    var isManual, foundSlot : Boolean // ---> NEU: foundSlot Flag hinzugefügt <---
+    var isManual, foundSlot : Boolean // foundSlot flag
     var targetPreset : String = "-"
 
     Trace("PROCESS: --- STARTING RESULT PROCESSOR ---")
@@ -11030,7 +11028,7 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
                 
                 // --- MANUELLE GUI-AKTIONEN ---
                 if isManual then
-                    Trace("PROCESS: Wechsle zurück in Setlist View...")
+                    Trace("PROCESS: Switching back to Setlist View...")
                     SwitchToSetlistView()
                     
                     // ---> NEU: AKTIV WARTEN BIS SETLIST-MODUS WIEDER DA IST <---
@@ -11042,7 +11040,7 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
                     End
                     
                     if InSetlistMode() then 
-                        Trace("PROCESS: SUCCESS! Zurück im Setlist-Modus.") 
+                        Trace("PROCESS: SUCCESS! Back in Setlist mode.") 
                     else 
                         Trace("PROCESS: WARNUNG! Immer noch nicht im Setlist-Modus!") 
                     end
@@ -11110,7 +11108,7 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
                     // ========================================================
                     // ---> DER BUGFIX <---
                     // Wurde die Queue durch einen automatischen Song-Wechsel 
-                    // ausgelöst? Dann müssen wir den Song jetzt zu Ende laden!
+                    // triggered? Then we need to finish loading the song now!
                     // ========================================================
                     if not isManual and InSetlistMode() then
                         Trace("PROCESS: Auto-Boot finished. Resuming Song Load...")
@@ -11244,7 +11242,7 @@ Initialization
    // PHASE 3: SYSTEM DEFAULTS
    // ====================================================================================
    
-   // A. Plugin Blöcke & Widgets (MUSS als allererstes existieren!)
+   // A. Plugin blocks & widgets (MUST exist first)
    BLK_MidiIn = [Ch1_MidiIn, Ch2_MidiIn, Ch3_MidiIn, Ch4_MidiIn, Ch5_MidiIn, Ch6_MidiIn, Ch7_MidiIn, Ch8_MidiIn, Ch9_MidiIn, Ch10_MidiIn, Ch11_MidiIn, Ch12_MidiIn, Ch13_MidiIn, Ch14_MidiIn, Ch15_MidiIn, Ch16_MidiIn]
    BLK_NoteProcessor = [Ch1_NoteProcessor, Ch2_NoteProcessor, Ch3_NoteProcessor, Ch4_NoteProcessor, Ch5_NoteProcessor, Ch6_NoteProcessor, Ch7_NoteProcessor, Ch8_NoteProcessor, Ch9_NoteProcessor, Ch10_NoteProcessor, Ch11_NoteProcessor, Ch12_NoteProcessor, Ch13_NoteProcessor, Ch14_NoteProcessor, Ch15_NoteProcessor, Ch16_NoteProcessor]
    BLK_VST = [VST1_GRS, VST2_GRS, VST3_GRS, VST4_GRS, VST5_GRS, VST6_GRS, VST7_GRS, VST8_GRS, VST9_GRS, VST10_GRS]
@@ -11377,7 +11375,7 @@ Initialization
        end
    end
 
-   // FIX: Crash-Schutz! GetCurrentSongName() stürzt außerhalb der Setlist ab.
+   // FIX: Crash protection! GetCurrentSongName() crashes outside the setlist.
    if InSetlistMode() then 
        bootSong = GetCurrentSongName() // <--- KEIN "var" MEHR HIER!
        Trace("BOOTLOADER: Song active. Running Full Recovery for: " + bootSong)
@@ -11397,7 +11395,7 @@ Initialization
    ScanGlobalInstruments()
    SetWidgetLabel(LBL_SyncMode, SyncModeNames[CurrentSyncMode])
    
-   // Wir übergeben die volle Kontrolle an den Boot-Inspektor!
+   // Hand over full control to the boot inspector
    ProcessTopQueueJobResult(true) // true = Wir sind im Boot-Modus
    
    BuildRecDisplayLines()
@@ -11525,7 +11523,7 @@ On WidgetValueChanged(newValue : Double) from BTN_Record_Overdub
             End
             Arr_Rec_Bar = []; Arr_Rec_Type = []; Arr_Rec_Val = []; Arr_Rec_Offset = []
             UpdatePrompter(false); BuildRecDisplayLines(); ScrollToCurrentTimelineEvent()
-            Trace("PROMPTER: 🔴 REC OVERDUB ARMED at Bar " + RecordStartBar)
+            Trace("PROMPTER: REC OVERDUB ARMED at Bar " + RecordStartBar)
         else
             if RecordMode == 1 then 
                 EnablePlayhead(false); FinishRecording() 
@@ -11555,7 +11553,7 @@ On WidgetValueChanged(newValue : Double) from BTN_Record_Replace
             End
             Arr_Rec_Bar = []; Arr_Rec_Type = []; Arr_Rec_Val = []; Arr_Rec_Offset = []
             UpdatePrompter(false); BuildRecDisplayLines(); ScrollToCurrentTimelineEvent()
-            Trace("PROMPTER: 🔴 REC REPLACE ARMED at Bar " + RecordStartBar)
+            Trace("PROMPTER: REC REPLACE ARMED at Bar " + RecordStartBar)
         else
             if RecordMode == 2 then 
                 EnablePlayhead(false); FinishRecording() 
@@ -11756,7 +11754,7 @@ On WidgetValueChanged(newValue : Double) from BTN_StatusReset
         End
         Trace("=======================================")
         
-        // Zwingt das Skript zusätzlich, das UI neu zu bewerten
+        // Additionally force the script to re-evaluate the UI
         UpdateMetaColors()
         RefreshAllInjectionDisplays()
         
@@ -12319,10 +12317,10 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
    var midiVal : Integer
    var m : MidiMessage
    
-   // 1. GHOST-ZERO SPERRE (Harter Türsteher!)
+   // 1. GHOST-ZERO LOCK (hard guard)
    If TimeSinceStartup() < FaderSafetyTimer Then
-       // Wird komplett ignoriert! Das schützt uns vor Plugin-Ladezeiten 
-       // und dem physischen Rückprall der Motorfader.
+       // Completely ignored! Protects against plugin load times
+       // and physical motorfader bounce-back.
    Else
        if paramIdx >= 0 and paramIdx <= 15 then
            
@@ -12406,7 +12404,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
            end
        end 
        
-       // NEU: TIMELINE RECORDING FÜR MACROS (NUR SCHALTER!)
+       // TIMELINE RECORDING FOR MACROS (SWITCHES ONLY)
        if RecordMode > 0 and IsPerformanceActive then
            if newVal == 1.0 then
                RecordTimelineEvent("Macro", paramIdx)
@@ -12416,7 +12414,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
 End
 
 // ---------------------------------------------------------
-// HARDWARE-EMPFÄNGER (Vom Scriptlet)
+// HARDWARE RECEIVER (from scriptlet)
 // ---------------------------------------------------------
 
 On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerSync
@@ -12428,10 +12426,10 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerS
             if DebugMode then Trace(">>> GENOS_STYLE (1&4): Genos Hardware-Start via Scriptlet Flag 29 erkannt! <<<") end
 
             // ---------------------------------------------------
-            // BUGFIX: GP LEADS - DER TÜRSTEHER
+            // BUGFIX: GP LEADS - THE GUARD
             // ---------------------------------------------------
-            // Wenn GP LEADS (2) aktiv ist und der GP-Transport SCHLÄFT,
-            // der Genos aber eigenmächtig startet, feuern wir ein sofortiges STOP Echo!
+            // When GP LEADS (2) is active and the GP transport is SLEEPING,
+            // but the arranger starts independently, fire an immediate STOP echo!
             if CurrentSyncMode == 2 and IsPlayheadEnabled() == false then
                 Trace("   [X] GENOS_STYLE (2): Genos isoliert gestartet! Abbruch-Echo wird gesendet...")
                 SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
@@ -12443,17 +12441,17 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerS
     if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
         // Index 44 ist unser Flag_HW_Start vom Scriptlet
         if paramIdx == 44 and newVal > 0.5 then
-            Trace(">>> GENOS_STYLE (2&3): HARDWARE START/STOP TASTE AM GENOS GEDRÜCKT!")
+            Trace(">>> ARRANGER_STYLE (2&3): HARDWARE START/STOP BUTTON ON ARRANGER PRESSED!")
         
             // Wir toggeln GP. Da der Playhead umschaltet, feuert der SystemEvent (oben) 
             // und schickt sicherheitshalber das Echo an den Genos. Da er die Taste aber 
-            // eh gerade gedrückt hat, ist das nicht schlimm!
+            // was just pressed anyway, so this is harmless!
             IsCorrectingPlayhead = false // Wir wollen, dass der SystemEvent triggert!
             EnablePlayhead(not PendingPlayheadState)
         end
     End
     
-    // TIMELINE RECORDING FÜR PARTWECHSEL (STYLE)
+    // TIMELINE RECORDING FOR PART CHANGES (STYLE)
     // ========================================================
     // Aufzeichnen, wenn REC an ist UND es ein Tastendruck ist (> 0.5)
     if RecordMode > 0 and newVal > 0.5 then
@@ -12517,7 +12515,7 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1
     var ctrlIdx : Integer = FindControl(1, cc)
 
     // ====================================================
-    // ---> DER HARTE TÜR-TRACE <---
+    // ---> HARD GATE TRACE <---
     // ====================================================
     if DebugMode then
         Trace("MINILAB IN: CC " + cc + " | Val: " + val + " | Ch: " + ch)
@@ -12549,7 +12547,7 @@ End
 On NoteEvent(m : NoteMessage) from DeviceIn_0
     var chan : Integer = GetChannel(m)
     
-    // 1. Zentrale HAL-Logik für Macros aufrufen
+    // 1. Call central HAL logic for macros
     ProcessHardwareNote(m)
     
     // Transport sync: only if this device has the capability
@@ -12559,11 +12557,11 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0
              EnablePlayhead(false)
         elsif CurrentSyncMode == 1 or CurrentSyncMode == 2 or CurrentSyncMode == 3 then
              if StartWatchdogTimer > 0.0 then
-                 Trace(">>> ON NOTE: Genos läuft bereits (Ch " + chan + "). Breche Befehl ab.")
+                 Trace(">>> ON NOTE: Arranger already running (Ch " + chan + "). Aborting command.")
                  StartWatchdogTimer = 0.0 
              end
              if StopWatchdogTimer > 0.0 and not IsPlayheadEnabled() then
-                 Trace(">>> ON NOTE: Genos spielt noch (Ch " + chan + ")! Schieße Stop nach.")
+                 Trace(">>> ON NOTE: Arranger still playing (Ch " + chan + ")! Sending stop.")
                  FireDirectArrangerTransport()
                  StopWatchdogTimer = 0.0 
              else
@@ -12586,7 +12584,7 @@ End
 // DEVICE 1 CALLBACKS
 // ====================================================
 On NoteEvent(m : NoteMessage) from DeviceIn_1
-    // 1. Zentrale HAL-Logik für Macros aufrufen
+    // 1. Call central HAL logic for macros
     ProcessHardwareNote(m)
     
     // 2. Tastatur-Split Lernen (falls man es vom MiniLab aus steuern will)
@@ -12692,7 +12690,7 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
       
       If InSetlistMode() Then 
          PendingSongName = currentGPName
-         DelayedLoadTimer = TimeSinceStartup() + 200.0 // 200ms Verzögerung
+         DelayedLoadTimer = TimeSinceStartup() + 200.0 // 200ms delay
          Trace("LAZY LOAD: Scheduled loading for '" + PendingSongName + "' in 200ms")
       End
       
@@ -12753,7 +12751,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
             end
 
             // =========================================================
-            // MODUS 3: FULL SYNC (Der "Champ" Code - 1:1 Rückkehr)
+            // MODE 3: FULL SYNC (1:1 mirror)
             // =========================================================
             if CurrentSyncMode == 3 then
                 PendingPlayheadState = playing
@@ -12764,7 +12762,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
                 if playing then
                     // --- START-LOGIK ---
                     StartWatchdogTimer = TimeSinceStartup() + 200.0
-                    Trace(">>> TRANSPORT: GP START. Warte auf Genos-Bestätigung (Noten)...")
+                    Trace(">>> TRANSPORT: GP START. Waiting for arranger confirmation (notes)...")
                 else
                     // --- STOPP-LOGIK ---
                     timeSinceHW = TimeSinceStartup() - LastHardwarePulseTime
@@ -12807,7 +12805,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
    RealTransportBar = bar 
    CurrentBeat = beat 
    
-   // ---> WICHTIG: Das globale Gedächtnis für den Looper <---
+   // ---> IMPORTANT: Global memory for the looper <---
    Global_CurrentBar = bar
    Global_CurrentBeat = beat
    Global_CurrentTick = subbeat
@@ -12826,7 +12824,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
    // ==================================================================
    if beat == 1 then
       For ch = 0; ch < 16; ch = ch + 1 Do
-         // Wenn wir aufnehmen UND eine feste Länge haben
+         // If recording AND a fixed length is set
          if Mem_Loop_State[ch] == 1 and Mem_Loop_Length[ch] > 0 then
              targetEndBar = LoopAnchorBar[ch] + Mem_Loop_Length[ch]
              
@@ -12867,7 +12865,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
                          LoopAnchorBeat[jTgt] = CurrentBeat
                          LoopAnchorTick[jTgt] = Global_CurrentTick
                          
-                         // Länge aus dem Zielkanal ablesen
+                         // Read length from the target channel
                          if Mem_Loop_Length[jTgt] > 0 then
                             beatsPerBar = GetTimeSigNumerator(); if beatsPerBar <= 0 then beatsPerBar = 4 end
                             LoopLengthMS[jTgt] = (60000.0 / GetBPM()) * IntToFloat(beatsPerBar) * IntToFloat(Mem_Loop_Length[jTgt])
@@ -12883,12 +12881,12 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
                          if DebugMode then Trace("LOOPER: Ziel-Kanal " + (jTgt+1) + " wurde sofort auf PLAY geschaltet!") end
                      end
                      
-                     // DIAGNOSE SCANNER FÜR DEN ZIELKANAL ABFEUERN!
+                     // FIRE DIAGNOSTIC SCANNER FOR TARGET CHANNEL!
                      if DebugMode then TraceLooperDiagnostic(jTgt, "AUTO-JUMP TRANSITION") end
                  end
                  
                  syncFired = true
-                 if DebugMode then Trace("LOOPER: Auto-Transition Ch" + (ch+1) + " abgeschlossen. Länge: " + LoopLengthMS[ch] + "ms") end
+                 if DebugMode then Trace("LOOPER: Auto-Transition Ch" + (ch+1) + " completed. Length: " + LoopLengthMS[ch] + "ms") end
                  
                  IgnoreUIFeedbackTimer = TimeSinceStartup() + 1500.0
              end
@@ -12911,14 +12909,14 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
             LoopAnchorBeat[ch] = CurrentBeat
             LoopAnchorTick[ch] = Global_CurrentTick
             
-            // Fallback Längenberechnung (wird beim Punch-Out überschrieben)
+            // Fallback length calculation (will be overwritten at punch-out)
             if Mem_Loop_Length[ch] > 0 then
                beatsPerBar = GetTimeSigNumerator(); if beatsPerBar <= 0 then beatsPerBar = 4 end
                LoopLengthMS[ch] = (60000.0 / GetBPM()) * IntToFloat(beatsPerBar) * IntToFloat(Mem_Loop_Length[ch])
             end
             syncFired = true
             
-            // ---> DIE TÜR VERRIEGELN <---
+            // ---> LOCK THE GATE <---
             IgnoreUIFeedbackTimer = TimeSinceStartup() + 1500.0
             
          elsif Mem_Loop_State[ch] == 6 then // ARM PLAY -> GO!
@@ -12934,7 +12932,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
             
             syncFired = true
             
-            // ---> DIE TÜR VERRIEGELN <---
+            // ---> LOCK THE GATE <---
             IgnoreUIFeedbackTimer = TimeSinceStartup() + 1500.0
             
          elsif Mem_Loop_State[ch] == 7 and Mem_Loop_StopMode[ch] == 1 then 
@@ -12943,7 +12941,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
             Trigger_NotesOff(ch + 1)
             syncFired = true
             
-            // ---> DIE TÜR VERRIEGELN <---
+            // ---> LOCK THE GATE <---
             IgnoreUIFeedbackTimer = TimeSinceStartup() + 1500.0
          end
       End
@@ -12954,7 +12952,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
    
    if syncFired then 
        UpdateSoloMuteState()
-       // Hier aktualisieren wir das UI lautlos (die Rückpraller werden vom 1500ms Timer geblockt!)
+       // Silently update the UI (bounce-back is blocked by the 1500ms timer)
        UpdateInjectionLooperTransportUI() 
    end
    
@@ -13071,23 +13069,23 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
                // =========================================================
                // NEU: HARDWARE RE-SYNC (Der Boss-Move)
                // =========================================================
-               // 1. TÜR ZUSCHLIESSEN! Sofort alle Fader-Eingänge blockieren, 
-               // damit die Genos-Motoren unser GP-Setup nicht überschreiben!
+               // 1. LOCK THE GATE! Block all fader inputs immediately,
+               // so arranger motors don't overwrite our GP setup!
                FaderSafetyTimer = TimeSinceStartup() + 800.0 
                
-               // 2. Den Timer setzen, um nach 300ms unsere Werte zurück zu erzwingen
+               // 2. Set timer to force our values back after 300ms
                HardwareSyncTimer = TimeSinceStartup() + 300.0
                
                // === 1. AUFZEICHNUNG (Wird ignoriert, wenn REC aus ist) ===
                RecordTimelineEvent("RegMem", regNumber)
                
-               // === 2. ZEITMASCHINEN-LOGIK (Nur ausführen, wenn wir NICHT aufnehmen!) ===
+               // === 2. TIME-MACHINE LOGIC (only execute when NOT recording) ===
                if RecordMode == 0 then
                    if IsPerformanceActive == false then
                        // Modus: PAUSE -> Wir suchen den Takt dieser RegMem und springen dorthin
                        JumpToRegMemAnchor(regNumber)
                    else
-                       // Modus: PLAY -> Der Autopilot überwacht den Sprung
+                       // Mode: PLAY -> Autopilot monitors the jump
                        CheckRegMemAutopilot(regNumber)
                    end
                end
@@ -13103,10 +13101,10 @@ End
 // ---------------------------------------------------------
 
 On OSCMessageReceived(m : OSCMessage) Matching "/Command/Scrub"
-    ExecuteScrub(OSC_GetArgAsDouble(m, 0), true) // true = Kam von GUI, bitte NICHT zurücksenden!
+    ExecuteScrub(OSC_GetArgAsDouble(m, 0), true) // true = from GUI, do NOT send back
 End
 
-// --- DIESEN BLOCK NEU HINZUFÜGEN ---
+// --- ADDED BLOCK ---
 On OSCMessageReceived(m : OSCMessage) Matching "/Command/RequestUIUpdate"
     // Wird gefeuert, wenn der lokale Rackspace aktiviert wird.
     // Zwingt die globale Engine, den aktuellen Text sofort an die frischen Displays zu senden.
@@ -13147,7 +13145,7 @@ On TimerTick(ms : Double)
      a_val : Double = 0.0; msSinceBarStart : Double = 0.0; currentBPM_Tick : Double = 0.0; msPerBeat : Double = 0.0
      
    // ========================================================================
-   // --- INITIALISIERUNG FÜR DIESEN TICK ---
+   // --- INITIALIZATION FOR THIS TICK ---
    // ========================================================================
    currentBPM_Tick = GetBPM()
    if currentBPM_Tick < 1.0 then currentBPM_Tick = 120.0 end
@@ -13155,7 +13153,7 @@ On TimerTick(ms : Double)
    anyLooperActive = false
 
    // ========================================================================
-   // A. SYSTEM-LOGIK (PRIORISIERT: LÄUFT IMMER, AUCH BEI AKTIVEM KILLSWITCH)
+   // A. SYSTEM LOGIC (PRIORITY: ALWAYS RUNS, EVEN WITH ACTIVE KILLSWITCH)
    // ========================================================================
 
    // 1. STABILISIERUNGS-TIMER (Ersetzt den 3s Wait nach View-Switch)
@@ -13191,7 +13189,7 @@ On TimerTick(ms : Double)
                End
                
                Trace("HARD-FIRE: Command sent to GP.")
-               Trace(">>> SHADOW MODE: Würde jetzt VST " + (PendingReplaceSlotIdx + 1) + " mit [" + PendingReplacePath + "] ersetzen! <<<")
+               Trace(">>> SHADOW MODE: Would now replace VST " + (PendingReplaceSlotIdx + 1) + " with [" + PendingReplacePath + "]! <<<")
                
                SwitchToSetlistView()
                
@@ -13298,7 +13296,7 @@ On TimerTick(ms : Double)
 
        if anyLooperActive then
            
-           // FALL A: COUNT-IN LÄUFT (Transport steht noch!)
+           // CASE A: COUNT-IN RUNNING (transport still stopped)
            if maxCountInBeats > 0 then
                ledIndex = 4 - ((maxCountInBeats - 1) % 4)
                
@@ -13312,7 +13310,7 @@ On TimerTick(ms : Double)
                    BuildLooperConfigLines() // Text-Countdown im Display updaten
                end
 
-           // FALL B: TRANSPORT LÄUFT -> Normales Lauflicht (1, 2, 3, 4)
+           // CASE B: TRANSPORT RUNNING -> Normal beat indicator (1, 2, 3, 4)
            elsif IsPerformanceActive then
                Global_BlinkState = IntToFloat(CurrentBeat)
                
@@ -13339,14 +13337,14 @@ On TimerTick(ms : Double)
            SetWidgetValue(LBL_Subbar_1, 0.0); SetWidgetValue(LBL_Subbar_2, 0.0); SetWidgetValue(LBL_Subbar_3, 0.0); SetWidgetValue(LBL_Subbar_4, 0.0)
        end
 
-       // --- FREE ARM COUNTDOWN (Status 8) ÜBERWACHEN ---
+       // --- MONITOR FREE ARM COUNTDOWN (Status 8) ---
        For k_loop = 0; k_loop < 16; k_loop = k_loop + 1 Do
            if Mem_Loop_State[k_loop] == 8 then
                if TimeSinceStartup() >= LoopFreeArmTimer[k_loop] then
                    
-                   // ---> DIE ENTSCHEIDENDE WEICHE FÜR DEN COUNT-IN! <---
+                   // ---> THE CRITICAL SWITCH FOR COUNT-IN! <---
                    if GetWidgetValue(BTN_Loop_HostSync) > 0.5 then
-                       // HOST SYNC [ON]: Master-Transport zünden!
+                       // HOST SYNC [ON]: Fire master transport!
                        if not IsPlayheadEnabled() then
                            if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
                                FireDirectArrangerTransport()
@@ -13444,7 +13442,7 @@ On TimerTick(ms : Double)
             RefreshVstInfoDisplay() 
         end
     
-        // MACRO / CTRL FEEDBACK LÖSCHEN 
+        // CLEAR MACRO / CTRL FEEDBACK
         if Ctrl_OverlayTimer > 0.0 and TimeSinceStartup() > Ctrl_OverlayTimer then
            Ctrl_OverlayTimer = 0.0
            RefreshCtrlInfoDisplay() 
@@ -13456,7 +13454,7 @@ On TimerTick(ms : Double)
             RefreshRecDisplay(GetWidgetValue(SLD_CurrentState)) 
         end
         
-        // MACRO FEEDBACK LÖSCHEN 
+        // CLEAR MACRO FEEDBACK
         if MacroFeedbackTimer > 0.0 and TimeSinceStartup() > MacroFeedbackTimer then
             MacroFeedbackTimer = 0.0
             OSC_SendStringSpecific("/UI/SetMacroFeedback", "", Local_IP, Local_PORT)
@@ -13520,7 +13518,7 @@ On TimerTick(ms : Double)
         End
         
         if currentIsSetlist and not LastViewWasSetlist Then 
-            Trace("VIEW SWITCH: Zurück in Setlist View. Stelle Song-Zustand wieder her...")
+            Trace("VIEW SWITCH: Back to Setlist View. Restoring song state...")
             TriggerSongTextLoad(GetCurrentSongName()) 
             LoadSongSnapshot(GetCurrentSongName(), DeferredManualReboot)
             DeferredBootRecovery = false
@@ -13582,7 +13580,7 @@ On TimerTick(ms : Double)
               // ---> NEU: INITIALES AUTO-SHOW NACH DEM SONG-LADEN <---
               // ========================================================
               if GetWidgetValue(BTN_AutoShow_GUI) > 0.5 then
-                  // Das System weiß durch das Laden bereits, welches VST den Fokus hat.
+                  // The system already knows from loading which VST has focus.
                   // Wir setzen den Timer auf 1 Sekunde, damit GP nach dem Laden kurz durchatmen kann.
                   Pending_VST_GUI = Active_VST_Scope
                   AutoShowGUITimer = TimeSinceStartup() + 1000.0 
@@ -13607,12 +13605,12 @@ On TimerTick(ms : Double)
         if PlayheadEvalTimer > 0.0 and TimeSinceStartup() > PlayheadEvalTimer then
             PlayheadEvalTimer = 0.0
             
-            // 1. GUI Blockade-Check (NUR für ISOLATED Modus 0 relevant)
+            // 1. GUI block check (only relevant for ISOLATED mode 0)
             if CurrentSyncMode == 0 then
                 timeSinceHW = TimeSinceStartup() - LastHardwarePulseTime
                 isGUI = (timeSinceHW > 150.0 or timeSinceHW < 0.0)
                 if isGUI then
-                     Trace("   [X] BLOCKED: GUI darf GP nicht steuern. Mache Klick rückgängig!")
+                     Trace("   [X] BLOCKED: GUI must not control GP. Reverting click!")
                      IsCorrectingPlayhead = true
                      EnablePlayhead(not PendingPlayheadState)
                 end
@@ -13621,7 +13619,7 @@ On TimerTick(ms : Double)
             EvaluateTransportSync() 
         end
 
-        // WATCHDOG FÜR VIEW SWITCH (Python Rückmeldung)
+        // WATCHDOG FOR VIEW SWITCH (Python callback)
         if OSC_IsWaitingForViewSwitch and TimeSinceStartup() > OSC_ViewSwitchTimeout then
              Trace("!!! WATCHDOG: TIMEOUT !!! Keine Antwort von Python. Erzwinge Weckruf...")
              OSC_IsWaitingForViewSwitch = false; OSC_ViewSwitchTimeout = 0.0
