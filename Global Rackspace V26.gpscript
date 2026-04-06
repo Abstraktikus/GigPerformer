@@ -7349,13 +7349,15 @@ Function FireDirectArrangerTransport()
     // (Kanal 16 = 0x9F / 0x8F, da GP Kanäle 0-basiert zählt)
     
     // Note ON
-    SendNowToMidiOutDevice(MidiOutDeviceName, MakeMidiMessage3(159, 14, 127)) 
-    
-    // 50 Millisekunden warten (simuliert das Halten der Taste)
-    Wait(50.0) 
-    
-    // Note OFF
-    SendNowToMidiOutDevice(MidiOutDeviceName, MakeMidiMessage3(143, 14, 0)) 
+    if arrangerDevIdx >= 0 and IsDeviceConnected(arrangerDevIdx) then
+        SendNowToMidiOutDevice(GetDeviceMidiOut(arrangerDevIdx), MakeMidiMessage3(159, 14, 127))
+
+        // 50 Millisekunden warten (simuliert das Halten der Taste)
+        Wait(50.0)
+
+        // Note OFF
+        SendNowToMidiOutDevice(GetDeviceMidiOut(arrangerDevIdx), MakeMidiMessage3(143, 14, 0))
+    end
     
     Trace(">>> FireDIREKT-OUT: Start/Stop (Note 14) physisch an Genos gesendet.")
 End
@@ -8686,10 +8688,10 @@ Function EvaluateAutoSysMode()
         end
         
         // SysEx an MiniLab senden!
-        if Length(ML3_OutDeviceName) > 0 then
-            if GlobalSystemMode == 1 then SendSysexNowToMidiOutDevice(ML3_OutDeviceName, ML3_SYSEX_PROFIL_5)
-            elsif GlobalSystemMode == 0 then SendSysexNowToMidiOutDevice(ML3_OutDeviceName, ML3_SYSEX_PROFIL_6)
-            else SendSysexNowToMidiOutDevice(ML3_OutDeviceName, ML3_SYSEX_PROFIL_1) end
+        if controllerDevIdx >= 0 and IsDeviceConnected(controllerDevIdx) then
+            if GlobalSystemMode == 1 then SendDeviceSysEx(controllerDevIdx, "PROFILE_5")
+            elsif GlobalSystemMode == 0 then SendDeviceSysEx(controllerDevIdx, "PROFILE_6")
+            else SendDeviceSysEx(controllerDevIdx, "PROFILE_1") end
         end
         
         OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + SysModeNames[GlobalSystemMode] + " <<<", Local_IP, Local_PORT)
@@ -9811,7 +9813,9 @@ Function CheckRegMemAutopilot(pressedRegNum : Integer)
             elsif currentRegNum == 10 then correctionMsg = # F0 43 73 01 52 25 11 00 02 00 09 F7
             end
             
-            SendSysexNowToMidiOutDevice(MidiOutDeviceName, correctionMsg)
+            if arrangerDevIdx >= 0 and IsDeviceConnected(arrangerDevIdx) then
+                SendSysexNowToMidiOutDevice(GetDeviceMidiOut(arrangerDevIdx), correctionMsg)
+            end
         else
             Trace("PROMPTER: Autopilot -> Deaktiviert. Falsche Taste (" + pressedRegNum + ") wird toleriert.")
         end
@@ -11235,25 +11239,8 @@ Initialization
    LoadedPresets = ["-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
    SetTimersRunning(true)
    
-   devCount = GetMidiOutDeviceCount(); i_init = 0; found = false
-   While i_init < devCount and not found Do
-      currentName = GetMidiOutDeviceName(i_init)
-      If IndexOfSubstring(currentName, TargetSuffix, false) > -1 Then MidiOutDeviceName = currentName; found = true End
-      i_init = i_init + 1
-   End
-   
-   If not found Then MidiOutDeviceName = "Digital Keyboard-1" End
-   
-   // ---> NEU: MINILAB 3 OUT DEVICE SUCHEN <---
-   i_init = 0; found = false
-   While i_init < devCount and not found Do
-      currentName = GetMidiOutDeviceName(i_init)
-      If IndexOfSubstring(currentName, "Minilab3", true) > -1 Then 
-          ML3_OutDeviceName = currentName
-          found = true 
-      End
-      i_init = i_init + 1
-   End
+   // HAL BOOT (Task 9): Old device detection removed
+   // Device discovery is now handled by the Hardware Abstraction Layer
    
    LoadMappingFile()
    RefreshCtrlMapList()
@@ -12398,12 +12385,13 @@ End
 On PitchBendEvent(m : PitchBendMessage) from DeviceIn_0
     var pbVal : Integer = GetPitchBendValue(m)
     if SystemModeActive then
-        if pbVal > GENOS_JOY_X_RIGHT and Joy_PB_Fired != 1 then
+        // TODO(HAL): Read joystick thresholds from control registry
+        if pbVal > 12000 and Joy_PB_Fired != 1 then
             Joy_PB_Fired = 1; ProcessSystemNavigation(0, "X_AXIS", 1)
-        elsif pbVal < GENOS_JOY_X_LEFT and Joy_PB_Fired != -1 then
+        elsif pbVal < 4000 and Joy_PB_Fired != -1 then
             Joy_PB_Fired = -1; ProcessSystemNavigation(0, "X_AXIS", -1)
-        elsif pbVal >= GENOS_JOY_X_LEFT and pbVal <= GENOS_JOY_X_RIGHT then
-            Joy_PB_Fired = 0 
+        elsif pbVal >= 4000 and pbVal <= 12000 then
+            Joy_PB_Fired = 0
         end
     else
         SendNow(DeviceIn_0, m)
@@ -12414,13 +12402,14 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
     var cc : Integer = GetCCNumber(m)
     var val : Integer = GetCCValue(m)
 
-    if SystemModeActive and (cc == GENOS_JOY_Y_UP or cc == GENOS_JOY_Y_DN) then
-        if cc == GENOS_JOY_Y_UP then
+    // TODO(HAL): Read joystick CC numbers from control registry
+    if SystemModeActive and (cc == 1 or cc == 16) then
+        if cc == 1 then
             if val > 100 and not Joy_CC1_Fired then
                 Joy_CC1_Fired = true; ProcessSystemNavigation(0, "Y_AXIS", 1)
             elsif val < 20 then Joy_CC1_Fired = false end
         end
-        if cc == GENOS_JOY_Y_DN then
+        if cc == 16 then
             if val > 100 and not Joy_CC16_Fired then
                 Joy_CC16_Fired = true; ProcessSystemNavigation(0, "Y_AXIS", -1)
             elsif val < 20 then Joy_CC16_Fired = false end
@@ -12435,22 +12424,24 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1
     var val : Integer = GetCCValue(m)
     var ch : Integer = GetChannel(m)
     var dir : Integer = 0
+    // TODO(HAL): Use FindControl/GetControlType from control registry
+    var ctrlIdx : Integer = FindControl(1, cc)
 
     // ====================================================
     // ---> DER HARTE TÜR-TRACE <---
     // ====================================================
-    if DebugMode then 
-        Trace("MINILAB IN: CC " + cc + " | Val: " + val + " | Ch: " + ch) 
+    if DebugMode then
+        Trace("MINILAB IN: CC " + cc + " | Val: " + val + " | Ch: " + ch)
     end
 
     // 1. MINILAB BUTTON (Druck)
     // Wir lauschen auf beide Konstanten, um sicherzugehen!
-    if (cc == ML3_BTN_CC_1 or cc == ML3_BTN_CC_2) and val > 0 then
+    if ctrlIdx >= 0 and GetControlType(ctrlIdx) == CTYPE_BUTTON and val > 0 then
         Trace("MINILAB: Button erkannt! Sende an Router...")
         ProcessSystemNavigation(1, "BUTTON", 1)
-    
+
     // 2. MINILAB ENCODER DREHUNG
-    elsif cc == ML3_ENC_CC then
+    elsif ctrlIdx >= 0 and GetControlType(ctrlIdx) == CTYPE_ENCODER then
         if val >= 65 then dir = 1 elsif val <= 63 then dir = -1 end
         if dir != 0 then 
             Trace("MINILAB: Encoder erkannt! Richtung: " + dir)
@@ -12565,14 +12556,16 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
       While i >= 0 and not foundMap Do
           if Mapping_GPSong[i] == currentGPName then
               s = Mapping_SysEx[i]
-              SendSysexNowToMidiOutDevice(MidiOutDeviceName, s)
-              Wait(50.0) 
-              SendSysexNowToMidiOutDevice(MidiOutDeviceName, SysEx_RegButton1)
-              
-              // CROSSFADER SLIDER KALIBRIERUNG ---
-              Wait(150.0)
-              // Sendet CC7 (Volume) mit Wert 127 auf Kanal 7 (0-basiert = 6)
-              SendNowToMidiOutDevice(MidiOutDeviceName, MakeControlChangeMessageEx(7, 127, 7))
+              if arrangerDevIdx >= 0 and IsDeviceConnected(arrangerDevIdx) then
+                  SendSysexNowToMidiOutDevice(GetDeviceMidiOut(arrangerDevIdx), s)
+                  Wait(50.0)
+                  SendSysexNowToMidiOutDevice(GetDeviceMidiOut(arrangerDevIdx), SysEx_RegButton1)
+
+                  // CROSSFADER SLIDER KALIBRIERUNG ---
+                  Wait(150.0)
+                  // Sendet CC7 (Volume) mit Wert 127 auf Kanal 7 (0-basiert = 6)
+                  SendNowToMidiOutDevice(GetDeviceMidiOut(arrangerDevIdx), MakeControlChangeMessageEx(7, 127, 7))
+              end
               // --------------------------------------
 
               Trace("GENOS: Setup Sent & Ch7 Calibrated for " + currentGPName)
