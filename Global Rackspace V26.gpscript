@@ -9502,29 +9502,56 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
         end
         
     // --- 1: LOOPER CONTROL ---
-    elsif GlobalSystemMode == 1 then 
-        if actionType == "Y_AXIS" or actionType == "ENCODER" then
-            CycleChannelScope(dir) // Wheel / Y-axis = switch channels
-        elsif actionType == "X_AXIS" then
-            if dir == 1 then ClickWidget(BTN_Loop_Rec)
-            elsif dir == -1 then ClickWidget(BTN_Loop_Clear) end
-        elsif actionType == "BUTTON" then
-            ClickWidget(BTN_Loop_Rec) // KNOPF = Looper Rec/Play/Dub (Super intuitiv!)
-        end
-        
-    // --- 2: CONTROLLER MAP ---
-    elsif GlobalSystemMode == 2 then 
-        // ARRANGER JOYSTICK
+    elsif GlobalSystemMode == 1 then
         if actionType == "Y_AXIS" then
-            CycleCtrlMap(dir)
+            CycleChannelScope(dir)           // Y-Up = select channel (1-16)
         elsif actionType == "X_AXIS" then
-            TriggerVstPresetChange(dir)
-            
-        // MINILAB 3
+            if dir == -1 then ClickWidget(BTN_Loop_Clear)   // X-Left full = clear channel
+            elsif dir == 1 then ClickWidget(BTN_Loop_Rec)   // X-Right = Record/Play/Overdub flow
+            end
         elsif actionType == "ENCODER" then
-            TriggerVstPresetChange(dir) // Wheel = cycle presets
+            CycleChannelScope(dir)           // Wheel = switch channels
         elsif actionType == "BUTTON" then
-            CycleCtrlMap(dir) // KNOPF = Maps wechseln
+            ClickWidget(BTN_Loop_Rec)        // Button = Rec/Play/Dub
+        end
+
+    // --- 2: CONTROLLER MAP ---
+    elsif GlobalSystemMode == 2 then
+        if actionType == "Y_AXIS" then
+            if dir == 1 then
+                // Y-Up = return to initial song-loaded controller map
+                if ExpectedMapName != "" and ExpectedMapName != "-" then
+                    LoadControllerMap(ExpectedMapName)
+                    HardwareSyncTimer = TimeSinceStartup() + 2000.0
+                    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> MAP: " + ExpectedMapName + " <<<", Local_IP, Local_PORT)
+                    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+                    MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+                end
+            end
+        elsif actionType == "X_AXIS" then
+            PreviewActiveControllerMaps(dir) // X-Left/Right = browse active VST maps
+        elsif actionType == "ENCODER" then
+            PreviewActiveControllerMaps(dir) // Wheel = browse maps
+        elsif actionType == "BUTTON" then
+            CycleCtrlMap(dir)                // Button = cycle all maps
+        end
+
+    // --- 3: STRIP-CONTROL ---
+    elsif GlobalSystemMode == 3 then
+        if actionType == "Y_AXIS" then
+            if dir == 1 then
+                CycleScopeSection(1)         // Y-Up = browse themes (Octaver -> Humanizer -> ...)
+            end
+        elsif actionType == "X_AXIS" then
+            if dir == -1 then
+                CycleChannelScope(-1)        // X-Left = prev channel with active VST
+            elsif dir == 1 then
+                CycleChannelScope(1)         // X-Right = next channel with active VST
+            end
+        elsif actionType == "ENCODER" then
+            CycleScopeSection(dir)           // Wheel = browse themes
+        elsif actionType == "BUTTON" then
+            CycleChannelScope(dir)           // Button = cycle channels
         end
     end
 End
