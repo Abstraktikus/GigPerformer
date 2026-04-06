@@ -335,6 +335,10 @@ Var
    Arr_EchoBlockTimer : Double Array = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
    Arr_AsymmetricMode : Boolean = false
 
+   // --- Strip Control State ---
+   Strip_ThemeIdx   : Integer = 8   // Index into MacroGroup_Names (8=Octaver, 9=Humanizer, 10=Quantizer, 11=Sustain)
+   Strip_ChannelIdx : Integer = 0   // Current channel (0-15)
+
    // ========================================================================
    // SECTION 7: CHANNEL MEMORY
    // ========================================================================
@@ -9482,6 +9486,128 @@ End
 // ---------------------------------------------------------
 // HAL: UNIVERSAL SYSTEM NAVIGATION ROUTER
 // ---------------------------------------------------------
+// Cycles the strip theme (Y-axis in STRIP-CONTROL mode).
+// Themes are the toggle-able macro groups: Octaver, Humanizer, Quantizer, Auto Sustain, etc.
+Function CycleStripTheme(dir : Integer)
+   Strip_ThemeIdx = Strip_ThemeIdx + dir
+   // Wrap within toggle-able themes (indices 3-11 in MacroGroup_Names)
+   if Strip_ThemeIdx < 3 then Strip_ThemeIdx = Size(MacroGroup_Names) - 1
+   elsif Strip_ThemeIdx >= Size(MacroGroup_Names) then Strip_ThemeIdx = 3 end
+
+   OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> STRIP: " + MacroGroup_Names[Strip_ThemeIdx] + " <<<", Local_IP, Local_PORT)
+   MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+   MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+   Trace("STRIP: Theme -> " + MacroGroup_Names[Strip_ThemeIdx])
+End
+
+// Cycles to next/prev channel that has an active VST in OutputScope.
+Function CycleStripChannel(dir : Integer)
+   var i, attempts : Integer
+   attempts = 0
+   Strip_ChannelIdx = Strip_ChannelIdx + dir
+   if Strip_ChannelIdx < 0 then Strip_ChannelIdx = 15
+   elsif Strip_ChannelIdx > 15 then Strip_ChannelIdx = 0 end
+
+   // Skip inactive channels (find next active one)
+   While attempts < 16 Do
+      if OutputScope[Strip_ChannelIdx] then
+         attempts = 16 // found, exit
+      else
+         Strip_ChannelIdx = Strip_ChannelIdx + dir
+         if Strip_ChannelIdx < 0 then Strip_ChannelIdx = 15
+         elsif Strip_ChannelIdx > 15 then Strip_ChannelIdx = 0 end
+         attempts = attempts + 1
+      end
+   End
+
+   OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> STRIP: Channel " + IntToString(Strip_ChannelIdx + 1) + " <<<", Local_IP, Local_PORT)
+   MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+   MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+   Trace("STRIP: Channel -> " + IntToString(Strip_ChannelIdx + 1))
+End
+
+// Toggles the parameter at the current strip grid position (theme x channel).
+// Uses the NoteProcessor toggle infrastructure for the selected channel.
+Function ToggleStripMacro()
+   var ch : Integer = Strip_ChannelIdx
+   var paramName : String = ""
+   var currentVal, newVal : Integer
+   var statusStr : String
+   var idx : Integer
+
+   // Map theme index to NP parameter name and RAM array
+   Select
+      Strip_ThemeIdx == 3  Do // Smart Solo
+         currentVal = Mem_SoloSmart[ch]
+         newVal = 1 - currentVal
+         Mem_SoloSmart[ch] = newVal
+         paramName = "Smart Solo"
+
+      Strip_ThemeIdx == 4  Do // Strict Solo
+         currentVal = Mem_SoloStrict[ch]
+         newVal = 1 - currentVal
+         Mem_SoloStrict[ch] = newVal
+         paramName = "Strict Solo"
+
+      Strip_ThemeIdx == 5  Do // User Mute
+         currentVal = Mem_UserMute[ch]
+         newVal = 1 - currentVal
+         Mem_UserMute[ch] = newVal
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_UserMute")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(newVal)) end
+         paramName = "User Mute"
+
+      Strip_ThemeIdx == 6  Do // Velocity Range
+         currentVal = Mem_NP_VelRangeActive[ch]
+         newVal = 1 - currentVal
+         Mem_NP_VelRangeActive[ch] = newVal
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_VelRangeActive")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(newVal)) end
+         paramName = "Vel Range"
+
+      Strip_ThemeIdx == 8  Do // Octaver
+         currentVal = Mem_NP_Octaver[ch]
+         newVal = 1 - currentVal
+         Mem_NP_Octaver[ch] = newVal
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_Octaver")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(newVal)) end
+         paramName = "Octaver"
+
+      Strip_ThemeIdx == 9  Do // Humanizer
+         currentVal = Mem_NP_HumanizeActive[ch]
+         newVal = 1 - currentVal
+         Mem_NP_HumanizeActive[ch] = newVal
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_HumanizeActive")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(newVal)) end
+         paramName = "Humanizer"
+
+      Strip_ThemeIdx == 10 Do // Scale Quantizer
+         currentVal = Mem_NP_QuantizeActive[ch]
+         newVal = 1 - currentVal
+         Mem_NP_QuantizeActive[ch] = newVal
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_QuantizeActive")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(newVal)) end
+         paramName = "Quantizer"
+
+      Strip_ThemeIdx == 11 Do // Auto Sustain
+         currentVal = Mem_NP_AutoSustain[ch]
+         newVal = 1 - currentVal
+         Mem_NP_AutoSustain[ch] = newVal
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_AutoSustain")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(newVal)) end
+         paramName = "Auto Sustain"
+   End
+
+   if paramName != "" then
+      if newVal > 0 then statusStr = "ON" else statusStr = "OFF" end
+      OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> Ch " + IntToString(ch + 1) + " | " + paramName + " [" + statusStr + "] <<<", Local_IP, Local_PORT)
+      MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+      MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+      Trace("STRIP TOGGLE: Ch " + IntToString(ch + 1) + " | " + paramName + " = " + statusStr)
+      UpdateMetaColors()
+   end
+End
+
 Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : Integer)
     
     // --- 0: VOICE SELECTOR ---
@@ -9536,22 +9662,22 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
             CycleCtrlMap(dir)                // Button = cycle all maps
         end
 
-    // --- 3: STRIP-CONTROL ---
+    // --- 3: STRIP-CONTROL (Grid: Theme x Channel) ---
     elsif GlobalSystemMode == 3 then
         if actionType == "Y_AXIS" then
             if dir == 1 then
-                CycleScopeSection(1)         // Y-Up = browse themes (Octaver -> Humanizer -> ...)
+                CycleStripTheme(1)           // Y-Up = browse themes (Octaver -> Humanizer -> ...)
             end
         elsif actionType == "X_AXIS" then
             if dir == -1 then
-                CycleChannelScope(-1)        // X-Left = prev channel with active VST
+                CycleStripChannel(-1)        // X-Left = prev channel with active VST
             elsif dir == 1 then
-                CycleChannelScope(1)         // X-Right = next channel with active VST
+                ToggleStripMacro()           // X-Right = toggle macro at grid position
             end
         elsif actionType == "ENCODER" then
-            CycleScopeSection(dir)           // Wheel = browse themes
+            CycleStripTheme(dir)             // Wheel = browse themes
         elsif actionType == "BUTTON" then
-            CycleChannelScope(dir)           // Button = cycle channels
+            ToggleStripMacro()               // Button = toggle macro at grid position
         end
     end
 End
