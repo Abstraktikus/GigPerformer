@@ -12479,7 +12479,7 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1
 End
 
 // ====================================================
-// EVENT 1: GENOS (MAIN MIDI IN)
+// DEVICE 0 CALLBACKS
 // ====================================================
 On NoteEvent(m : NoteMessage) from DeviceIn_0
     var chan : Integer = GetChannel(m)
@@ -12487,8 +12487,8 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0
     // 1. Zentrale HAL-Logik für Macros aufrufen
     ProcessHardwareNote(m)
     
-    // 2. Transport Sync Logik (NUR für den Genos relevant!)
-    if IsNoteOn(m) and chan >= 9 and chan <= 16 then
+    // Transport sync: only if this device has the capability
+    if DeviceHasCap(0, CAP_TRANSPORT_SYNC) and IsNoteOn(m) and chan >= 9 and chan <= 16 then
         if CurrentSyncMode == 0 and IsPlayheadEnabled() then
              Trace(">>> ON NOTE: [ISOLATED] GenosStyle hat gestartet (Ch " + chan + ") Stoppe GP")
              EnablePlayhead(false)
@@ -12518,7 +12518,7 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0
 End
 
 // ====================================================
-// EVENT 2: MINILAB 3
+// DEVICE 1 CALLBACKS
 // ====================================================
 On NoteEvent(m : NoteMessage) from DeviceIn_1
     // 1. Zentrale HAL-Logik für Macros aufrufen
@@ -12534,8 +12534,30 @@ On NoteEvent(m : NoteMessage) from DeviceIn_1
     SendNow(DeviceIn_1, m)
 End
 
+// ====================================================
+// DEVICE 2 CALLBACKS (future expansion)
+// ====================================================
+On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_2
+    ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_2, m)
+End
+
+On NoteEvent(m : NoteMessage) from DeviceIn_2
+    ProcessHardwareNote(m); ProcessMidiLearn(m); FeedLooper_Note(m); SendNow(DeviceIn_2, m)
+End
+
+// ====================================================
+// DEVICE 3 CALLBACKS (future expansion)
+// ====================================================
+On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_3
+    ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_3, m)
+End
+
+On NoteEvent(m : NoteMessage) from DeviceIn_3
+    ProcessHardwareNote(m); ProcessMidiLearn(m); FeedLooper_Note(m); SendNow(DeviceIn_3, m)
+End
+
 // ----------------------------------------------------
-// TRANSPORT FEEDBACK 
+// TRANSPORT FEEDBACK
 // ----------------------------------------------------
 
 On Song(oldSongIndex : Integer, newSongIndex : Integer)
