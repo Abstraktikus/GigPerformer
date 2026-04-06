@@ -12586,13 +12586,10 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
     var cc : Integer = GetCCNumber(m)
     var val : Integer = GetCCValue(m)
 
-    // Device 0 joystick: CC1 = Y up, CC16 = Y down
-    // CC16 down-flick toggles SYS-MODE when not in system navigation
-    if cc == 16 and not SystemModeActive then
-        if val > 100 and not Joy_CC16_Fired then
-            Joy_CC16_Fired = true; CycleGlobalSystemMode()
-        elsif val < 20 then Joy_CC16_Fired = false end
-    elsif SystemModeActive and (cc == 1 or cc == 16) then
+    // Device 0 joystick (only active while sustain pedal is held = SystemModeActive):
+    //   CC1 (up)  = navigate within current SYS-MODE
+    //   CC16 (down) = cycle SYS-MODE (VOICE → LOOPER → CONTROLLER MAP)
+    if SystemModeActive and (cc == 1 or cc == 16) then
         if cc == 1 then
             if val > 100 and not Joy_CC1_Fired then
                 Joy_CC1_Fired = true; ProcessSystemNavigation(0, "Y_AXIS", 1)
@@ -12600,7 +12597,7 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
         end
         if cc == 16 then
             if val > 100 and not Joy_CC16_Fired then
-                Joy_CC16_Fired = true; ProcessSystemNavigation(0, "Y_AXIS", -1)
+                Joy_CC16_Fired = true; CycleGlobalSystemMode()
             elsif val < 20 then Joy_CC16_Fired = false end
         end
     else
