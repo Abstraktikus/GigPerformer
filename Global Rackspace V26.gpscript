@@ -619,7 +619,7 @@ End
 Function GetSnapshotPath(fileName : String) Returns String
    var sep : String = "/"
    
-   // Separator Erkennung basierend auf deinem Pfad
+   // Detect path separator style
    if IndexOfSubstring(UserSnapshotPath, "\\", false) > -1 Then 
       sep = "\\" 
    Else 
@@ -639,7 +639,7 @@ End
 // ---------------------------------------------------------
 Function GetSpaces(count : Integer) Returns String
     var res : String = ""
-    var chunk : String = "          " // 10 Leerzeichen
+    var chunk : String = "          " // 10 spaces
     var c : Integer = count
     
     if c > 0 then
@@ -723,7 +723,7 @@ Function SetChannelState(chIdx : Integer, colorCode : Integer)
       SetWidgetHideOnPresentation(W_Out_Layer_Gr[chIdx], false)
       SetWidgetValue(W_Out_Layer_Gr[chIdx], isSelected)
 
-   elsif colorCode == 4 then    // ORANGE (Dirty / Volatile - Aus, aber Custom Werte)
+   elsif colorCode == 4 then    // ORANGE (Dirty / Volatile - Off but with custom values)
       SetWidgetHideOnPresentation(W_Out_Layer_Or[chIdx], false)
       SetWidgetValue(W_Out_Layer_Or[chIdx], isSelected)
    end
@@ -816,14 +816,14 @@ Function GetMusicTheoryString(semitones : Integer) Returns String
       if noteIndex < 0 then noteIndex = noteIndex + 12 end
       targetNote = notes[noteIndex]
       
-      // Intervall-Namen bauen
+      // Build interval name
       intervalName = intervals[remainder]
       if octaves == 1 and remainder == 0 then intervalName = "Octave"
       elsif octaves > 0 and remainder > 0 then intervalName = "" + octaves + " Oct + " + intervalName
       elsif octaves > 1 and remainder == 0 then intervalName = "" + octaves + " Octaves"
       end
       
-      // Richtung
+      // Direction
       if semitones > 0 then dirStr = "Up" else dirStr = "Down" end
       
       finalStr = "C -> " + targetNote + " (" + intervalName + " " + dirStr + ")"
@@ -891,7 +891,7 @@ Function GetActiveMapSlot() Returns Integer
    if Size(ReplaceableSlots) > 0 then
        result = ReplaceableSlots[CurrentMapSlotIndex]
    else
-       result = 0 // Fallback auf VST 1
+       result = 0 // Fallback to VST 1
    end
 End
 
@@ -1109,7 +1109,7 @@ Function GetConfigFromFile(content : String) Returns String
 End
 
 // =========================================================
-// 2. DEN ERSTEN JOB DER WARTESCHLANGE STARTEN (Skript-Tod!)
+// 2. START THE FIRST JOB IN THE QUEUE (Script death risk!)
 // =========================================================
 
 Function SuperCleanPath(raw : String) Returns String
@@ -1336,7 +1336,7 @@ Function SendDeviceSysEx(devIdx : Integer, purpose : String)
       data = GetDeviceSysEx(devIdx, purpose)
       outDev = GetDeviceMidiOut(devIdx)
       if data != "" and outDev != "" then
-         SendSysexNowToMidiOutDevice(SM_CreateSysexFromString(data), outDev)
+         SendSysexNowToMidiOutDevice(outDev, data)
       end
    end
 End
@@ -1478,14 +1478,14 @@ Function CaptureFactoryDefaults()
        Wait(100.0) 
    end
    
-   // 2. JETZT ERST die sauberen Defaults auslesen
+   // 2. NOW read the clean defaults
    pCount = GetParameterCount(BLK_NoteProcessor[probeIdx])
    For p = 0; p < pCount; p = p + 1 Do 
        FACT_NoteProcessor <-- GetParameter(BLK_NoteProcessor[probeIdx], p) 
        DEF_NoteProcessor  <-- GetParameter(BLK_NoteProcessor[probeIdx], p) 
    End
    
-   // Explizit Solo/User Mute nullen im Default Array
+   // Explicitly zero Solo/User Mute in the default array
    soloMuteIdx = GetParamIdxByName(BLK_NoteProcessor[probeIdx], "p_SoloMute")
    userMuteIdx = GetParamIdxByName(BLK_NoteProcessor[probeIdx], "p_UserMute")
    
@@ -1675,7 +1675,7 @@ Function AreMidiParamsEqual(b1 : MidiInBlock, b2 : MidiInBlock) Returns Boolean
    result = isEqual
 End
 
-// Kopiert Werte von A nach B (Blitzschnell im RAM)
+// Copies values from A to B (lightning-fast in RAM)
 Function CopyPluginParams(src : PluginBlock, dest : PluginBlock)
    var p, count : Integer; count = GetParameterCount(src)
    For p = 0; p < count; p = p + 1 Do SetParameter(dest, p, GetParameter(src, p)) End
@@ -1695,10 +1695,10 @@ Function UpdateSubbarLEDs(currentBeat : Integer)
     var i : Integer
     var ledIndex : Integer
 
-    // Modulo-Rechnung: Zwingt jeden Beat stur in einen 0-3 Kreislauf
+    // Modulo operation: forces each beat into a 0-3 cycle
     ledIndex = (currentBeat - 1) % 4
 
-    // Alle LEDs durchlaufen: Nur die aktuell berechnete LED einschalten
+    // Iterate all LEDs: only light up the currently calculated one
     For i = 0; i < 4; i = i + 1 Do
         if i == ledIndex then
             SetWidgetValue(Arr_Subbar_LEDs[i], 1.0)
@@ -1746,7 +1746,7 @@ End
 Function RefreshDiagDisplay()
    var scrollVal : Double = GetWidgetValue(SLD_MIDIConfiguration)
    var totalLines : Integer = 48
-   var visibleCount : Integer = 4 // Dein Widget fasst exakt 4 Daten-Zeilen
+   var visibleCount : Integer = 4 // The widget holds exactly 4 data lines
    var maxStart : Integer = totalLines - visibleCount
    var startIdx, i : Integer
    var finalText : String
@@ -1774,8 +1774,8 @@ Function ScrollToCurrentChannel()
 
     // 2. Calculate target scroll position
     if activeIdx > -1 then
-        maxStart = 44 // 48 Gesamtzeilen - 4 sichtbare Zeilen
-        targetLine = activeIdx * 3 // Jeder Kanal belegt jetzt 3 Zeilen
+        maxStart = 44 // 48 total lines - 4 visible lines
+        targetLine = activeIdx * 3 // Each channel now occupies 3 lines
         
         if targetLine > maxStart then targetLine = maxStart end
         
@@ -1798,9 +1798,9 @@ Function RefreshVstInfoDisplay()
    var startIdx, i : Integer
    var finalText : String = ""
 
-   // 1. HARD LOCK (Aktion erforderlich!)
+   // 1. HARD LOCK (action required!)
    if IsPresetLocked then
-       // HIER IST DER FIX: Filtered_VstNames statt Fav_VstNames
+       // FIX: Use Filtered_VstNames instead of Fav_VstNames
        finalText = NEW_LINE + NEW_LINE + "    >>> --- PRESS REPLACE --- <<<" + NEW_LINE + "    To load: " + Filtered_VstNames[CurrentFavIndex]
        SetWidgetLabel(LBL_VSTConfiguration, finalText)
        
@@ -1809,7 +1809,7 @@ Function RefreshVstInfoDisplay()
        finalText = NEW_LINE + NEW_LINE + "    >>> " + VST_OverlayMsg + " <<<"
        SetWidgetLabel(LBL_VSTConfiguration, finalText)
        
-   // 3. NORMAL VIEW (Alles in Ordnung)
+   // 3. NORMAL VIEW (all good)
    else
        if InSetlistMode() then
            finalText = "--- SONG: " + GetCurrentSongName() + " ---" + NEW_LINE
@@ -1855,7 +1855,7 @@ Function RefreshSafeReplacerUI()
        
        SetWidgetLabel(LBL_MAP, "VST " + (realSlotIdx + 1))
        
-       // --- RESIDENT SCHUTZ-MODUS ---
+       // --- RESIDENT PROTECTION MODE ---
        if realSlotIdx < 2 then 
            SetWidgetLabel(LBL_Publisher, "--- RESIDENT ---")
            SetWidgetLabel(LBL_VST, loadedPluginName)
@@ -1864,7 +1864,7 @@ Function RefreshSafeReplacerUI()
            IsBrowsingFavorites = false
            SetWidgetValue(BTN_ReplaceVST, 0.0)
        
-       // --- DYNAMISCHER MODUS (VST 3 bis 10) ---
+       // --- DYNAMIC MODE (VST 3 to 10) ---
        else
            targetPubName = UniquePublishers[CurrentPubIndex]
            targetPluginName = Filtered_VstNames[CurrentFavIndex]
@@ -1896,16 +1896,16 @@ Function TraceHardwarePrediction()
    Trace("Map in RAM: " + CurrentCtrlMapName)
 
    For s = 0; s < 16; s = s + 1 Do
-      // 1. Hardware Label bauen (1-6 Knobs, 7 Leer, 8-16 Sliders)
+      // 1. Build hardware label (1-6 Knobs, 7 Unused, 8-16 Sliders)
       if s < 6 then hwLabel = "Knob " + (s+1)
-      elsif s == 6 then hwLabel = "Unbelegt"
+      elsif s == 6 then hwLabel = "Unused"
       else hwLabel = "Slider " + (s-6) end // s=7 -> Slider 1
 
-      // 2. Aktuellen Wert aus dem ExternalArranger Block holen
+      // 2. Read current value from the ExternalArranger block
       faderVal = GetParameter(ExternalArranger, s)
       midiVal = Round(faderVal * 127.0)
 
-      // 3. Herausfinden, was der Regler in dieser Map gerade macht
+      // 3. Determine what this controller does in the current map
       assignment = "- Empty -"
       if s == CF_MacroIdx then assignment = "[CROSSFADER]"
       elsif s == SCRUB_MacroIdx then assignment = "[SCRUBBER]"
@@ -1913,7 +1913,7 @@ Function TraceHardwarePrediction()
       elsif s == VST_SCOPE_MacroIdx then assignment = "[VST SCOPE]"
       elsif s == REC_SONGPART_MacroIdx then assignment = "[REC MARKER]"
       else
-         // In der ControllerMap suchen
+         // Search in the controller map
          linkInfo = ""
          For l = 0; l < Link_Count; l = l + 1 Do
             if Link_Active[l] and Link_SourceIdx[l] == s and Link_SourceIsCC[l] == false then
@@ -1925,8 +1925,8 @@ Function TraceHardwarePrediction()
          if linkInfo != "" then assignment = linkInfo end
       end
 
-      // 4. Ins Log schreiben
-      Trace("Macro " + PadInt(s+1, 2) + " [" + hwLabel + "] -> Wert: " + PadInt(midiVal, 3) + " | " + assignment)
+      // 4. Write to log
+      Trace("Macro " + PadInt(s+1, 2) + " [" + hwLabel + "] -> Value: " + PadInt(midiVal, 3) + " | " + assignment)
    End
    Trace("==========================================")
 End
@@ -1996,7 +1996,7 @@ Function UpdateInjectionFilterDisplay()
       if OutputScope[i] then
          anyActive = true
          
-         // EXAKTE NAMEN AUS DEINEM SCRIPTLET!
+         // EXACT NAMES FROM THE SCRIPTLET!
          idxPB = GetParamIdxByName(BLK_NoteProcessor[i], "p_PassPitchBend")
          idxMW = GetParamIdxByName(BLK_NoteProcessor[i], "p_PassModWheel")
          idxVol = GetParamIdxByName(BLK_NoteProcessor[i], "p_PassVolume")
@@ -2092,7 +2092,7 @@ Function UpdateInjectionNPDisplay()
          SetWidgetLabel(LBL_Inject_NP_OctHigh, IntToString(Mem_NP_OctHigh[firstScopeIdx]) + " Up")
          SetWidgetLabel(LBL_Inject_NP_OctHighOffset, "Gap " + IntToString(Mem_NP_OctHighOffset[firstScopeIdx]))
          
-         // ---> DYNAMISCHE SPLIT GRENZEN <---
+         // ---> DYNAMIC SPLIT BOUNDARIES <---
          idxMonoL = GetParamIdxByName(BLK_NoteProcessor[firstScopeIdx], "p_MonoLowest")
          idxMonoH = GetParamIdxByName(BLK_NoteProcessor[firstScopeIdx], "p_MonoHighest")
          
@@ -2140,7 +2140,7 @@ Function UpdateInjectionTransposeDisplay()
    else
       currentTrans = Mem_Transpose[firstScopeIdx] 
       
-      // --- HIER IST DAS UPDATE ---
+      // --- UPDATE ---
       SetWidgetLabel(LBL_InjectMTAmount, IntToString(currentTrans) + " ST")
       SetWidgetLabel(LBL_InjectMT_Info, GetMusicTheoryString(currentTrans))
    end
@@ -2196,7 +2196,7 @@ Function UpdateUsageLabelDisplay()
    else
       SetWidgetLabel(LBL_ChannelUsage, ChannelUsage[firstScopeIdx])
       
-      // 1. Suche bis zu 3 VSTs, die auf diesem Kanal liegen
+      // 1. Find up to 3 VSTs assigned to this channel
       count = 0
       routingText = ""
       if Size(RoutingMatrix) == 160 then
@@ -2205,7 +2205,7 @@ Function UpdateUsageLabelDisplay()
                   if count < 3 then
                       assignedVSTs[count] = vstIdx
                       
-                      // Status-String bauen
+                      // Build status string
                       if Mem_ManualVSTBypass[vstIdx] then 
                           bypassStr = " [MAN OFF]" // Manual override indicator
                       elsif IsPluginBypassed(BLK_VST[vstIdx]) then 
@@ -2226,8 +2226,8 @@ Function UpdateUsageLabelDisplay()
       if count == 0 then routingText = "-" end
       SetWidgetLabel(LBL_VSTRouting, routingText)
 
-      // 2. Buttons aktualisieren (Sichtbarkeit und Wert)
-      IsUpdatingBypassUI = true // <--- SCHUTZSCHILD AN
+      // 2. Update buttons (visibility and value)
+      IsUpdatingBypassUI = true // <--- SHIELD ON
 
       For i = 0; i < 3; i = i + 1 Do
           if assignedVSTs[i] != -1 then
@@ -2243,7 +2243,7 @@ Function UpdateUsageLabelDisplay()
        end
    End
 
-   IsUpdatingBypassUI = false // <--- SCHUTZSCHILD AUS
+   IsUpdatingBypassUI = false // <--- SHIELD OFF
    end
 End
 
@@ -2257,7 +2257,7 @@ Function UpdateScopeVelocityMeter()
    // Find the loudest velocity across all selected channels
    For i = 0; i < 16; i = i + 1 Do
       if OutputScope[i] then
-         // Da deine Scriptlet-Parameter 0 bis 15 genau Ch 1 bis 16 entsprechen:
+         // Scriptlet parameters 0-15 correspond exactly to Ch 1-16:
          currentVal = GetParameter(BLK_VelocityMonitor, i)
          if currentVal > maxVal then 
             maxVal = currentVal 
@@ -2265,7 +2265,7 @@ Function UpdateScopeVelocityMeter()
       end
    End
    
-   // Wert an das LED-Meter-Widget senden
+   // Send value to the LED meter widget
    SetWidgetValue(W_VelocityMeter, maxVal)
 End
 
@@ -2337,7 +2337,7 @@ Function UpdateInjectionLooperTransportUI()
 End
 
 // ---------------------------------------------------------
-// INPUT FEEDBACK (TRISTATE LOGIK)
+// INPUT FEEDBACK (TRISTATE LOGIC)
 // ---------------------------------------------------------
 
 Function SyncInputFeedback()
@@ -2345,10 +2345,10 @@ Function SyncInputFeedback()
    var activeCount : Integer
    var scopeCount : Integer
    
-   // Visualisiert den Zustand der Input-Buttons basierend auf dem Output-Scope
-   // 0.0 = Keiner verbunden
-   // 1.0 = Alle verbunden
-   // 0.5 = Gemischt (Manche verbunden, manche nicht)
+   // Visualizes the state of the input buttons based on the output scope
+   // 0.0 = None connected
+   // 1.0 = All connected
+   // 0.5 = Mixed (some connected, some not)
    
    // --- LOOP KILLER: Ignore UI echo from widgets for 150ms ---
    InputSyncTimer = TimeSinceStartup() + 150.0
@@ -2445,7 +2445,7 @@ Function UpdateCFConfigLabel()
     var activeCount : Integer
     var i : Integer
     
-    // 1. VST NAMEN GENERIEREN
+    // 1. GENERATE VST NAMES
     activeCount = 0
     For i = 0; i < 5; i = i + 1 Do
         if GetWidgetValue(W_CF_Audio[i]) > 0.5 then activeCount = activeCount + 1 end
@@ -2463,7 +2463,7 @@ Function UpdateCFConfigLabel()
         if Length(vstPart) > 4 then vstPart = CopySubstring(vstPart, 0, Length(vstPart)-1) end
     end
     
-    // 2. GENOS NAMEN GENERIEREN
+    // 2. GENERATE ARRANGER NAMES
     activeCount = 0
     For i = 0; i < 16; i = i + 1 Do
         if GetWidgetValue(W_CF_Arranger[i]) > 0.5 then activeCount = activeCount + 1 end
@@ -2507,7 +2507,7 @@ Function RefreshCtrlInfoDisplay()
         finalText = finalText + "   blocked to prevent MIDI Chaos."
         SetWidgetLabel(LBL_ControllerInfo, finalText)
     else
-        // --- 2. STATISCHER HEADER (Scrollt nicht mit) ---
+        // --- 2. STATIC HEADER (does not scroll) ---
         if CurrentCtrlMapName == "-" or CurrentCtrlMapName == "" then
             finalText = "--- NO MAPPING LOADED ---" + NEW_LINE 
         else
@@ -2520,10 +2520,10 @@ Function RefreshCtrlInfoDisplay()
             finalText = finalText + "Song expected: '" + ExpectedMapName + "'" + NEW_LINE + NEW_LINE
         end
 
-        // --- 3. SCROLLBEREICH ---
+        // --- 3. SCROLL AREA ---
         if maxStart < 0 then maxStart = 0 end
         
-        // Slider oben = 1.0 (startIdx 0), Slider unten = 0.0 (startIdx max)
+        // Slider top = 1.0 (startIdx 0), Slider bottom = 0.0 (startIdx max)
         startIdx = Round((1.0 - scrollVal) * maxStart)
 
         For i = 0; i < displayLines; i = i + 1 Do
@@ -2553,7 +2553,7 @@ End
 // ============================================================================
 
 // ---------------------------------------------------------
-// GENOS KNOBS UND SLIDER INFO DISPLAY (FOR MORPHFADER)
+// ARRANGER KNOBS AND SLIDER INFO DISPLAY (FOR MORPHFADER)
 // ---------------------------------------------------------
 
 Function GetHardwareLabel(idx : Integer) Returns String
@@ -2572,12 +2572,12 @@ Function GetAssignedHWString(mIdx : Integer) Returns String
    var i : Integer
    var res : String = ""
 
-   // 1. Gelernte Fremd-Controller (MiniLab, Pedale, etc.) suchen
+   // 1. Search for learned external controllers (MiniLab, pedals, etc.)
    For i = 0; i < HW_Count; i = i + 1 Do
        if HW_MacroIdx[i] == mIdx then
            if res != "" then res = res + " | " end
            
-           // ---> NEU: Unterscheidung Note vs CC <---
+           // ---> NEW: Distinguish Note vs CC <---
            if HW_IsNote[i] then
                res = res + "Ch" + HW_Channel[i] + ":Note" + HW_CC[i]
            else
@@ -2611,18 +2611,18 @@ Function ScrollToCurrentCtrlScope()
     var targetLine : Integer = 0
     var searchStr, searchStrAlt : String = ""
     var isGrouped : Boolean = false
-    var foundLine : Boolean = false // ---> NEU: Das saubere Abbruch-Flag <---
+    var foundLine : Boolean = false // ---> NEW: Clean exit flag <---
     
     var totalLines : Integer = Size(CtrlInfo_Lines)
     var displayLines : Integer = 17 
     var maxStart : Integer = totalLines - displayLines
     var scrollVal : Double = 0.0
 
-    // Wenn EditScope -1 ist (Global), bleibt targetLine = 0 -> Er scrollt ganz nach oben!
+    // If EditScope is -1 (Global), targetLine stays 0 -> scrolls to the top!
     if CurrentEditScope != -1 then
         
-        // 1. Kategorien checken (Ist es ein Gruppen-Macro?)
-        // ---> DIE ERSTE SICHERE WHILE-SCHLEIFE <---
+        // 1. Check categories (is it a group macro?)
+        // ---> FIRST SAFE WHILE-LOOP <---
         l = 0
         While l < 16 and not isGrouped Do
             if CurrentEditScope == SOLO_SMART_MacroIdx[l] then searchStr = "Smart Solo"; isGrouped = true
@@ -2633,25 +2633,25 @@ Function ScrollToCurrentCtrlScope()
             l = l + 1
         End
         
-        // 2. Einzelfunktionen oder Standard-Macros
+        // 2. Individual functions or standard macros
         if not isGrouped then
-            searchStr = GetHardwareLabel(CurrentEditScope) // ergibt z.B. "Macro 1"
+            searchStr = GetHardwareLabel(CurrentEditScope) // yields e.g. "Macro 1"
             searchStrAlt = searchStr + " [" // "Macro 1 ["
             searchStr = searchStr + ":"     // "Macro 1:"
         end
         
-        // 3. Finde die passende Zeile
-        // ---> DIE ZWEITE SICHERE WHILE-SCHLEIFE <---
+        // 3. Find the matching line
+        // ---> SECOND SAFE WHILE-LOOP <---
         i = 0
         While i < totalLines and not foundLine Do
             if isGrouped then
-                // Bei Gruppen: Taucht das Keyword irgendwo in der Zeile auf?
+                // For groups: does the keyword appear anywhere in the line?
                 if IndexOfSubstring(CtrlInfo_Lines[i], searchStr, true) > -1 then
                     targetLine = i
                     foundLine = true
                 end
             else
-                // Bei Einzel-Macros: Die Zeile muss exakt mit "Macro X:" oder "Macro X [" beginnen!
+                // For individual macros: the line must start exactly with "Macro X:" or "Macro X ["!
                 // (Prevents "Macro 1" from falsely matching "Macro 10")
                 if IndexOfSubstring(CtrlInfo_Lines[i], searchStr, false) == 0 or 
                    IndexOfSubstring(CtrlInfo_Lines[i], searchStrAlt, false) == 0 then
@@ -2663,7 +2663,7 @@ Function ScrollToCurrentCtrlScope()
         End
     end
 
-    // 4. Slider-Wert berechnen
+    // 4. Calculate slider value
     if maxStart <= 0 then 
         scrollVal = 1.0 
     else
@@ -2671,7 +2671,7 @@ Function ScrollToCurrentCtrlScope()
         scrollVal = 1.0 - (IntToFloat(targetLine) / IntToFloat(maxStart))
     end
 
-    // 5. Wert setzen und Display rendern
+    // 5. Set value and render display
     SetWidgetValue(SLD_ControllerInfo, scrollVal)
     RefreshCtrlInfoDisplay()
 End
@@ -2697,7 +2697,7 @@ Function TriggerMacroFeedback(sourceIdx : Integer, isCC : Boolean, val : Double)
         end
     end
     
-    // Nur weitermachen, wenn es eine ECHTE Bewegung war
+    // Only proceed if this was a real movement
     if not isJitter then
         // Store new valid value for this controller
         Last_HUD_Source = sourceIdx
@@ -2714,42 +2714,42 @@ Function TriggerMacroFeedback(sourceIdx : Integer, isCC : Boolean, val : Double)
             linkFound = true
             
         else
-            // 2. NORMALE PARAMETER LINKS SUCHEN
+            // 2. SEARCH NORMAL PARAMETER LINKS
             For i = 0; i < Link_Count; i = i + 1 Do
                 // Grab the FIRST active link belonging to this controller
                 if not linkFound and Link_Active[i] and Link_SourceIdx[i] == sourceIdx and Link_SourceIsCC[i] == isCC then
                     
-                    // A) Echten Plugin-Namen auslesen
+                    // A) Read actual plugin name
                     if Link_Type[i] == 0 then pName = GetPluginInfo(BLK_VST[Link_BlockIdx[i]], 0)
                     elsif Link_Type[i] == 1 then pName = "NoteProc (Ch " + (Link_BlockIdx[i]+1) + ")"
                     elsif Link_Type[i] == 2 then pName = "AudioMixer"
                     else pName = Link_BlockName[i] end
 
-                    // B) Parameter-Namen nehmen
+                    // B) Get parameter name
                     paramName = Link_ExpectedName[i]
                     if paramName == "" then paramName = "Param " + Link_TargetParam[i] end
 
-                    // C) Den ECHTEN aktuellen Wert berechnen
+                    // C) Calculate the actual current value
                     mappedVal = Link_MinVal[i] + (val * (Link_MaxVal[i] - Link_MinVal[i]))
                     
-                    // D) String zusammenbauen
+                    // D) Assemble the string
                     msg = pName + " | " + paramName + " : " + Round(mappedVal * 100.0) + "%"
                     linkFound = true 
                 end
             End
         end // Closes the "else" of step 1
         
-        // 3. AN DISPLAY SENDEN & TIMER STARTEN
-        // (Das machen wir sinnvollerweise nur, wenn es kein Jitter war)
+        // 3. SEND TO DISPLAY & START TIMER
+        // (Only makes sense if it was not jitter)
         if linkFound then
             // ---> MAP-CHANGE LOCK <---
             if TimeSinceStartup() > MacroFeedbackLockTimer then
-                Trace("HUD PUSH: Sende '" + msg + "' an Display!") 
+                Trace("HUD PUSH: Sending '" + msg + "' to display!") 
                 OSC_SendStringSpecific("/UI/SetMacroFeedback", msg, Local_IP, Local_PORT)
                 MacroFeedbackTimer = TimeSinceStartup() + 1500.0
             else
                 // While lock is active, silently discard fader movements
-                Trace("HUD PUSH BLOCKED: Map-Change LockTimer ist noch aktiv.")
+                Trace("HUD PUSH BLOCKED: Map-change lock timer still active.")
             end
         end
         
@@ -2774,15 +2774,15 @@ Function UpdateControllerInfoDisplay()
    var Grp_Max : Integer Array
    var g, grpIdx : Integer
    
-   // Pointer, um die Position anhand des Ankers zu finden.
+   // Pointers to find the position by anchor.
    var idxLooper, idxSmart, idxStrict, idxMute, idxVel, idxRoot, idxOct, idxHum, idxQuant, idxSus : Integer = -1
    
-   // 1. Arrays initialisieren
+   // 1. Initialize arrays
    For g = 0; g < Grp_Count; g = g + 1 Do
        Grp_Has <-- false; Grp_Min <-- 999; Grp_Max <-- -1
    End
    
-   // 2. Wo liegen die Gruppen in der aktuellen Sortierung?
+   // 2. Where are the groups in the current sort order?
    For g = 0; g < Grp_Count; g = g + 1 Do
        if MacroGroup_Anchors[g] == 82  then idxLooper = g end
        if MacroGroup_Anchors[g] == 34  then idxSmart = g end
@@ -2798,18 +2798,18 @@ Function UpdateControllerInfoDisplay()
    
    CtrlInfo_Lines = [] 
 
-   // WIR GEHEN BEIDE TYPEN DURCH: Erst Macro (0=False), dann CC (1=True)
+   // Iterate both types: first Macro (0=False), then CC (1=True)
    For typeLoop = 0; typeLoop <= 1; typeLoop = typeLoop + 1 Do
        isCC = (typeLoop == 1)
        
-       // Durchsuche Index 0 bis 127 (Deckt Macros und CCs ab)
+       // Search index 0 to 127 (covers Macros and CCs)
        For s = 0; s < 128; s = s + 1 Do
            
-           // Hardware-Name vorab bauen (z.B. "Macro 16" oder "CC 4")
+           // Build hardware name upfront (e.g. "Macro 16" or "CC 4")
            if isCC then hwStr = GetStandardCCName(s) + " [CC" + s + "]"
            else hwStr = "Macro " + (s+1) + GetAssignedHWString(s) end
 
-           // --- GRUPPEN FILTER (Sammelt die Werte in die dynamischen Arrays) ---
+           // --- GROUP FILTER (collects values into dynamic arrays) ---
            isGroupedDisp = false
            l = 0
            While l < 16 and not isGroupedDisp Do
@@ -2853,7 +2853,7 @@ Function UpdateControllerInfoDisplay()
            End
 
            if isGroupedDisp then
-               // Absichtlich leer lassen! Wir machen unten den dynamischen Sammel-Eintrag.
+               // Intentionally left empty! The dynamic grouped entry is built below.
                
            // --- CROSSFADER ---
            elsif (not isCC and s == CF_MacroIdx) or (isCC and s == CF_CCIdx) then
@@ -2863,7 +2863,7 @@ Function UpdateControllerInfoDisplay()
            elsif (not isCC and s == SCRUB_MacroIdx) or (isCC and s == SCRUB_CCIdx) then
                CtrlInfo_Lines <-- hwStr + ": >> Timeline Scrubber & Panic Transport Stop" 
 
-           // ---  REC SONGPART (MARKER) ANZEIGEN ---
+           // ---  REC SONGPART (MARKER) DISPLAY ---
            elsif (not isCC and s == REC_SONGPART_MacroIdx) or (isCC and s == REC_SONGPART_CCIdx) then
                CtrlInfo_Lines <-- hwStr + ": >> Record: Next Songpart (Marker)"
                
@@ -2871,7 +2871,7 @@ Function UpdateControllerInfoDisplay()
            elsif (not isCC and s == SYSTEM_TOGGLE_MacroIdx) or (isCC and s == SYSTEM_TOGGLE_CCIdx) then
                CtrlInfo_Lines <-- hwStr + ": >> HOLD: System Mode (Joystick Hijack)"
                
-           // --- VST SCOPE & BROWSE ANZEIGEN ---
+           // --- VST SCOPE & BROWSE DISPLAY ---
            elsif (not isCC and s == VST_SCOPE_MacroIdx) or (isCC and s == VST_SCOPE_CCIdx) then
                CtrlInfo_Lines <-- hwStr + ": >> VST Scope Select (Encoder)"
                
@@ -2902,13 +2902,13 @@ Function UpdateControllerInfoDisplay()
                End
 
                if count > 0 then
-                   // Header der Zeile bauen
+                   // Build the line header
                    if isCC then mainLine = GetStandardCCName(s) + " [CC" + s + "]: "
                    else mainLine = "Macro " + (s+1) + GetAssignedHWString(s) + ": " end
 
                    if count > 1 then mainLine = mainLine + "[" + count + " Targets] " end
 
-                   // Links formatieren
+                   // Format links
                    For l = 0; l < count; l = l + 1 Do
                        idx = linksForThisSource[l]
                        vMin = Round(Link_MinVal[idx] * 100.0); vMax = Round(Link_MaxVal[idx] * 100.0)
@@ -2942,7 +2942,7 @@ Function UpdateControllerInfoDisplay()
        end
    End
    
-   // Slider nachziehen und rendern
+   // Update slider and render
    ScrollToCurrentCtrlScope()
 End
 
@@ -2957,7 +2957,7 @@ Function UpdateEditScopeDisplay()
    if CurrentCtrlMapName == "-" or CurrentCtrlMapName == "None" or CurrentCtrlMapName == "" then
        txt = "Scope: -"
        
-   // Normaler Betrieb
+   // Normal operation
    elsif CurrentEditScope == -1 then
        txt = "Scope: [GLOBAL] (All Sliders)"
    else
@@ -2978,7 +2978,7 @@ Function CycleEditScope(dir : Integer)
    isValid = false
    loopGuard = 0
 
-   // Wenn gar keine Map geladen ist, gibt es nur "Global"
+   // If no map is loaded, only "Global" exists
    if CurrentCtrlMapName == "-" or CurrentCtrlMapName == "None" or CurrentCtrlMapName == "" then
        nextScope = -1
        isValid = true
@@ -2988,7 +2988,7 @@ Function CycleEditScope(dir : Integer)
            loopGuard = loopGuard + 1
            nextScope = nextScope + dir
 
-           // Wrap around (-1 bis MAX_MACROS-1)
+           // Wrap around (-1 to MAX_MACROS-1)
            if nextScope < -1 then nextScope = MAX_MACROS - 1
            elsif nextScope >= MAX_MACROS then nextScope = -1
            end
@@ -2997,7 +2997,7 @@ Function CycleEditScope(dir : Integer)
            if nextScope == -1 then
                isValid = true
                      
-           // 2. Sind es unsere Spezial-Funktionen? 
+           // 2. Is it one of our special functions?
            elsif nextScope == CF_MacroIdx or 
                  nextScope == SCRUB_MacroIdx or
                  nextScope == VST_PREV_MacroIdx or
@@ -3011,7 +3011,7 @@ Function CycleEditScope(dir : Integer)
                isValid = true
            
            else
-               // 3. NEU: Ist es ein Looper oder Channel-Toggle Macro?
+               // 3. Is it a Looper or Channel-Toggle Macro?
                i = 0
                While i < 16 and not isValid Do
                    if nextScope == LOOPER_CH_MacroIdx[i] or 
@@ -3048,13 +3048,13 @@ Function CycleEditScope(dir : Integer)
            SetWidgetValue(SLD_Morph, 0.0)
        end
 
-       // SPERRE: Learn-Modus abbrechen, wenn wir auf "Global" wechseln
+       // LOCK: Cancel learn mode when switching to "Global"
        if CurrentEditScope == -1 then
            IsHardwareLearning = false
            SetWidgetValue(BTN_MacroLearn, 0.0)
        end
 
-       // Labels aktualisieren & Auto-Scroll
+       // Update labels & auto-scroll
        UpdateEditScopeDisplay()
        ScrollToCurrentCtrlScope()
    end
@@ -3074,7 +3074,7 @@ Function AppendLinkEncoded(name : String, paramId : Integer, sliderIdx : Integer
    // 1. VSTs (Type 0)
    if IndexOfSubstring(name, "VST", false) == 0 then
        k = 3
-       // ---> DIE SICHERE WHILE-SCHLEIFE <---
+       // ---> SAFE WHILE-LOOP <---
        While k < Length(name) and not stopParse Do
            char = CopySubstring(name, k, 1)
            if char >= "0" and char <= "9" then 
@@ -3140,7 +3140,7 @@ End
 
 Function CaptureRechBaseline()
    var i : Integer
-   // Fotografiert den aktuellen, "sauberen" Zustand der Matrix nach dem Laden
+   // Snapshots the current, clean state of the matrix after loading
    For i = 0; i < 256; i = i + 1 Do
       Loaded_RECH_State[i] = GetParameter(RECH, i)
    End
@@ -3154,9 +3154,9 @@ Function SaveHardwareMap()
     var mIdx, aIdx : Integer
     var line : String
     var hasLinks : Boolean
-    var saved : Boolean // <--- HIER IST DER FIX
+    var saved : Boolean // <--- FIX
 
-    // Wir schreiben exakt das Format: Macro1 = Ch1:CC74 | Ch3:CC14
+    // Write exactly this format: Macro1 = Ch1:CC74 | Ch3:CC14
     For mIdx = 0; mIdx < MAX_MACROS; mIdx = mIdx + 1 Do
         line = "Macro" + (mIdx + 1) + " = "
         hasLinks = false
@@ -3176,7 +3176,7 @@ Function SaveHardwareMap()
         if hasLinks then content = content + line + NEW_LINE end
     End
 
-    // WERT ABFANGEN:
+    // CAPTURE RETURN VALUE:
     saved = SaveStringToTextFile(HardwareMapFilePath, content)
     
     if saved then
@@ -3214,7 +3214,7 @@ Function LoadHardwareMap()
                                 ch = StringToInt(ReplaceString(TrimString(subParts[0]), "Ch", "", false))
                                 cc = StringToInt(ReplaceString(TrimString(subParts[1]), "CC", "", false))
                                 
-                                // --- CC ODER NOTE ERKENNEN ---
+                                // --- DETECT CC OR NOTE ---
                                 if IndexOfSubstring(TrimString(subParts[1]), "Note", true) == 0 then
                                     cc = StringToInt(ReplaceString(TrimString(subParts[1]), "Note", "", true))
                                     HW_IsNote <-- true
@@ -3270,7 +3270,7 @@ Function UnlearnHardware(mIdx : Integer)
    var tempMacro : Integer Array
    var tempCh : Integer Array
    var tempCC : Integer Array
-   var tempIsNote : Boolean Array // <--- NEU
+   var tempIsNote : Boolean Array // <--- NEW
 
    // Copy all entries to a new array, EXCEPT those belonging to the current macro
    For i = 0; i < HW_Count; i = i + 1 Do
@@ -3278,7 +3278,7 @@ Function UnlearnHardware(mIdx : Integer)
            tempMacro <-- HW_MacroIdx[i]
            tempCh <-- HW_Channel[i]
            tempCC <-- HW_CC[i]
-           tempIsNote <-- HW_IsNote[i] // <--- NEU
+           tempIsNote <-- HW_IsNote[i] // <--- NEW
            newCount = newCount + 1
        end
    End
@@ -3286,11 +3286,11 @@ Function UnlearnHardware(mIdx : Integer)
    HW_MacroIdx = tempMacro
    HW_Channel = tempCh
    HW_CC = tempCC
-   HW_IsNote = tempIsNote // <--- NEU
+   HW_IsNote = tempIsNote // <--- NEW
    HW_Count = newCount
 
    SaveHardwareMap()
-   UpdateControllerInfoDisplay() // Display sofort updaten
+   UpdateControllerInfoDisplay() // Update display immediately
    Trace("HAL: Unlearned all external controllers for Macro " + (mIdx + 1))
 End
 
@@ -3323,18 +3323,18 @@ Function RefreshCtrlMapList()
        end
    end
 
-   // 2. Liste leeren
+   // 2. Clear list
    CtrlMapList = []
    CtrlMapList <-- "-" 
    
-   // 3. Datei im High-Speed Modus scannen (Ohne SplitString!)
+   // 3. Scan file in high-speed mode (without SplitString!)
    if FileExists(ControllerMapFilePath) then
        content = LoadStringFromTextFile(ControllerMapFilePath)
        tempContent = content
        
        pos = IndexOfSubstring(tempContent, "[Map:", false)
        While pos > -1 Do
-           // Schneide alles vor dem Map-Tag ab
+           // Cut everything before the map tag
            tempContent = CopySubstring(tempContent, pos, Length(tempContent) - pos)
            
            // Find the closing bracket
@@ -6845,7 +6845,7 @@ Function GetChannelForVST(vstIdx : Integer) Returns Integer
    
    result = 1 // Fallback
    
-   // ---> DIE SICHERE WHILE-SCHLEIFE <---
+   // ---> SAFE WHILE-LOOP <---
    While i < 16 and not found Do
       if RoutingMatrix[(vstIdx * 16) + i] == true then
          result = i + 1
@@ -6933,7 +6933,7 @@ Function CyclePluginPreset(pluginIndex : Integer, direction : Integer)
                 currentName = LoadedPresets[pluginIndex]
                 idx = -1
                 
-                // ---> DIE SICHERE WHILE-SCHLEIFE <---
+                // ---> SAFE WHILE-LOOP <---
                 i = 0
                 While i < Size(presets) and idx == -1 Do
                     If presets[i] == currentName Then 
@@ -7048,7 +7048,7 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
         loadedName = GetPluginInfo(BLK_VST[Active_VST_Scope], 0)
         
         // 2. Lookup in der Master-DB
-        // ---> DIE SICHERE WHILE-SCHLEIFE <---
+        // ---> SAFE WHILE-LOOP <---
         i = 0
         While i < Size(DB_VstNames) and not found Do
             if DB_VstNames[i] == loadedName then
@@ -7391,7 +7391,7 @@ Function TriggerNextQueueJob()
        if Size(parts) == 4 then
            nextIdx = StringToInt(parts[0])
            targetName = parts[1]
-           isManual = (parts[2] == "true") // <--- NEU: Das Flag aus dem Zettel lesen!
+           isManual = (parts[2] == "true") // <--- NEW: Das Flag aus dem Zettel lesen!
            cleanPath = SuperCleanPath(parts[3])
            
            Trace("QUEUE: Firing Replace directly on Slot " + (nextIdx+1) + " -> " + targetName)
@@ -7433,7 +7433,7 @@ Function GetPathForVst(vstName : String) Returns String
    result = ""
    
    // HIER IST DER FIX: Wir suchen in der neuen Master-Datenbank (DB_VstNames)
-   // ---> DIE SICHERE WHILE-SCHLEIFE <---
+   // ---> SAFE WHILE-LOOP <---
    While i < Size(DB_VstNames) and not found Do
       if DB_VstNames[i] == vstName then
          result = DB_VstPaths[i]
@@ -7542,7 +7542,7 @@ Function CycleGlobalSystemMode()
 
    if GlobalSystemMode == 0 then modeName = "VOICE SELECTOR"
    elsif GlobalSystemMode == 1 then modeName = "LOOPER CONTROL"
-   elsif GlobalSystemMode == 2 then modeName = "CONTROLLER MAP" // <--- NEU
+   elsif GlobalSystemMode == 2 then modeName = "CONTROLLER MAP" // <--- NEW
    end
 
    Trace("SYS-MODE: Switched to " + modeName)
@@ -7641,7 +7641,7 @@ Function HandleInjectBypassClick(btnIdx : Integer, val : Double)
             // Which VST belongs to this button?
             if Size(RoutingMatrix) == 160 then
                 i = 0
-                // ---> DIE SICHERE WHILE-SCHLEIFE <---
+                // ---> SAFE WHILE-LOOP <---
                 While i < MAX_VSTS and targetVstIdx == -1 Do
                     if RoutingMatrix[(i * 16) + firstScopeIdx] == true then
                         if count == btnIdx then
@@ -8881,7 +8881,7 @@ Function CycleRechPresets(direction : Integer)
     var i : Integer = 0
     var newIdx : Integer
 
-    // ---> DIE SICHERE WHILE-SCHLEIFE <---
+    // ---> SAFE WHILE-LOOP <---
     While i < Size(presets) and idx == -1 Do
         If presets[i] == currentName Then 
             idx = i 
@@ -8926,7 +8926,7 @@ Function CycleChannelUsage(direction : Integer)
        currentUsage = ChannelUsage[firstScopeIdx]
        catIdx = -1 // Initial value for safe search
        
-       // ---> DIE SICHERE WHILE-SCHLEIFE <---
+       // ---> SAFE WHILE-LOOP <---
        i = 0
        While i < Size(UsageCategories) and catIdx == -1 Do
           if UsageCategories[i] == currentUsage then 
@@ -9753,7 +9753,7 @@ Function JumpToRegMemAnchor(regNum : Integer)
     targetBar = -1
     firstFoundBar = -1
 
-    // ---> DIE SICHERE WHILE-SCHLEIFE <---
+    // ---> SAFE WHILE-LOOP <---
     i = 0
     // Search the timeline array for the pressed RegMem
     While i < Size(Arr_TL_Bar) and not found Do
@@ -10612,7 +10612,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                                     
                                     pCount = GetParameterCount(BLK_NoteProcessor[chIdx])
                                     p = 0
-                                    // ---> DIE SICHERE WHILE-SCHLEIFE <---
+                                    // ---> SAFE WHILE-LOOP <---
                                     While p < pCount and paramIdx == -1 Do
                                         // WICHTIG: TrimString filtert versteckte Leerzeichen vom Plugin-Namen!
                                         if TrimString(GetParameterName(BLK_NoteProcessor[chIdx], p)) == paramNameOrIdx then
@@ -11034,7 +11034,7 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
                 
                 IsBrowsingFavorites = false
                 
-                // ---> DIE SICHERE WHILE-SCHLEIFE <---
+                // ---> SAFE WHILE-LOOP <---
                 foundSlot = false
                 k = 0
                 While k < Size(ReplaceableSlots) and not foundSlot Do
@@ -11254,7 +11254,7 @@ End
 
 
 Initialization
-   var devCount, i, i_init, finishedIdx, ch, p, vIdx, vCount, rIdx, idxInit : Integer;
+   var devCount, i, i_init, finishedIdx, ch, p, vIdx, vCount, rIdx, idxInit, d : Integer;
    var currentName, bootSong, finishedManual, finishedName, remainingQueue, rName, queueStr : String
    var memStr : String = GetWidgetLabel(MEM_ReplaceState)
    var jobs, parts, memParts, routeParts : String Array
@@ -11320,7 +11320,6 @@ Initialization
 
    arrangerDevIdx = -1
    controllerDevIdx = -1
-   var d : Integer
    For d = 0; d < MAX_DEVICES; d = d + 1 Do
       if DEV_Active[d] then
          if arrangerDevIdx < 0 and DeviceHasCap(d, CAP_TRANSPORT_SYNC) then arrangerDevIdx = d end
