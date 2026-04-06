@@ -7547,7 +7547,9 @@ Function CycleGlobalSystemMode()
 
    Trace("SYS-MODE: Switched to " + modeName)
    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
-   MacroFeedbackTimer = TimeSinceStartup() + 1500.0
+   MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+   // Lock prevents hardware sync fader echoes from overwriting the mode display
+   MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
 End
 
 // ---------------------------------------------------------
