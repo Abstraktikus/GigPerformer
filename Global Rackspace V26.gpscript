@@ -7536,14 +7536,11 @@ End
 Function CycleGlobalSystemMode()
    var modeName : String
    
-   // We now have 3 modes: 0 (Voice), 1 (Looper), 2 (Controller Map)
+   // 4 modes: 0 (Voice), 1 (Looper), 2 (Controller Map), 3 (Strip Control)
    GlobalSystemMode = GlobalSystemMode + 1
-   if GlobalSystemMode > 2 then GlobalSystemMode = 0 end 
+   if GlobalSystemMode > 3 then GlobalSystemMode = 0 end
 
-   if GlobalSystemMode == 0 then modeName = "VOICE SELECTOR"
-   elsif GlobalSystemMode == 1 then modeName = "LOOPER CONTROL"
-   elsif GlobalSystemMode == 2 then modeName = "CONTROLLER MAP" // <--- NEW
-   end
+   modeName = SysModeNames[GlobalSystemMode]
 
    Trace("SYS-MODE: Switched to " + modeName)
    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
@@ -9224,19 +9221,13 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
    elsif matchedMacro == SYSTEM_TOGGLE_MacroIdx then
        SystemModeActive = (val > 0.5)
        
-       if SystemModeActive then 
-           Trace("SYS-MODE: ON (Joystick hijacked)")
-           
-           // Sofortige Anzeige im HUD, wenn der Transport steht!
-           if not IsPerformanceActive then
-               if GlobalSystemMode == 0 then mName = "VOICE SELECTOR" 
-               elsif GlobalSystemMode == 1 then mName = "LOOPER CONTROL" 
-               else mName = "SYSTEM" end
-               
-               OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + mName + " <<<", Local_IP, Local_PORT)
-               MacroFeedbackTimer = TimeSinceStartup() + 1500.0
-           end
-       else 
+       if SystemModeActive then
+           mName = SysModeNames[GlobalSystemMode]
+           Trace("SYS-MODE: ON -> " + mName)
+           OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + mName + " <<<", Local_IP, Local_PORT)
+           MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+           MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+       else
            Trace("SYS-MODE: OFF") 
        end
     
@@ -9461,16 +9452,13 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
        // SYSTEM TOGGLE FOR DIRECT CCs
        elsif SYSTEM_TOGGLE_CCIdx == cc then
            SystemModeActive = (val > 0.5)
-           if SystemModeActive then 
-               Trace("SYS-MODE: ON (Joystick hijacked via CC" + cc + ")")
-               if not IsPerformanceActive then
-                   if GlobalSystemMode == 0 then mName = "VOICE SELECTOR" 
-                   elsif GlobalSystemMode == 1 then mName = "LOOPER CONTROL" 
-                   else mName = "SYSTEM" end
-                   OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + mName + " <<<", Local_IP, Local_PORT)
-                   MacroFeedbackTimer = TimeSinceStartup() + 1500.0
-               end
-           else 
+           if SystemModeActive then
+               mName = SysModeNames[GlobalSystemMode]
+               Trace("SYS-MODE: ON -> " + mName + " (via CC" + cc + ")")
+               OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + mName + " <<<", Local_IP, Local_PORT)
+               MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+               MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+           else
                Trace("SYS-MODE: OFF") 
            end
        end 
