@@ -81,6 +81,61 @@ Var
    // ========================================================================
    SysModeNames : String Array = ["VOICE SELECTOR", "LOOPER CONTROL", "CONTROLLER MAP", "STRIP-CONTROL"]
 
+   // --- Capability Flags (bitfield, combinable) ---
+   CAP_NONE              : Integer = 0
+   CAP_TRANSPORT_SYNC    : Integer = 1
+   CAP_SYSEX_TRIGGER     : Integer = 2
+   CAP_CROSSFADER_TARGETS: Integer = 4
+   CAP_SYSEX_PROFILES    : Integer = 8
+   CAP_JOYSTICK          : Integer = 16
+   CAP_MIDI_OUT          : Integer = 32
+   CAP_FEEDBACK_CC       : Integer = 64
+   CAP_SYSEX_COMMANDS    : Integer = 128
+
+   // --- Control Type Constants ---
+   CTYPE_FADER    : Integer = 0
+   CTYPE_ENCODER  : Integer = 1
+   CTYPE_BUTTON   : Integer = 2
+   CTYPE_JOYSTICK : Integer = 3
+   CTYPE_PAD      : Integer = 4
+
+   // --- Feedback Method Constants ---
+   FB_NONE  : Integer = 0
+   FB_CC    : Integer = 1
+   FB_SYSEX : Integer = 2
+
+   // --- Device Registry (4 slots) ---
+   MAX_DEVICES  : Integer = 4
+   DEV_Active   : Boolean Array = [false, false, false, false]
+   DEV_Name     : String Array  = ["", "", "", ""]
+   DEV_MidiIn   : String Array  = ["", "", "", ""]
+   DEV_MidiOut  : String Array  = ["", "", "", ""]
+   DEV_Channel  : Integer Array = [0, 0, 0, 0]
+   DEV_Caps     : Integer Array = [0, 0, 0, 0]
+   DEV_BlockIdx : Integer Array = [-1, -1, -1, -1]
+
+   // --- Control Registry (dynamic, filled from config) ---
+   MAX_CONTROLS  : Integer = 64
+   CTRL_Count    : Integer = 0
+   CTRL_DevIdx   : Integer Array
+   CTRL_Type     : Integer Array
+   CTRL_CC       : Integer Array
+   CTRL_Channel  : Integer Array
+   CTRL_RangeMin : Integer Array
+   CTRL_RangeMax : Integer Array
+   CTRL_Feedback : Integer Array
+   CTRL_Label    : String Array
+
+   // --- SysEx Command Registry (dynamic, filled from config) ---
+   SYSEX_Count   : Integer = 0
+   SYSEX_DevIdx  : Integer Array
+   SYSEX_Purpose : String Array
+   SYSEX_Data    : String Array
+
+   // --- Convenience Indices (set during boot) ---
+   arrangerDevIdx   : Integer = -1
+   controllerDevIdx : Integer = -1
+
    // ========================================================================
    // SECTION 4: PLUGIN BLOCKS & HARDWARE HANDLES
    // ========================================================================
