@@ -1,184 +1,19 @@
-// SCRIPTLET: Genos2 Control Center (Pure Asymmetric Scaling & Decoupled Crossfader)
-// Handle: Genos2_Control
+// Genos2_Control — DEPRECATED
+// Volume/expression feedback logic has been absorbed into Global Rackspace V26 (HAL layer).
+// This scriptlet remains as a parameter bridge for fader communication.
+// It can be fully removed once all SetParameter(ExternalArranger, ...) calls
+// are migrated to direct MIDI sends in a future refactoring.
 
 Var
-   // --- PARAMETERS (Index 0-15) ---
    Genos_Vol_Ch01, Genos_Vol_Ch02, Genos_Vol_Ch03, Genos_Vol_Ch04 : Parameter = 0.0
    Genos_Vol_Ch05, Genos_Vol_Ch06, Genos_Vol_Ch07, Genos_Vol_Ch08 : Parameter = 0.0
    Genos_Vol_Ch09, Genos_Vol_Ch10, Genos_Vol_Ch11, Genos_Vol_Ch12 : Parameter = 0.0
    Genos_Vol_Ch13, Genos_Vol_Ch14, Genos_Vol_Ch15, Genos_Vol_Ch16 : Parameter = 0.0
 
-   // --- FLAGS (Index 16-31) ---
    CF_Enable_Ch01, CF_Enable_Ch02, CF_Enable_Ch03, CF_Enable_Ch04 : Parameter = 0.0
    CF_Enable_Ch05, CF_Enable_Ch06, CF_Enable_Ch07, CF_Enable_Ch08 : Parameter = 0.0
    CF_Enable_Ch09, CF_Enable_Ch10, CF_Enable_Ch11, CF_Enable_Ch12 : Parameter = 0.0
    CF_Enable_Ch13, CF_Enable_Ch14, CF_Enable_Ch15, CF_Enable_Ch16 : Parameter = 0.0
 
-   // --- DEDICATED CROSSFADER (Index 32) ---
    Crossfader_Master : Parameter = 0.5
-
-   // --- NEU: SICHERHEITS-SCHALTER (Index 33 - Sicher am Ende!) ---
-   // 1.0 = Alte Logik (Yamaha Asymmetrie 0-100)
-   // 0.0 = Neue Logik (Full Range 0-127)
    Asymmetric_Mode : Parameter = 0.0
-
-   // --- CONFIG ---
-   TargetCC : Integer = 7 
-   ExpressionCC : Integer = 11
-   
-   // --- STATE ---
-   LastSentVal_Vol : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
-   LastSentVal_Exp : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
-
-   // --- ANTI-ECHO BLOCKER ---
-   EchoBlockTimer : Double Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-
-// ------------------------------------------------------------------
-// 1. DEDICATED CROSSFADER LOGIC (GP -> GENOS EXPRESSION CC11)
-// ------------------------------------------------------------------
-On ParameterValueChanged matching Crossfader_Master
-   var i, expValToSend : Integer
-   var shouldSendExp : Boolean
-   var cfVal : Double = 0.0
-
-   cfVal = Crossfader_Master
-   expValToSend = Round((cfVal * cfVal) * 127.0) // Expression bleibt immer 0-127
-
-   For i = 1; i <= 16; i = i + 1 Do
-      shouldSendExp = false
-      Select
-          i == 1  Do if CF_Enable_Ch01 > 0.5 then shouldSendExp = true end
-          i == 2  Do if CF_Enable_Ch02 > 0.5 then shouldSendExp = true end
-          i == 3  Do if CF_Enable_Ch03 > 0.5 then shouldSendExp = true end
-          i == 4  Do if CF_Enable_Ch04 > 0.5 then shouldSendExp = true end
-          i == 5  Do if CF_Enable_Ch05 > 0.5 then shouldSendExp = true end
-          i == 6  Do if CF_Enable_Ch06 > 0.5 then shouldSendExp = true end
-          i == 7  Do if CF_Enable_Ch07 > 0.5 then shouldSendExp = true end
-          i == 8  Do if CF_Enable_Ch08 > 0.5 then shouldSendExp = true end
-          i == 9  Do if CF_Enable_Ch09 > 0.5 then shouldSendExp = true end
-          i == 10 Do if CF_Enable_Ch10 > 0.5 then shouldSendExp = true end
-          i == 11 Do if CF_Enable_Ch11 > 0.5 then shouldSendExp = true end
-          i == 12 Do if CF_Enable_Ch12 > 0.5 then shouldSendExp = true end
-          i == 13 Do if CF_Enable_Ch13 > 0.5 then shouldSendExp = true end
-          i == 14 Do if CF_Enable_Ch14 > 0.5 then shouldSendExp = true end
-          i == 15 Do if CF_Enable_Ch15 > 0.5 then shouldSendExp = true end
-          i == 16 Do if CF_Enable_Ch16 > 0.5 then shouldSendExp = true end
-      End
-      
-      If shouldSendExp Then
-          if LastSentVal_Exp[i] != expValToSend then
-              SendNow(MakeMidiMessage3(176 + (i - 1), ExpressionCC, expValToSend))
-              LastSentVal_Exp[i] = expValToSend
-          end
-      End
-   End
-End
-
-// ------------------------------------------------------------------
-// 2. VOLUME SEND LOGIC (GP -> GENOS VOLUME CC7)
-// ------------------------------------------------------------------
-Function SendGenosFeedback(val : Double, ch : Integer)
-   var midiValToSend : Integer
-   var performSend : Boolean = true
-
-   if TimeSinceStartup() < EchoBlockTimer[ch] then performSend = false end
-
-   // --- DER NEUE WEICHENSTELLER (OUT) ---
-   if Asymmetric_Mode > 0.5 then
-       // ALTE LOGIK: Yamaha Asymmetric Scaling (0-100)
-       midiValToSend = Round(val * 100.0)
-       if midiValToSend > 100 then midiValToSend = 100 end 
-   else
-       // NEUE LOGIK: Full Range (0-127)
-       midiValToSend = Round(val * 127.0)
-       if midiValToSend > 127 then midiValToSend = 127 end 
-   end
-   
-   if performSend then
-      if ch >= 1 and ch <= 16 then
-         if LastSentVal_Vol[ch] == midiValToSend then performSend = false end
-      end
-   end
-
-   If performSend Then
-      SendNow(MakeMidiMessage3(176 + (ch - 1), TargetCC, midiValToSend))
-      if ch >= 1 and ch <= 16 then LastSentVal_Vol[ch] = midiValToSend end
-   End
-End
-
-On ParameterValueChanged matching Genos_Vol_Ch01 SendGenosFeedback(Genos_Vol_Ch01, 1) End
-On ParameterValueChanged matching Genos_Vol_Ch02 SendGenosFeedback(Genos_Vol_Ch02, 2) End
-On ParameterValueChanged matching Genos_Vol_Ch03 SendGenosFeedback(Genos_Vol_Ch03, 3) End
-On ParameterValueChanged matching Genos_Vol_Ch04 SendGenosFeedback(Genos_Vol_Ch04, 4) End
-On ParameterValueChanged matching Genos_Vol_Ch05 SendGenosFeedback(Genos_Vol_Ch05, 5) End
-On ParameterValueChanged matching Genos_Vol_Ch06 SendGenosFeedback(Genos_Vol_Ch06, 6) End
-On ParameterValueChanged matching Genos_Vol_Ch07 SendGenosFeedback(Genos_Vol_Ch07, 7) End
-On ParameterValueChanged matching Genos_Vol_Ch08 SendGenosFeedback(Genos_Vol_Ch08, 8) End
-On ParameterValueChanged matching Genos_Vol_Ch09 SendGenosFeedback(Genos_Vol_Ch09, 9) End
-On ParameterValueChanged matching Genos_Vol_Ch10 SendGenosFeedback(Genos_Vol_Ch10, 10) End
-On ParameterValueChanged matching Genos_Vol_Ch11 SendGenosFeedback(Genos_Vol_Ch11, 11) End
-On ParameterValueChanged matching Genos_Vol_Ch12 SendGenosFeedback(Genos_Vol_Ch12, 12) End
-On ParameterValueChanged matching Genos_Vol_Ch13 SendGenosFeedback(Genos_Vol_Ch13, 13) End
-On ParameterValueChanged matching Genos_Vol_Ch14 SendGenosFeedback(Genos_Vol_Ch14, 14) End
-On ParameterValueChanged matching Genos_Vol_Ch15 SendGenosFeedback(Genos_Vol_Ch15, 15) End
-On ParameterValueChanged matching Genos_Vol_Ch16 SendGenosFeedback(Genos_Vol_Ch16, 16) End
-
-// ------------------------------------------------------------------
-// 3. MIDI INPUT (GENOS -> GP VOLUME)
-// ------------------------------------------------------------------
-On MidiEvent(m : MidiMessage)
-   Var ccMsg : ControlChangeMessage
-   Var ccNum, ch, val : Integer
-   Var scaledVal : Double = 0.0
-   Var passThrough : Boolean = true
-
-   If IsController(m) Then
-      ccMsg = ReinterpretAsControllerMessage(m)
-      ccNum = GetCCNumber(ccMsg)
-      
-      If ccNum == TargetCC Then
-         ch = GetChannel(m)
-         
-         if ch >= 1 and ch <= 16 then 
-            passThrough = false 
-            val = GetCCValue(ccMsg)
-            
-            // --- DER NEUE WEICHENSTELLER (IN) ---
-            if Asymmetric_Mode > 0.5 then
-                // ALTE LOGIK: Yamaha Asymmetric Scaling (0-100 -> 0.0-1.0)
-                if val >= 100 then scaledVal = 1.0 else scaledVal = IntToFloat(val) / 100.0 end
-            else
-                // NEUE LOGIK: Full Range (0-127 -> 0.0-1.0)
-                scaledVal = IntToFloat(val) / 127.0
-            end
-            
-            // 3. ECHO BLOCKER SCHARF STELLEN
-            EchoBlockTimer[ch] = TimeSinceStartup() + 200.0
-            LastSentVal_Vol[ch] = val
-            
-            // 4. PARAMETER SETZEN (Triggert lautlos das Global Skript)
-            Select
-               ch == 1  Do Genos_Vol_Ch01 = scaledVal
-               ch == 2  Do Genos_Vol_Ch02 = scaledVal
-               ch == 3  Do Genos_Vol_Ch03 = scaledVal
-               ch == 4  Do Genos_Vol_Ch04 = scaledVal
-               ch == 5  Do Genos_Vol_Ch05 = scaledVal
-               ch == 6  Do Genos_Vol_Ch06 = scaledVal
-               ch == 7  Do Genos_Vol_Ch07 = scaledVal
-               ch == 8  Do Genos_Vol_Ch08 = scaledVal
-               ch == 9  Do Genos_Vol_Ch09 = scaledVal
-               ch == 10 Do Genos_Vol_Ch10 = scaledVal
-               ch == 11 Do Genos_Vol_Ch11 = scaledVal
-               ch == 12 Do Genos_Vol_Ch12 = scaledVal
-               ch == 13 Do Genos_Vol_Ch13 = scaledVal
-               ch == 14 Do Genos_Vol_Ch14 = scaledVal
-               ch == 15 Do Genos_Vol_Ch15 = scaledVal
-               ch == 16 Do Genos_Vol_Ch16 = scaledVal
-            End
-         end
-      End
-   End
-   
-   // Nur Dinge durchwinken, die KEINE Genos-Fader sind!
-   if passThrough then SendNow(m) end
-End
