@@ -521,7 +521,7 @@ Var
    Anim_Start, Anim_Target, Anim_StartTime, Anim_Duration, Arr_Anim_DurMS,Arr_Anim_Target : Double Array  = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
    Arr_Anim_Bar, Arr_Anim_MacroIdx, Arr_Style_Bar, Arr_Style_ID : Integer Array
    
-   // --- Genos SysEx Mapping ---
+   // --- Arranger SysEx Mapping ---
    Mapping_SysEx, Mapping_GPSong : String Array
    MappingFilePath, LastUnknownSysEx_Trigger : String = "" 
 
@@ -1052,7 +1052,7 @@ Function GetNoteIndex(note : String) Returns Integer
 End
 
 // ---------------------------------------------------------
-// NEW GENOS MAPPING HELPERS
+// ARRANGER MAPPING HELPERS
 // ---------------------------------------------------------
 
 Function HexCharToInt(c : String) Returns Integer
@@ -1892,7 +1892,7 @@ Function TraceHardwarePrediction()
    var hwLabel, assignment, linkInfo : String
    var l : Integer
 
-   Trace("=== PREDICTION: GENOS 2 MACROS (0-127) ===")
+   Trace("=== PREDICTION: ARRANGER MACROS (0-127) ===")
    Trace("Map in RAM: " + CurrentCtrlMapName)
 
    For s = 0; s < 16; s = s + 1 Do
@@ -3366,7 +3366,7 @@ Function SyncArrangerToCurrentMap()
    var i, hwIdx : Integer
    var currentVal : Double = 0.0; var range : Double = 0.0; var faderVal : Double = 0.0
    
-   if DebugMode then Trace("=== START HARD-TRACE: SYNC GENOS TO MAP (" + CurrentCtrlMapName + ") ===") end
+   if DebugMode then Trace("=== START HARD-TRACE: SYNC ARRANGER TO MAP (" + CurrentCtrlMapName + ") ===") end
    
    For i = 0; i < Link_Count; i = i + 1 Do
        if Link_Active[i] then
@@ -5427,7 +5427,7 @@ Function SanitizeAndSlugify(rawName : String) Returns String
         processed = CopySubstring(processed, 0, dotIndex) 
     end
     
-    // 3. REMOVE GENOS ID (.T589, .S038, etc.)
+    // 3. REMOVE ARRANGER ID (.T589, .S038, etc.)
     dotIndex = -1
     for i = 0; i < Length(processed); i=i+1 do
        if CopySubstring(processed, i, 1) == "." then dotIndex = i end
@@ -5454,7 +5454,7 @@ Function SanitizeAndSlugify(rawName : String) Returns String
 End
 
 // ---------------------------------------------------------
-// GENOS MAPPING FILE HANDLER
+// ARRANGER MAPPING FILE HANDLER
 // ---------------------------------------------------------
 
 Function LoadMappingFile()
@@ -5466,7 +5466,7 @@ Function LoadMappingFile()
    if IndexOfSubstring(UserSnapshotPath, "\\", false) > -1 Then sep = "\\" Else sep = "/" End
    MappingFilePath = UserSnapshotPath + sep + "GenosMapping.txt"
    
-   Trace("GENOS FILE DEBUG: Full Path is -> " + MappingFilePath)
+   Trace("ARRANGER FILE DEBUG: Full Path is -> " + MappingFilePath)
    
    Mapping_SysEx = []
    Mapping_GPSong = []
@@ -5484,15 +5484,15 @@ Function LoadMappingFile()
                end
            end
        end
-       Trace("GENOS: Loaded " + Size(Mapping_SysEx) + " mappings.")
+       Trace("ARRANGER: Loaded " + Size(Mapping_SysEx) + " mappings.")
    else
-       Trace("GENOS: File not found. Attempting to create new file...")
-       saved = SaveStringToTextFile(MappingFilePath, "; Genos Mapping File" + NEW_LINE + "; SysEx ; DecodedName ; GPSongName" + NEW_LINE)
+       Trace("ARRANGER: File not found. Attempting to create new file...")
+       saved = SaveStringToTextFile(MappingFilePath, "; Arranger Mapping File" + NEW_LINE + "; SysEx ; DecodedName ; GPSongName" + NEW_LINE)
        
        if saved then 
-           Trace("GENOS: SUCCESS! New file created.")
+           Trace("ARRANGER: SUCCESS! New file created.")
        else
-           Trace("GENOS: ERROR! Could not create file. Check if Folder 'Snapshots' exists!")
+           Trace("ARRANGER: ERROR! Could not create file. Check if Folder 'Snapshots' exists!")
        end
    end
 End
@@ -5513,9 +5513,9 @@ Function AppendToMappingFile(hexCode : String, rawName : String, gpSong : String
    saveOK = SaveStringToTextFile(MappingFilePath, currentContent)
    
    if saveOK then
-       Trace("GENOS: Write Success to file.")
+       Trace("ARRANGER: Write Success to file.")
    else
-       Trace("GENOS: WRITE FAILED! Could not save to: " + MappingFilePath)
+       Trace("ARRANGER: WRITE FAILED! Could not save to: " + MappingFilePath)
    end
 End
 
@@ -5523,7 +5523,7 @@ Function AddNewMapping(hex : String, gpSong : String, rawName : String)
    Mapping_SysEx <-- hex
    Mapping_GPSong <-- gpSong
    AppendToMappingFile(hex, rawName, gpSong)
-   Trace("GENOS: Mapped New -> " + rawName + " = " + gpSong)
+   Trace("ARRANGER: Mapped New -> " + rawName + " = " + gpSong)
 End
 
 // ---------------------------------------------------------
@@ -9104,7 +9104,7 @@ Function DeactivateChannel(chIdx : Integer)
 End
 
 // ----------------------------------------------------------------------
-// --- ARRANGER VOLUME FEEDBACK (absorbed from Genos2_Control scriptlet)
+// --- ARRANGER VOLUME FEEDBACK (absorbed from arranger control scriptlet)
 // ----------------------------------------------------------------------
 
 // Sends a volume CC7 value to the arranger device on the given channel.
@@ -9242,7 +9242,7 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
    elsif matchedMacro == VST_SCOPE_MacroIdx then
        ChangeVstScope(-1, Round(val * (MAX_VSTS - 1)))                
     
-   // --- GENOS MOTORS (Macro 1-16) ---
+   // --- ARRANGER MOTORS (Macro 1-16) ---
    elsif matchedMacro >= 0 and matchedMacro <= 15 then
        SetParameter(ExternalArranger, matchedMacro, val)
          
@@ -9496,7 +9496,7 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
     
     // --- 0: VOICE SELECTOR ---
     if GlobalSystemMode == 0 then 
-        // GENOS JOYSTICK
+        // ARRANGER JOYSTICK
         if actionType == "Y_AXIS" then
             ChangeVstScope(dir, -1)
             ApplyVstFocusBypass() // Surgeon greift sofort ein!
@@ -9524,7 +9524,7 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
         
     // --- 2: CONTROLLER MAP ---
     elsif GlobalSystemMode == 2 then 
-        // GENOS JOYSTICK
+        // ARRANGER JOYSTICK
         if actionType == "Y_AXIS" then
             CycleCtrlMap(dir)
         elsif actionType == "X_AXIS" then
@@ -10476,7 +10476,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
        // 2. Clean all channels and set to system defaults
        For i = 0; i < 16; i = i + 1 Do ResetChannelToStandard(i) End
        
-       // 3. Genos Flags resetten
+       // 3. Reset arranger flags
        For j = 0; j < 16; j = j + 1 Do SetParameter(ExternalArranger, P_ARRANGER_FLAGS_START + j, 0.0) End
        
        fileContent = LoadStringFromTextFile(filePath)
@@ -10845,7 +10845,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
    Else 
        // NO SONG.INI FOUND -> HW ONLY FALLBACK
        IsLoadingSnapshot = true 
-       Trace("SONG LOAD: No Snapshot found! Reverting to Genos-Only Fallback...")
+       Trace("SONG LOAD: No Snapshot found! Reverting to Arranger-Only Fallback...")
        
        For i = 0; i < 256; i = i + 1 Do SetParameter(RECH, i, 0.0) End
        SyncMatrixToScriptlet()
@@ -11165,17 +11165,17 @@ Function EvaluateTransportSync()
     // DIE NEUE EINWEG-SPIEGEL LOGIK
     // ========================================================
 
-    // --- MODUS 0: ISOLATED (GUI darf Genos nicht steuern) ---
+    // --- MODUS 0: ISOLATED (GUI cannot control arranger) ---
     if CurrentSyncMode == 0 then 
         IsPerformanceActive = playing
         if not playing then
 //            EnablePlayhead(false) 
-            Trace("ETS: [OK] ETS: ISOLATED: Genos hat gestartet.")
+            Trace("ETS: [OK] ETS: ISOLATED: Arranger started.")
         else
             Trace("ETS: [OK] ETS: ISOLATED: GP hat gestartet")
         end
     
-    // --- MODUS 1: GENOS LEADS (GUI darf Genos nicht steuern) ---
+    // --- MODE 1: ARRANGER LEADS (GUI cannot control arranger) ---
     elsif CurrentSyncMode == 1 then 
         IsPerformanceActive = playing
         if not isHW then
@@ -11183,20 +11183,20 @@ Function EvaluateTransportSync()
             Trace("ETS: [X] ETS: ARRANGER LEADS: GUI acted illegally! Forcing GP back...")
             IsCorrectingPlayhead = true; EnablePlayhead(not playing) 
         else
-            Trace("ETS: [OK] ETS: GENOS LEADS: Genos Aktion. GP lief nativ mit.")
+            Trace("ETS: [OK] ETS: ARRANGER LEADS: Arranger action. GP was running natively.")
         end
         
-    // --- MODUS 2: GP LEADS (Genos darf GP nicht starten) ---
+    // --- MODUS 2: GP LEADS (Arranger cannot start GP) ---
     elsif CurrentSyncMode == 2 then 
         IsPerformanceActive = playing
         if not isHW then
-            Trace("ETS: [OK] GP LEADS: GUI Aktion. Sende Befehl an Genos...")
+            Trace("ETS: [OK] GP LEADS: GUI action. Sending command to arranger...")
             SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
             StyleTriggerResetTimer = TimeSinceStartup() + 60.0
             LastHardwarePulseTime = TimeSinceStartup() + 1000.0
         else
-            // VERBOTEN: Genos hat GP nativ gestartet! Wir killen sofort beide!
-            Trace("ETS: [X] GP LEADS: Genos hat illegal gestartet! Stoppe beide...")
+            // FORBIDDEN: Arranger started GP natively! Killing both!
+            Trace("ETS: [X] GP LEADS: Arranger started illegally! Stopping both...")
             IsCorrectingPlayhead = true; EnablePlayhead(false)
             SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
             StyleTriggerResetTimer = TimeSinceStartup() + 60.0
@@ -11207,12 +11207,12 @@ Function EvaluateTransportSync()
         IsPerformanceActive = playing
         if not isHW then
             // It was a pure mouse click! We need to sync the arranger!
-            Trace("ETS: [OK] FULL SYNC: GUI Aktion. Sende Befehl an Genos...")
+            Trace("ETS: [OK] FULL SYNC: GUI action. Sending command to arranger...")
             SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
             StyleTriggerResetTimer = TimeSinceStartup() + 60.0
             
             // IMPORTANT: Set the pulse artificially into the future so that
-            // unvermeidliche Echo des Genos beim Stoppen uns nicht verwirrt!
+            // unavoidable arranger stop echo does not confuse us!
             LastHardwarePulseTime = TimeSinceStartup() + 1000.0
         else
             // It was a hardware click! GP responded natively. Script stays silent.
@@ -11235,7 +11235,7 @@ Function EvaluateTransportSync()
         else
             // On stop, ignore the arranger entirely so GP continues unaffected!
             if isHW then
-                Trace("ETS: [X] INITIAL LATCH: Genos hat gestoppt. Wird ignoriert! Re-Start GP.")
+                Trace("ETS: [X] INITIAL LATCH: Arranger stopped. Ignored! Re-starting GP.")
                 IsCorrectingPlayhead = true; EnablePlayhead(true)
             else
                 IsPerformanceActive = false; UpdateSyncLabel()
@@ -12423,7 +12423,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
            // ---> NEU: LOG-EINTRAG & HUD FEEDBACK (Ausnahme: Scrubber)
            // ==========================================================
            if paramIdx != SCRUB_MacroIdx then
-               if DebugMode then Trace("MACRO-IN: Genos Slider/Knob " + (paramIdx + 1) + " -> " + Round(newVal * 127.0)) end
+               if DebugMode then Trace("MACRO-IN: Arranger Slider/Knob " + (paramIdx + 1) + " -> " + Round(newVal * 127.0)) end
                
                // Schickt den Wert an das HUD (false = Macro, kein direkter CC)
                TriggerMacroFeedback(paramIdx, false, newVal) 
@@ -12518,7 +12518,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerS
         // P_STYLE_HW_START = 29 (Hardware Start Flag vom Scriptlet)
         if paramIdx == 29 and newVal > 0.5 then
             LastHardwarePulseTime = TimeSinceStartup()
-            if DebugMode then Trace(">>> GENOS_STYLE (1&4): Genos Hardware-Start via Scriptlet Flag 29 erkannt! <<<") end
+            if DebugMode then Trace(">>> ARRANGER_STYLE (1&4): Arranger hardware start via scriptlet flag 29 detected! <<<") end
 
             // ---------------------------------------------------
             // BUGFIX: GP LEADS - THE GUARD
@@ -12526,7 +12526,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerS
             // When GP LEADS (2) is active and the GP transport is SLEEPING,
             // but the arranger starts independently, fire an immediate STOP echo!
             if CurrentSyncMode == 2 and IsPlayheadEnabled() == false then
-                Trace("   [X] GENOS_STYLE (2): Genos isoliert gestartet! Abbruch-Echo wird gesendet...")
+                Trace("   [X] ARRANGER_STYLE (2): Arranger started in isolation! Sending abort echo...")
                 SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
                 StyleTriggerResetTimer = TimeSinceStartup() + 60.0
             end
@@ -12539,7 +12539,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerS
             Trace(">>> ARRANGER_STYLE (2&3): HARDWARE START/STOP BUTTON ON ARRANGER PRESSED!")
         
             // Wir toggeln GP. Da der Playhead umschaltet, feuert der SystemEvent (oben) 
-            // und schickt sicherheitshalber das Echo an den Genos. Da er die Taste aber 
+            // und sends a safety echo to the arranger. Da er die Taste aber 
             // was just pressed anyway, so this is harmless!
             IsCorrectingPlayhead = false // Wir wollen, dass der SystemEvent triggert!
             EnablePlayhead(not PendingPlayheadState)
@@ -12552,7 +12552,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerS
     if RecordMode > 0 and newVal > 0.5 then
         
         // System-Pings herausfiltern (Start/Stop, HW-Flags)
-        // P_STYLE_START_STOP = 1, P_STYLE_HW_START = 29, Genos HW Taste = 44
+        // P_STYLE_START_STOP = 1, P_STYLE_HW_START = 29, Arranger HW button = 44
         if paramIdx != 1 and paramIdx != 29 and paramIdx != 44 then
             RecordTimelineEvent("Style", paramIdx)
         end
@@ -12584,8 +12584,13 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
     var cc : Integer = GetCCNumber(m)
     var val : Integer = GetCCValue(m)
 
-    // TODO(HAL): Read joystick CC numbers from control registry
-    if SystemModeActive and (cc == 1 or cc == 16) then
+    // Device 0 joystick: CC1 = Y up, CC16 = Y down
+    // CC16 down-flick toggles SYS-MODE when not in system navigation
+    if cc == 16 and not SystemModeActive then
+        if val > 100 and not Joy_CC16_Fired then
+            Joy_CC16_Fired = true; CycleGlobalSystemMode()
+        elsif val < 20 then Joy_CC16_Fired = false end
+    elsif SystemModeActive and (cc == 1 or cc == 16) then
         if cc == 1 then
             if val > 100 and not Joy_CC1_Fired then
                 Joy_CC1_Fired = true; ProcessSystemNavigation(0, "Y_AXIS", 1)
@@ -12597,7 +12602,7 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
             elsif val < 20 then Joy_CC16_Fired = false end
         end
     else
-        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_0, m) 
+        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_0, m)
     end
 End
 
@@ -12648,7 +12653,7 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0
     // Transport sync: only if this device has the capability
     if DeviceHasCap(0, CAP_TRANSPORT_SYNC) and IsNoteOn(m) and chan >= 9 and chan <= 16 then
         if CurrentSyncMode == 0 and IsPlayheadEnabled() then
-             Trace(">>> ON NOTE: [ISOLATED] GenosStyle hat gestartet (Ch " + chan + ") Stoppe GP")
+             Trace(">>> ON NOTE: [ISOLATED] ArrangerStyle started (Ch " + chan + ") Stoppe GP")
              EnablePlayhead(false)
         elsif CurrentSyncMode == 1 or CurrentSyncMode == 2 or CurrentSyncMode == 3 then
              if StartWatchdogTimer > 0.0 then
@@ -12747,7 +12752,7 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
       AllNotesOff(BLK_MidiIn[k])
    End
    
-   // 3. GENOS SYSEX LOGIK (Bleibt hier, da es nur sendet)
+   // 3. ARRANGER SYSEX LOGIC (stays here, send-only)
    if IgnoreNextSongSwitch == true Then 
       IgnoreNextSongSwitch = false
    Else
@@ -12772,7 +12777,7 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
               end
               // --------------------------------------
 
-              Trace("GENOS: Setup Sent & Ch7 Calibrated for " + currentGPName)
+              Trace("ARRANGER: Setup Sent & Ch7 Calibrated for " + currentGPName)
               LastSysExSentTime = TimeSinceStartup()
               foundMap = true 
           end
@@ -12798,8 +12803,8 @@ End
 On SystemEvent(newValue : Double) Matching PlayheadStateChanged
     var playing : Boolean = (newValue > 0.5)
     var timeSinceHW : Double = 0.0
-    var isHW : Boolean = (timeSinceHW < 800.0) or CurrentTriggerSource == "GENOS"
-    var isGenosPush : Boolean 
+    var isHW : Boolean = (timeSinceHW < 800.0) or CurrentTriggerSource == "ARRANGER"
+    var isArrangerPush : Boolean 
     
     if IsCorrectingPlayhead then
         IsCorrectingPlayhead = false 
@@ -12819,7 +12824,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
             end
 
             // =========================================================
-            // MODUS 1: GENOS LEADS (Timer)
+            // MODE 1: ARRANGER LEADS (Timer)
             // =========================================================          
             if CurrentSyncMode == 1 then
                 PendingPlayheadState = playing
@@ -12829,8 +12834,8 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
                 else
                      // --- STOPP-LOGIK ---
                      timeSinceHW = TimeSinceStartup() - LastHardwarePulseTime
-                     isGenosPush = (timeSinceHW < 250.0 and timeSinceHW >= 0.0)
-                     Trace(">>> [GENOS LEADS]: TRANSPORT: GP STOPP (Genos). Halte Klappe.")
+                     isArrangerPush = (timeSinceHW < 250.0 and timeSinceHW >= 0.0)
+                     Trace(">>> [ARRANGER LEADS]: TRANSPORT: GP STOP (Arranger). Suppressing.")
                      StopWatchdogTimer = 0.0
                 end
                 PlayheadEvalTimer = TimeSinceStartup() + 80.0 
@@ -12861,13 +12866,13 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
                 else
                     // --- STOPP-LOGIK ---
                     timeSinceHW = TimeSinceStartup() - LastHardwarePulseTime
-                    isGenosPush = (timeSinceHW < 250.0 and timeSinceHW >= 0.0)
+                    isArrangerPush = (timeSinceHW < 250.0 and timeSinceHW >= 0.0)
 
-                    if not isGenosPush then
-                        Trace(">>> [FULL SYNC]: TRANSPORT: GP STOPP (GUI). Sende Befehl an Genos...")
+                    if not isArrangerPush then
+                        Trace(">>> [FULL SYNC]: TRANSPORT: GP STOP (GUI). Sending command to arranger...")
                         FireDirectArrangerTransport()
                     else
-                        Trace(">>> [FULL SYNC]: TRANSPORT: GP STOPP (Genos). Kein Befehl an Genos...")
+                        Trace(">>> [FULL SYNC]: TRANSPORT: GP STOP (Arranger). No command to arranger...")
                     end
                     
                     StopWatchdogTimer = TimeSinceStartup() + 2500.0 
@@ -13084,7 +13089,7 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
       byte1 = SM_GetValue(m, 1); byte2 = SM_GetValue(m, 2); byte3 = SM_GetValue(m, 3)
       
       // ---> NEU: DER SYSEX HEARTBEAT <---
-      // 0x43 ist die Hersteller-ID von Yamaha. Jeder Pups vom Genos setzt den Stempel!
+      // 0x43 ist die Hersteller-ID von Yamaha. Every message from the arranger carries this stamp!
       if byte1 == 0x43 then
           LastHardwarePulseTime = TimeSinceStartup()
       end
@@ -13098,7 +13103,7 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
             if microSecs > 0 Then newBPM = 60000000.0 / microSecs; if Abs(GetBPM() - newBPM) > 0.5 Then LastReceivedBPM = newBPM; SetBPM(newBPM) End End
          End
          
-      // 2. GENOS BEFEHLE (SONG SELECT & REG MEMORY)
+      // 2. ARRANGER COMMANDS (SONG SELECT & REG MEMORY)
       Elsif byte1 == 0x43 and byte2 == 0x73 and byte3 == 0x01 and SM_GetValue(m, 4) == 0x52 Then
          byte5 = SM_GetValue(m, 5)
          
@@ -13113,7 +13118,7 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
                    // ---> DIE ERSTE SICHERE WHILE-SCHLEIFE <---
                    While i < Size(Mapping_SysEx) and not foundMatch Do
                       if incomingHex == Mapping_SysEx[i] Then
-                         Trace("GENOS: Known SysEx -> " + Mapping_GPSong[i])
+                         Trace("ARRANGER: Known SysEx -> " + Mapping_GPSong[i])
                          if GetCurrentSongName() != Mapping_GPSong[i] Then
                             IgnoreNextSongSwitch = true; switchOk = SwitchToSongByName_Safe(Mapping_GPSong[i]); Wait(100.0) 
                             currentSongName = GetCurrentSongName(); LoadSongSnapshot(currentSongName, false);
@@ -13124,7 +13129,7 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
                    End
                    
                    if not foundMatch Then
-                       Trace("GENOS: Unknown SysEx. Trying Auto-Match...")
+                       Trace("ARRANGER: Unknown SysEx. Trying auto-match...")
                        regNameDecoded = DecodeDeviceSysExName(incomingHex); regNameSlug = SanitizeAndSlugify(regNameDecoded) 
                        
                        // ---> DIE ZWEITE SICHERE WHILE-SCHLEIFE <---
@@ -13137,7 +13142,7 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
                                elsif Length(gpSongSlug) > 2 and IndexOfSubstring(regNameSlug, gpSongSlug, true) > -1 then foundMatch = true end
                                
                                if foundMatch then
-                                   Trace("GENOS: MATCH! " + regNameDecoded + " -> " + GetSongName(i))
+                                   Trace("ARRANGER: MATCH! " + regNameDecoded + " -> " + GetSongName(i))
                                    AddNewMapping(incomingHex, GetSongName(i), regNameDecoded)
                                    IgnoreNextSongSwitch = true; switchOk = SwitchToSongByIndex(i, 0); Wait(100.0) 
                                    currentSongName = GetCurrentSongName(); LoadSongSnapshot(currentSongName, false)
@@ -13146,7 +13151,7 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
                            i = i + 1
                        End
                    end
-                   if not foundMatch Then Trace("GENOS: Unknown File '" + regNameDecoded + "'. Ignoring."); LastUnknownSysEx_Trigger = "" end
+                   if not foundMatch Then Trace("ARRANGER: Unknown file '" + regNameDecoded + "'. Ignoring."); LastUnknownSysEx_Trigger = "" end
                 End
              End
              
@@ -13157,7 +13162,7 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
                regButtonIndex = SM_GetValue(m, 10) 
                regNumber = regButtonIndex + 1 // Damit wir logische Zahlen von 1 bis 10 haben
                
-               Trace("PROMPTER: Genos sendet RegMem " + regNumber)
+               Trace("PROMPTER: Arranger sends RegMem " + regNumber)
                
                if not InSetlistMode() Then SwitchToSetlistView(); Wait(200.0) End
 
@@ -13361,7 +13366,7 @@ On TimerTick(ms : Double)
             Trace(">>> ECHO SENDER: Bounce blockiert (800ms Schutz aktiv).")
         else
             SyncLockTimer = TimeSinceStartup() + 800.0
-            Trace(">>> ECHO SENDER: Sende START/STOP an Genos2.")
+            Trace(">>> ECHO SENDER: Sending START/STOP to arranger.")
             SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
             StyleTriggerResetTimer = TimeSinceStartup() + 60.0
         end
@@ -13452,7 +13457,7 @@ On TimerTick(ms : Double)
                        end
                        
                        Mem_Loop_State[k_loop] = 5 // ARM REC
-                       if DebugMode then Trace("COUNT-IN FINISHED: Genos/GP gestartet. Looper wartet auf Sync (State 5).") end
+                       if DebugMode then Trace("COUNT-IN FINISHED: Arranger/GP started. Looper waiting for sync (State 5).") end
                        
                    else
                        // HOST SYNC [OFF]: Isoliert starten!
@@ -13688,7 +13693,7 @@ On TimerTick(ms : Double)
         if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
             if StartWatchdogTimer > 0.0 and TimeSinceStartup() > StartWatchdogTimer then
                 StartWatchdogTimer = 0.0
-                Trace(">>> TRANSPORT: Genos ist stumm. Sende Start-Befehl (Note 14)!")
+                Trace(">>> TRANSPORT: Arranger is silent. Sending start command (Note 14)!")
                 FireDirectArrangerTransport()
                 SetParameter(BLK_ArrangerSync, 1, 1.0)
             end
