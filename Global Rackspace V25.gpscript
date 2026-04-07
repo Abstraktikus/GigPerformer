@@ -75,7 +75,7 @@ Var
    // =========================================================================
    // 3. --- HARDWARE ABSTRACTION LAYER (HAL) ---
    // =========================================================================
-   SysModeNames : String Array = ["VOICE SELECTOR", "LOOPER CONTROL", "CONTROLLER MAP"]
+   SysModeNames : String Array = ["VOICE SELECTOR", "LOOPER CONTROL", "CONTROLLER MAP", "STRIP-CONTROL"]
    
    // --- DEVICE 0: GENOS ---
    GENOS_JOY_Y_UP : Integer = 1

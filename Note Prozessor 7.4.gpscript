@@ -1,0 +1,650 @@
+// =========================================================================
+// SCRIPTLET: V7.4 Ultimate Channel Strip
+// Features: Split, Transpose, VelFade, Chord-to-Root, AutoSustain
+// Filters: Explicit MIDI Whitelisting Filter (Sustain, CCs, PB, AT, PC)
+// Engine: Looper Solo Mute & Polyphonic Octave Generator (POG)
+// NEW (V7.4): Velocity Range, Scale Quantizer, Humanizer (Vel & Timing)
+// =========================================================================
+
+Var
+   // --- 1. Routing & Split Parameter ---
+   p_SplitMin  : Parameter 0 .. 127 = 0
+   p_SplitMax  : Parameter 0 .. 127 = 127
+   p_Transpose : Parameter -48 .. 48 = 0
+   
+   // --- 2. THE NEW ROUTING FILTERS (Whitelisting Switches) ---
+   p_PassSustain   : Parameter 0 .. 1 = 0 // CC64 - Default Blocked
+   p_PassPitchBend : Parameter 0 .. 1 = 0 // Pitch Bend - Default Blocked
+   p_PassModWheel  : Parameter 0 .. 1 = 0 // CC1 - Default Blocked
+   p_PassVolume    : Parameter 0 .. 1 = 0 // CC7 - Default Blocked
+   p_PassExpression: Parameter 0 .. 1 = 0 // CC11 - Default Blocked
+   p_PassAfterTouch: Parameter 0 .. 1 = 1 // AT - Default ON
+   p_PassPC        : Parameter 0 .. 1 = 0 // Program Change - Default Blocked
+   
+   // --- 3. Velocity Fade Parameter ---
+   p_MinNote : Parameter 0 .. 127 = 57
+   p_MaxNote : Parameter 0 .. 127 = 103
+   p_FadeIn  : Parameter 0 .. 127 = 10 
+   p_FadeOut : Parameter 0 .. 127 = 10 
+   
+   // --- 4. Chord Detection Parameter ---
+   p_ChordMode    : Parameter 0 .. 1 = 0 
+   p_LatchMode    : Parameter 0 .. 1 = 0 
+   p_Engine       : Parameter 0 .. 1 = 0      // 0 = Fast Math, 1 = Heuristic
+   p_MuteOriginal : Parameter 0 .. 1 = 0      // 1 = Originalnoten stummschalten
+   p_MinKeys      : Parameter 1 .. 5 = 1      // Ab wie vielen Tasten Erkennung starten?
+   p_OctaveOffset : Parameter -3 .. 3 = -1    // Oktavierung der Root-Note
+   
+   // --- 5. AutoSustain Parameter ---
+   p_AutoSustain  : Parameter 0 .. 1 = 0 
+   p_StopSustain  : Parameter 0 .. 1 = 0      // Trigger-Button
+   
+   // --- 6. Mono Mode Parameter 
+   p_MonoLowest  : Parameter 0 .. 1 = 0 
+   p_MonoHighest : Parameter 0 .. 1 = 0 
+   
+   // --- 7. Notes Off & Mutes
+   p_Panic : Parameter 0 .. 1 = 0  
+   p_SoloMute : Parameter 0 .. 1 = 0 
+   p_UserMute : Parameter 0 .. 1 = 0 
+   
+   // --- 8. POLYPHONIC OCTAVE GENERATOR (POG) ---
+   p_Octaver         : Parameter 0 .. 1 = 0   // Master On/Off
+   p_OctLow          : Parameter 0 .. 3 = 0   // Anzahl der Sub-Oktaven
+   p_OctLowOffset    : Parameter 0 .. 3 = 0   // Start-Gap nach unten (0 = direkt drunter)
+   p_OctaverMuteOrig : Parameter 0 .. 1 = 0   // Kill Dry (Löscht die Ursprungsnote)
+   p_OctHighOffset   : Parameter 0 .. 3 = 0   // Start-Gap nach oben (0 = direkt drüber)
+   p_OctHigh         : Parameter 0 .. 3 = 0   // Anzahl der Upper-Oktaven
+
+   // --- 9. VELOCITY RANGE (NEW) ---
+   p_VelRangeActive  : Parameter 0 .. 1 = 0
+   p_MinVel          : Parameter 0 .. 127 = 0
+   p_MaxVel          : Parameter 0 .. 127 = 127
+
+   // --- 10. HUMANIZER (NEW) ---
+   p_HumanizeActive  : Parameter 0 .. 1 = 0
+   p_HumVelAmount    : Parameter 0 .. 100 = 0 // +/- Abweichung
+   p_HumTimeAmount   : Parameter 0 .. 100 = 0 // Max Delay in ms
+
+   // --- 11. SCALE QUANTIZER (NEW) ---
+   p_QuantizeActive  : Parameter 0 .. 1 = 0
+   p_QuantKey        : Parameter 0 .. 11 = 0  // 0=C, 1=C#, 2=D...
+   p_QuantScale      : Parameter 0 .. 5 = 0   // 0=Major, 1=Minor, 2=MajPenta, 3=MinPenta, 4=Blues, 5=Dorian
+   
+   p_FactoryReset : Parameter 0 .. 1 = 0
+   
+   clrIdx : Integer
+   
+   // Interne State Machine für Mono Mode
+   monoHeldNotes    : Integer Array
+   monoHeldVels     : Integer Array // Merkt sich die Velocity der Noten
+   lastMonoSentNote : Integer = -1
+
+   // --- Interne State Machine ---
+   heldNotes       : Integer Array 
+   lastSentRoot    : Integer = -1  
+   Sustainer       : AutoSustainer 
+   ActiveNoteTrack : Integer Array // Verhindert Hänger beim Ändern von Transpose/Quantize!
+
+Initialization
+   var i : Integer
+   For i = 0; i < 128; i = i + 1 Do ActiveNoteTrack <-- -1 End
+   SetDisplayMessage("V7.4 - Ultimate Strip (VelRange, Quantizer, Humanizer, POG)")
+End
+
+// ---------------------------------------------------------
+// HELPER: EXECUTE PANIC (RAM & MIDI Cleanup)
+// ---------------------------------------------------------
+Function ExecutePanic()
+   var clrIdx : Integer
+   heldNotes = []
+   monoHeldNotes = []
+   monoHeldVels = []
+   lastSentRoot = -1
+   lastMonoSentNote = -1
+   For clrIdx = 0; clrIdx < 128; clrIdx = clrIdx + 1 Do ActiveNoteTrack[clrIdx] = -1 End
+   AutoSustainer_Stop(Sustainer)
+
+   For clrIdx = 1; clrIdx <= 16; clrIdx = clrIdx + 1 Do
+       SendNow(MakeControlChangeMessageEx(123, 0, clrIdx))
+       SendNow(MakeControlChangeMessageEx(64, 0, clrIdx))
+   End
+End
+
+On ParameterValueChanged matching p_StopSustain
+    if Round(p_StopSustain) == 1 then 
+        AutoSustainer_Stop(Sustainer)
+        p_StopSustain = 0 
+    end     
+End
+
+On ParameterValueChanged matching p_Panic
+   if Round(p_Panic) == 1 then
+       ExecutePanic()
+       p_Panic = 0 
+   end
+End
+
+On ParameterValueChanged matching p_SoloMute, p_UserMute
+   if Round(p_SoloMute) == 1 or Round(p_UserMute) == 1 then ExecutePanic() end
+End
+
+// Hänger-Vermeidung: Wenn man aktiv am Pitch oder Quantizer schraubt
+On ParameterValueChanged matching p_Octaver, p_OctLow, p_OctLowOffset, p_OctHigh, p_OctHighOffset, p_OctaverMuteOrig, p_QuantizeActive, p_QuantKey, p_QuantScale
+   ExecutePanic()
+End
+
+
+// ---------------------------------------------------------
+// FACTORY RESET (Wird vom Global Rackspace beim Booten aufgerufen)
+// ---------------------------------------------------------
+On ParameterValueChanged matching p_FactoryReset
+   if Round(p_FactoryReset) == 1 then
+      p_SplitMin = 0; p_SplitMax = 127; p_Transpose = 0
+      p_PassSustain = 0; p_PassPitchBend = 0; p_PassModWheel = 0; p_PassVolume = 0; p_PassExpression = 0; p_PassAfterTouch = 1; p_PassPC = 0
+      p_MinNote = 0; p_MaxNote = 127; p_FadeIn = 0; p_FadeOut = 0
+      p_ChordMode = 0; p_LatchMode = 0; p_Engine = 0; p_MuteOriginal = 0; p_MinKeys = 1; p_OctaveOffset = 0 
+      p_AutoSustain = 0; p_MonoLowest = 0; p_MonoHighest = 0
+      p_SoloMute = 0; p_UserMute = 0
+      
+      // POG Reset
+      p_Octaver = 0; p_OctLow = 0; p_OctLowOffset = 0; p_OctaverMuteOrig = 0; p_OctHighOffset = 0; p_OctHigh = 0
+      
+      // NEW V7.4 Reset
+      p_VelRangeActive = 0; p_MinVel = 0; p_MaxVel = 127
+      p_HumanizeActive = 0; p_HumVelAmount = 0; p_HumTimeAmount = 0
+      p_QuantizeActive = 0; p_QuantKey = 0; p_QuantScale = 0
+      
+      ExecutePanic()
+      p_FactoryReset = 0
+   end
+End
+
+
+// ---------------------------------------------------------
+// NEW: SCALE QUANTIZER MATH
+// ---------------------------------------------------------
+Function IsInScale(notePc : Integer, scaleType : Integer) Returns Boolean
+   var res : Boolean = false
+   Select
+      scaleType == 0 Do // Major
+         if notePc==0 or notePc==2 or notePc==4 or notePc==5 or notePc==7 or notePc==9 or notePc==11 then res = true end
+      scaleType == 1 Do // Minor
+         if notePc==0 or notePc==2 or notePc==3 or notePc==5 or notePc==7 or notePc==8 or notePc==10 then res = true end
+      scaleType == 2 Do // Major Pentatonic
+         if notePc==0 or notePc==2 or notePc==4 or notePc==7 or notePc==9 then res = true end
+      scaleType == 3 Do // Minor Pentatonic
+         if notePc==0 or notePc==3 or notePc==5 or notePc==7 or notePc==10 then res = true end
+      scaleType == 4 Do // Blues
+         if notePc==0 or notePc==3 or notePc==5 or notePc==6 or notePc==7 or notePc==10 then res = true end
+      scaleType == 5 Do // Dorian
+         if notePc==0 or notePc==2 or notePc==3 or notePc==5 or notePc==7 or notePc==9 or notePc==10 then res = true end
+   End
+   result = res
+End
+
+Function GetQuantizedNote(note : Integer, rootKey : Integer, scaleType : Integer) Returns Integer
+   var pc, testNote, shift : Integer
+   var found : Boolean = false
+   
+   pc = (note - rootKey) % 12
+   if pc < 0 then pc = pc + 12 end
+   
+   if IsInScale(pc, scaleType) then
+       result = note
+   else
+       shift = 1
+       // Sucht den nächsten Nachbarn bis zu +/- 2 Halbtöne (reicht für unsere Skalen)
+       While shift <= 2 and not found Do
+           // 1. Suche nach Oben
+           testNote = note + shift
+           pc = (testNote - rootKey) % 12
+           if pc < 0 then pc = pc + 12 end
+           if IsInScale(pc, scaleType) then result = testNote; found = true end
+           
+           // 2. Suche nach Unten (wenn oben nichts war)
+           if not found then
+               testNote = note - shift
+               pc = (testNote - rootKey) % 12
+               if pc < 0 then pc = pc + 12 end
+               if IsInScale(pc, scaleType) then result = testNote; found = true end
+           end
+           shift = shift + 1
+       End
+       if not found then result = note end // Fallback (Passiert faktisch nie)
+   end
+End
+
+
+// ---------------------------------------------------------
+// NEW: THE HUMANIZER MATH
+// ---------------------------------------------------------
+Function GetHumanizedVelocity(vel : Integer, amount : Double) Returns Integer
+   var dev : Integer = Round(amount)
+   var offset, res : Integer
+   res = vel
+   if dev > 0 then
+       offset = Round(Random() * IntToFloat(dev * 2)) - dev
+       res = vel + offset
+       if res < 1 then res = 1 elsif res > 127 then res = 127 end
+   end
+   result = res
+End
+
+Function GetHumanizedDelay(amount : Double) Returns Double
+   var res : Double = 0.0
+   if amount > 0.0 then res = Random() * amount end
+   result = res
+End
+
+
+// ---------------------------------------------------------
+// THE OCTAVER ENGINE (The Note Multiplier & Timing Emitter)
+// ---------------------------------------------------------
+Function PlayOutNote(note : Integer, vel : Integer, chan : Integer)
+   var i, k, cloneNote : Integer
+   var msg : NoteMessage
+   var delayMS : Double = 0.0
+   
+   if Round(p_HumanizeActive) == 1 then delayMS = GetHumanizedDelay(p_HumTimeAmount) end
+   
+   if Round(p_Octaver) == 1 then
+       // 1. Original Note
+       if Round(p_OctaverMuteOrig) == 0 then
+           msg = MakeNoteMessageEx(note, vel, chan)
+           if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg) 
+           else if delayMS > 0.0 then SendLater(msg, delayMS) else SendNow(msg) end end
+       end
+       
+       // 2. Lower Octaves
+       k = Round(p_OctLow)
+       if k > 0 then
+           for i = 1; i <= k; i = i + 1 do
+               cloneNote = note - ((Round(p_OctLowOffset) + i) * 12)
+               if cloneNote >= 0 and cloneNote <= 127 then
+                   // Subtiler Humanizer: Die Oktaven wackeln alle GANZ LEICHT gegeneinander (fettes Strumming!)
+                   if Round(p_HumanizeActive) == 1 then delayMS = GetHumanizedDelay(p_HumTimeAmount) end
+                   msg = MakeNoteMessageEx(cloneNote, vel, chan)
+                   if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg) 
+                   else if delayMS > 0.0 then SendLater(msg, delayMS) else SendNow(msg) end end
+               end
+           end
+       end
+       
+       // 3. Higher Octaves
+       k = Round(p_OctHigh)
+       if k > 0 then
+           for i = 1; i <= k; i = i + 1 do
+               cloneNote = note + ((Round(p_OctHighOffset) + i) * 12)
+               if cloneNote >= 0 and cloneNote <= 127 then
+                   if Round(p_HumanizeActive) == 1 then delayMS = GetHumanizedDelay(p_HumTimeAmount) end
+                   msg = MakeNoteMessageEx(cloneNote, vel, chan)
+                   if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg) 
+                   else if delayMS > 0.0 then SendLater(msg, delayMS) else SendNow(msg) end end
+               end
+           end
+       end
+   else
+       // Octaver ist AUS -> Normales Verhalten
+       msg = MakeNoteMessageEx(note, vel, chan)
+       if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg) 
+       else if delayMS > 0.0 then SendLater(msg, delayMS) else SendNow(msg) end end
+   end
+End
+
+Function StopOutNote(note : Integer, chan : Integer)
+   var i, k, cloneNote : Integer
+   var msg : NoteMessage
+   var delayMS : Double = 0.0
+   
+   if Round(p_HumanizeActive) == 1 then delayMS = GetHumanizedDelay(p_HumTimeAmount) end
+   
+   if Round(p_Octaver) == 1 then
+       if Round(p_OctaverMuteOrig) == 0 then
+           msg = MakeNoteMessageEx(note, 0, chan)
+           if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg) 
+           else if delayMS > 0.0 then SendLater(msg, delayMS) else SendNow(msg) end end
+       end
+       
+       k = Round(p_OctLow)
+       if k > 0 then
+           for i = 1; i <= k; i = i + 1 do
+               cloneNote = note - ((Round(p_OctLowOffset) + i) * 12)
+               if cloneNote >= 0 and cloneNote <= 127 then
+                   if Round(p_HumanizeActive) == 1 then delayMS = GetHumanizedDelay(p_HumTimeAmount) end
+                   msg = MakeNoteMessageEx(cloneNote, 0, chan)
+                   if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg) 
+                   else if delayMS > 0.0 then SendLater(msg, delayMS) else SendNow(msg) end end
+               end
+           end
+       end
+       
+       k = Round(p_OctHigh)
+       if k > 0 then
+           for i = 1; i <= k; i = i + 1 do
+               cloneNote = note + ((Round(p_OctHighOffset) + i) * 12)
+               if cloneNote >= 0 and cloneNote <= 127 then
+                   if Round(p_HumanizeActive) == 1 then delayMS = GetHumanizedDelay(p_HumTimeAmount) end
+                   msg = MakeNoteMessageEx(cloneNote, 0, chan)
+                   if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg) 
+                   else if delayMS > 0.0 then SendLater(msg, delayMS) else SendNow(msg) end end
+               end
+           end
+       end
+   else
+       msg = MakeNoteMessageEx(note, 0, chan)
+       if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg) 
+       else if delayMS > 0.0 then SendLater(msg, delayMS) else SendNow(msg) end end
+   end
+End
+
+
+// ---------------------------------------------------------
+// DATA PROCESSING (Math, Logic, Roots)
+// ---------------------------------------------------------
+Function GetScaledVelocity(note : Integer, vel : Integer) Returns Integer
+   var minN, maxN, distFromStart, distFromEnd : Integer
+   var fIn, fOut, factor : Double = 0.0
+   var calcResult : Integer = vel
+   
+   minN = Round(p_MinNote); maxN = Round(p_MaxNote)
+   fIn  = p_FadeIn; fOut = p_FadeOut; factor = 1.0
+   
+   if note >= minN and note <= maxN then
+      if fIn > 0.0 and note < (minN + fIn) then
+         distFromStart = note - minN
+         factor = (IntToFloat(distFromStart) + 1.0) / (fIn + 1.0)
+      elsif fOut > 0.0 and note > (maxN - fOut) then
+         distFromEnd = maxN - note
+         factor = (IntToFloat(distFromEnd) + 1.0) / (fOut + 1.0)
+      end
+      calcResult = Round(IntToFloat(vel) * factor)
+   end
+   result = calcResult
+End
+
+Function AddHeldNote(note : Integer)
+    var i : Integer; var found : Boolean = false
+    for i = 0; i < Size(heldNotes); i = i + 1 do if heldNotes[i] == note then found = true end end
+    if not found then heldNotes[Size(heldNotes)] = note end
+End
+
+Function RemoveHeldNote(note : Integer)
+    var i : Integer; var tempArr : Integer Array
+    for i = 0; i < Size(heldNotes); i = i + 1 do if heldNotes[i] != note then tempArr[Size(tempArr)] = heldNotes[i] end end
+    heldNotes = tempArr
+End
+
+Function CalculateRootMath(lowestNote : Integer) Returns Integer
+    var i, j, temp, pc, nextPc, interval : Integer
+    var pitchClasses, uniquePCs : Integer Array
+    var rootPC : Integer = -1; var rootMidi : Integer = lowestNote 
+    
+    for i = 0; i < Size(heldNotes); i = i + 1 do pitchClasses[Size(pitchClasses)] = heldNotes[i] % 12 end
+    if Size(pitchClasses) > 1 then
+        for i = 0; i < Size(pitchClasses) - 1; i = i + 1 do
+            for j = 0; j < Size(pitchClasses) - i - 1; j = j + 1 do
+                if pitchClasses[j] > pitchClasses[j+1] then
+                    temp = pitchClasses[j]; pitchClasses[j] = pitchClasses[j+1]; pitchClasses[j+1] = temp
+                end
+            end
+        end
+    end
+    if Size(pitchClasses) > 0 then
+        uniquePCs[Size(uniquePCs)] = pitchClasses[0]
+        for i = 1; i < Size(pitchClasses); i = i + 1 do
+            if pitchClasses[i] != pitchClasses[i-1] then uniquePCs[Size(uniquePCs)] = pitchClasses[i] end
+        end
+    end
+    if Size(uniquePCs) >= 2 then
+        for i = 0; i < Size(uniquePCs); i = i + 1 do
+            pc = uniquePCs[i]
+            if i == Size(uniquePCs) - 1 then nextPc = uniquePCs[0] else nextPc = uniquePCs[i+1] end
+            if nextPc > pc then interval = nextPc - pc else interval = (nextPc + 12) - pc end
+            if interval == 5 then rootPC = nextPc end
+        end
+    end
+    if rootPC != -1 then rootMidi = 36 + rootPC else if lowestNote != -1 then rootMidi = 36 + (lowestNote % 12) end end
+    result = rootMidi
+End
+
+Function CalculateRootHeuristics(lowestNote : Integer) Returns Integer
+    var Anzahl : Integer = Size(heldNotes)
+    var umk, i, interval, rootPC, terz, quint, terzAnz, quintAnz, erw : Integer
+    var bestRoot : Integer = lowestNote; var minErw : Integer = 1000
+    var currentRootCandidate, finalResult : Integer = lowestNote
+    
+    if Anzahl == 0 then finalResult = lowestNote
+    elsif Anzahl == 1 then finalResult = 36 + (heldNotes[0] % 12)
+    else
+        for umk = 0; umk < Anzahl; umk = umk + 1 do
+            currentRootCandidate = heldNotes[umk]; rootPC = currentRootCandidate % 12
+            erw = 0; terz = 0; quint = 0; terzAnz = 0; quintAnz = 0
+            
+            for i = 0; i < Anzahl; i = i + 1 do
+                if i != umk then
+                    interval = (heldNotes[i] % 12) - rootPC
+                    if interval < 0 then interval = interval + 12 end
+                    if interval == 3 then
+                        if terz != 3 then terzAnz = terzAnz + 1 end
+                        if terz == 0 then terz = 3 end
+                    elsif interval == 4 then
+                        if terz != 4 then terzAnz = terzAnz + 1 end
+                        if terz == 0 then terz = 4 end
+                    elsif interval == 7 then
+                        if quint != 7 then quintAnz = quintAnz + 1 end
+                        if quint == 0 then quint = 7 end
+                    elsif interval == 2 or interval == 5 or interval == 9 or interval == 10 or interval == 11 or interval == 1 then erw = erw + 1
+                    elsif interval == 6 then
+                        erw = erw + 1
+                        if quint != 6 then quintAnz = quintAnz + 1 end
+                        if quint == 0 then quint = 6 end
+                    elsif interval == 8 then
+                        erw = erw + 1
+                        if quint != 8 then quintAnz = quintAnz + 1 end
+                        if quint == 0 then quint = 8 end
+                    end
+                end
+            end
+            if terz == 3 and quint == 6 then erw = erw - 1 end 
+            if terz == 0 then erw = erw + 1 end                
+            if quint == 0 then erw = erw + 1 end                
+            if quintAnz > 1 or terzAnz > 1 then erw = erw + 1 end 
+            if erw < minErw then minErw = erw; bestRoot = currentRootCandidate end
+        end
+        finalResult = 36 + (bestRoot % 12)
+    end
+    result = finalResult
+End
+
+Function UpdateChordLogic(activeChannel : Integer)
+    var newRoot, finalRoot, lowestNote : Integer = -1
+    var i : Integer
+
+    if Size(heldNotes) > 0 then
+        lowestNote = heldNotes[0]
+        for i = 1; i < Size(heldNotes); i = i + 1 do if heldNotes[i] < lowestNote then lowestNote = heldNotes[i] end end
+    end
+
+    if Size(heldNotes) >= Round(p_MinKeys) then
+        if Round(p_Engine) == 0 then newRoot = CalculateRootMath(lowestNote)
+        else newRoot = CalculateRootHeuristics(lowestNote) end
+    end
+
+    if Size(heldNotes) == 0 or Size(heldNotes) < Round(p_MinKeys) then
+        if Round(p_LatchMode) == 0 and lastSentRoot != -1 then
+            StopOutNote(lastSentRoot, activeChannel)
+            lastSentRoot = -1
+        end
+    else
+        if newRoot != -1 then
+            finalRoot = newRoot + (Round(p_OctaveOffset) * 12)
+            if finalRoot < 0 then finalRoot = 0 end
+            if finalRoot > 127 then finalRoot = 127 end
+            
+            if finalRoot != lastSentRoot then
+                if lastSentRoot != -1 then StopOutNote(lastSentRoot, activeChannel) end
+                PlayOutNote(finalRoot, 100, activeChannel)
+                lastSentRoot = finalRoot
+            end
+        end
+    end
+End
+
+Function AddMonoNote(note : Integer, vel : Integer)
+    var i : Integer; var found : Boolean = false
+    for i = 0; i < Size(monoHeldNotes); i = i + 1 do 
+        if monoHeldNotes[i] == note then found = true; monoHeldVels[i] = vel end 
+    end
+    if not found then 
+        monoHeldNotes[Size(monoHeldNotes)] = note
+        monoHeldVels[Size(monoHeldVels)] = vel
+    end
+End
+
+Function RemoveMonoNote(note : Integer)
+    var i : Integer; var tempNotes, tempVels : Integer Array
+    for i = 0; i < Size(monoHeldNotes); i = i + 1 do 
+        if monoHeldNotes[i] != note then 
+            tempNotes[Size(tempNotes)] = monoHeldNotes[i]
+            tempVels[Size(tempVels)] = monoHeldVels[i]
+        end 
+    end
+    monoHeldNotes = tempNotes
+    monoHeldVels = tempVels
+End
+
+Function ProcessMonoLogic(activeChannel : Integer)
+    var targetNote, targetVel, i : Integer = -1
+    
+    if Size(monoHeldNotes) > 0 then
+        targetNote = monoHeldNotes[0]
+        targetVel = monoHeldVels[0]
+        
+        if Round(p_MonoLowest) == 1 then
+            for i = 1; i < Size(monoHeldNotes); i = i + 1 do 
+                if monoHeldNotes[i] < targetNote then targetNote = monoHeldNotes[i]; targetVel = monoHeldVels[i] end 
+            end
+        elsif Round(p_MonoHighest) == 1 then
+            for i = 1; i < Size(monoHeldNotes); i = i + 1 do 
+                if monoHeldNotes[i] > targetNote then targetNote = monoHeldNotes[i]; targetVel = monoHeldVels[i] end 
+            end
+        end
+    end
+    
+    if lastMonoSentNote != -1 and lastMonoSentNote != targetNote then
+        StopOutNote(lastMonoSentNote, activeChannel)
+        lastMonoSentNote = -1
+    end
+    
+    if targetNote != -1 and lastMonoSentNote != targetNote then
+        PlayOutNote(targetNote, targetVel, activeChannel)
+        lastMonoSentNote = targetNote
+    end
+End
+
+// ---------------------------------------------------------
+// THE MASTER EVENT HANDLER (Die V7.4 Waschstraße)
+// ---------------------------------------------------------
+On MidiEvent(m : MidiMessage)
+   var rawNote, transNote, vel, newVel, chn, status, ccNum : Integer = 0
+
+   // TÜRSTEHER 1: MUTE & SOLO FIREWALL
+   if Round(p_SoloMute) == 1 or Round(p_UserMute) == 1 then
+       // Blockiert!
+   else
+       if IsNoteOn(m) then
+          rawNote = GetByte(m, 1)
+          vel = GetByte(m, 2); chn = GetChannel(m)
+          
+          // TÜRSTEHER 2: KEYBOARD SPLITT (Physische Tasten)
+          if rawNote >= Round(p_SplitMin) and rawNote <= Round(p_SplitMax) then
+             
+             // TÜRSTEHER 3: VELOCITY RANGE (Neu)
+             if Round(p_VelRangeActive) == 1 and (vel < Round(p_MinVel) or vel > Round(p_MaxVel)) then
+                 // Out of Range -> Ignorieren!
+             else
+                 // PHASE 1: VELOCITY FADE
+                 newVel = GetScaledVelocity(rawNote, vel) 
+                 
+                 if newVel > 0 then
+                    // PHASE 2: VELOCITY HUMANIZER (Neu)
+                    if Round(p_HumanizeActive) == 1 then
+                        newVel = GetHumanizedVelocity(newVel, p_HumVelAmount)
+                    end
+                    
+                    // PHASE 3: PITCH & TRANSPOSE
+                    transNote = rawNote + Round(p_Transpose)
+                    
+                    // PHASE 4: SCALE QUANTIZER (Neu)
+                    if Round(p_QuantizeActive) == 1 then
+                        transNote = GetQuantizedNote(transNote, Round(p_QuantKey), Round(p_QuantScale))
+                    end
+                    
+                    if transNote < 0 then transNote = 0 elsif transNote > 127 then transNote = 127 end
+                    
+                    // TRACKING FÜR DAS NOTE OFF EVENT
+                    ActiveNoteTrack[rawNote] = transNote
+                    
+                    // PHASE 5: ENGINE LOGIK (Mono, Chord, POG)
+                    if Round(p_MonoLowest) == 1 or Round(p_MonoHighest) == 1 then
+                        AddMonoNote(transNote, newVel)
+                        ProcessMonoLogic(chn)
+                    else
+                        if Round(p_ChordMode) == 1 then
+                           AddHeldNote(transNote); UpdateChordLogic(chn)
+                           if Round(p_MuteOriginal) == 0 then PlayOutNote(transNote, newVel, chn) end
+                        else 
+                           PlayOutNote(transNote, newVel, chn)
+                        end
+                    end
+                 end
+             end
+          end
+          
+       elsif IsNoteOff(m) then
+          rawNote = GetByte(m, 1)
+          transNote = ActiveNoteTrack[rawNote] // Exakte Note aus dem Gedächtnis abrufen
+          
+          if transNote != -1 then
+             ActiveNoteTrack[rawNote] = -1; chn = GetChannel(m)
+             
+             if Round(p_MonoLowest) == 1 or Round(p_MonoHighest) == 1 then
+                 RemoveMonoNote(transNote)
+                 ProcessMonoLogic(chn)
+             else
+                 if Round(p_ChordMode) == 1 then
+                    RemoveHeldNote(transNote); UpdateChordLogic(chn)
+                    if Round(p_MuteOriginal) == 0 then StopOutNote(transNote, chn) end
+                 else 
+                    StopOutNote(transNote, chn)
+                 end
+             end
+          end
+
+       else
+          // ------------------------------------------
+          // NON-NOTES (Strict Routing Filters)
+          // ------------------------------------------
+          status = GetByte(m, 0)
+          
+          if status >= 176 and status <= 191 then
+             ccNum = GetByte(m, 1)
+             
+             Select 
+                ccNum == 123 Do ExecutePanic(); SendNow(m)
+                ccNum == 64 Do 
+                   if GetByte(m, 2) == 0 then AutoSustainer_Stop(Sustainer); SendNow(m)
+                   else if Round(p_PassSustain) == 1 and Round(p_ChordMode) == 0 then SendNow(m) end end
+                ccNum == 1 Do if Round(p_PassModWheel) == 1 then SendNow(m) end
+                ccNum == 7 Do if Round(p_PassVolume) == 1 then SendNow(m) end
+                ccNum == 11 Do if Round(p_PassExpression) == 1 then SendNow(m) end
+             End
+          
+          elsif status >= 224 and status <= 239 then if Round(p_PassPitchBend) == 1 then SendNow(m) end
+          elsif (status >= 160 and status <= 175) or (status >= 208 and status <= 223) then if Round(p_PassAfterTouch) == 1 then SendNow(m) end
+          elsif status >= 192 and status <= 207 then if Round(p_PassPC) == 1 then SendNow(m) end
+          end
+       end
+   end
+End
