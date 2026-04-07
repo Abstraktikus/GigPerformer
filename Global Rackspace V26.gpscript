@@ -1679,7 +1679,7 @@ Function AreMidiParamsEqual(b1 : MidiInBlock, b2 : MidiInBlock) Returns Boolean
    result = isEqual
 End
 
-// Copies values from A to B (lightning-fast in RAM)
+// Copies values from A to B (efficiently in memory)
 Function CopyPluginParams(src : PluginBlock, dest : PluginBlock)
    var p, count : Integer; count = GetParameterCount(src)
    For p = 0; p < count; p = p + 1 Do SetParameter(dest, p, GetParameter(src, p)) End
@@ -3911,14 +3911,14 @@ Function GetLoopProgressString(ch : Integer) Returns String
         end
         
     else
-        // --- STATE 1, 2, 3: DIE RELATIVE STOPPUHR ---
+        // --- STATE 1, 2, 3: THE RELATIVE STOPWATCH ---
         totalBars = Mem_Loop_Length[ch]
         ticksPerBeat = 960 // GP Standard
 
-        // Die absoluten Ticks seit Songstart
+        // The absolute ticks since song start
         currentTotalTicks = (((CurrentBar - 1) * sigNum) + (CurrentBeat - 1)) * ticksPerBeat + Global_CurrentTick
         
-        // Die absoluten Ticks des gesetzten Ankers
+        // The absolute ticks of the set anchor
         anchorTotalTicks = (((LoopAnchorBar[ch] - 1) * sigNum) + (LoopAnchorBeat[ch] - 1)) * ticksPerBeat + LoopAnchorTick[ch]
         
         diffTicks = currentTotalTicks - anchorTotalTicks
@@ -3942,7 +3942,7 @@ Function GetLoopProgressString(ch : Integer) Returns String
         
         // THE CRITICAL TRACE FOR LEVEL 3:
         if DebugMode then 
-            Trace("LOOP-MATH [Ch" + (ch+1) + "]: GP_Tick=" + currentTotalTicks + " | Anker=" + anchorTotalTicks + " | Diff=" + diffTicks + " -> Display: " + beatString) 
+            Trace("LOOP-MATH [Ch" + (ch+1) + "]: GP_Tick=" + currentTotalTicks + " | Anchor=" + anchorTotalTicks + " | Diff=" + diffTicks + " -> Display: " + beatString) 
         end
     end
     
@@ -4358,10 +4358,10 @@ Function ValidateLooperScopeConfig(testTarget : Integer, testOut : Integer) Retu
       end
    End
    
-   // 2. REGELWERK ANWENDEN
+   // 2. APPLY RULESET
    if scopeCount > 1 then
        // Auto-jump (Target != -1) is strictly forbidden in multi-channel scope!
-       // (Verhindert zerrissene Scopes und Chaos beim Punch-Out)
+       // (Prevents torn scopes and chaos during Punch-Out)
        if testTarget != -1 then isAllowed = false end
        
        // Loop Out = GLOBAL (1) is strictly forbidden in multi-channel scope!
@@ -4478,7 +4478,7 @@ Function CycleLoopOutMode(direction : Integer)
           UpdateInjectionLooperDisplay()
       else
           ShowCtrlOverlay("NOT ALLOWED: GLOBAL OUT CONFLICT", 1500.0)
-          if DebugMode then Trace("LOOPER UI: Multi-Scope blockiert LoopOut=GLOBAL!") end
+          if DebugMode then Trace("LOOPER UI: Multi-Scope blocks LoopOut=GLOBAL!") end
       end
    end
 End
@@ -5711,7 +5711,7 @@ Function LoadControllerMap(mapName : String)
                    sectionContent = remainingContent
                end
                
-               // NOW SPLIT! (lightning-fast since only ~40 lines)
+               // NOW SPLIT! (efficient since only ~40 lines)
                lines = SplitString(sectionContent, NEW_LINE)
                
                // FAST LOOP OVER SHORT BLOCK
@@ -5897,19 +5897,19 @@ Function EvaluateSmartAdapt()
     // 1. GUARD: Is the feature enabled?
     if GetWidgetValue(BTN_SmartAdapt) > 0.5 then
         
-        // 2. WIE VIELE VSTS SIND GERADE WACH? (Die universelle Wahrheit)
+        // 2. HOW MANY VSTS ARE CURRENTLY ACTIVE? (Definitive count)
         activeVSTs = 0
         targetVstIdx = -1
         
         For i = 0; i < MAX_VSTS; i = i + 1 Do
-            // IsPluginBypassed == false bedeutet das VST ist AKTIV/WACH
+            // IsPluginBypassed == false means the VST is ACTIVE (not bypassed)
             if not IsPluginBypassed(BLK_VST[i]) and GetPluginInfo(BLK_VST[i], 0) != "Element" then
                 activeVSTs = activeVSTs + 1
                 targetVstIdx = i
             end
         End
 
-        // 3. ISOLATION ACTIVE: Exactly ONE VST is awake! (regardless of mode)
+        // 3. ISOLATION ACTIVE: Exactly ONE VST is active! (regardless of mode)
         if activeVSTs == 1 then
             targetMap = "Standard_VST" + IntToString(targetVstIdx + 1)
             
@@ -5932,7 +5932,7 @@ Function EvaluateSmartAdapt()
                 MacroFeedbackTimer = TimeSinceStartup() + 2000.0
             end
             
-        // 4. ISOLATION INACTIVE (>1 VST awake or all muted): Revert to previous map!
+        // 4. ISOLATION INACTIVE (>1 VST active or all muted): Revert to previous map!
         else
             if IsAutoSoloMapActive then
                 if PreSoloMapName != "" and PreSoloMapName != CurrentCtrlMapName then
@@ -5965,7 +5965,7 @@ End
 Function CycleCtrlMap(direction : Integer)
     var newIdx : Integer
     
-    // Liste leer? Scan!
+    // List empty? Scan!
     if Size(CtrlMapList) <= 1 then 
         Trace("Cycle: List empty/default. Refreshing...")
         RefreshCtrlMapList() 
@@ -6343,7 +6343,7 @@ Function GetSmartWrapIndex(cLine : String, lLine : String, maxLen : Integer) Ret
             
             // Virtual test weave!
             if GetEffectiveLength(leftC, leftL) <= maxLen then
-                bestIdx = idx // Perfekter Schnitt gefunden! Loop bricht ab.
+                bestIdx = idx // Perfect cut found! Loop breaks.
             end
         end
         
@@ -6533,7 +6533,7 @@ Function WashClipboardText(rawText : String) Returns String
     for i = 0; i < Size(lines); i = i + 1 do
         if firstHeaderIdx == -1 and IsHeaderLine(lines[i]) then
             firstHeaderIdx = i
-            // Check: Ist dieser allererste Titel ein Intro?
+            // Check: Is this very first title an Intro?
             if IndexOfSubstring(lines[i], "[Intro", true) > -1 then
                 isIntroFirst = true
             end
@@ -6979,7 +6979,7 @@ Function ResetHardwareFadersForVST(vstIdx : Integer)
        For i = 0; i < Link_Count; i = i + 1 Do
            if Link_Active[i] and Link_Type[i] == 0 and Link_BlockIdx[i] == vstIdx and Link_IsCC[i] == false then
                
-               s = Link_SourceIdx[i] // Der Hardware Slider Index
+               s = Link_SourceIdx[i] // The hardware slider index
                
                currentVal = GetParameter(BLK_VST[vstIdx], Link_TargetParam[i])
                range = Link_MaxVal[i] - Link_MinVal[i]
@@ -7008,11 +7008,11 @@ Function SendProgramChangeToVst(vstIdx : Integer, direction : Integer)
     
     // Limits (clamp to 0-3000 range)
     if absVal < 0 then absVal = 0 
-    elsif absVal > 3000 then absVal = 3000 end // Passe das Max-Limit an Dein VST an
+    elsif absVal > 3000 then absVal = 3000 end // Adjust the max limit to match your VST
     
     Current_PC_Absolute[vstIdx] = absVal
     
-    // 2. Die magische Mathematik (Umrechnung in Bank und PC)
+    // 2. Bank/PC calculation (conversion to Bank and PC)
     bankLSB = absVal / 128
     pcVal = absVal % 128
     
@@ -7051,7 +7051,7 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
     if Active_VST_Scope >= 0 and Active_VST_Scope < MAX_VSTS then
         loadedName = GetPluginInfo(BLK_VST[Active_VST_Scope], 0)
         
-        // 2. Lookup in der Master-DB
+        // 2. Lookup in the master DB
         // ---> SAFE WHILE-LOOP <---
         i = 0
         While i < Size(DB_VstNames) and not found Do
@@ -7070,7 +7070,7 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
             // --- A: CONTROL VIA PLUGIN PARAMETERS (Arturia, Omnisphere) ---
             if cType == "PARAM" then
                 if direction == 1 and pUp > 0 then
-                    // 1. Sicherheitshalber Nullen (falls Arturia den letzten Off-Befehl verschluckt hat)
+                    // 1. Zero out as a safety measure (in case Arturia swallowed the last Off command)
                     SetParameter(BLK_VST[Active_VST_Scope], pUp, 0.0) 
                     
                     // 2. Force inject
@@ -7079,7 +7079,7 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
                     // 3. Hold significantly longer so heavy VSTs register it!
                     Wait(150.0) 
                     
-                    // 4. Wieder loslassen
+                    // 4. Release again
                     SetParameter(BLK_VST[Active_VST_Scope], pUp, 0.0)
                     feedbackMsg = ">> " + loadedName + " : Next Patch <<"
                     
@@ -7121,7 +7121,7 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
                 if DebugMode then Trace("HUD PUSH: " + feedbackMsg) end
             end
              
-            // ---> FADER SYNC NACH PRESET WECHSEL <---
+            // ---> FADER SYNC AFTER PRESET CHANGE <---
             HardwareSyncTimer = TimeSinceStartup() + 400.0
              
          else
@@ -7134,7 +7134,7 @@ End
 // SAFE VST REPLACER ENGINE & PRESET LOGIC
 // ---------------------------------------------------------
 
-// Holt das perfekte Preset nach deinen 4 Regeln!
+// Fetches the perfect preset according to your 4 rules!
 Function SmartLoadPresetAfterReplace(vstIdx : Integer)
     var presets : String Array = GetGPPresetList(BLK_VST[vstIdx], 0)
     var sName : String = ReplaceString(GetCurrentSongName(), ".ini", "", false)
@@ -7156,7 +7156,7 @@ Function SmartLoadPresetAfterReplace(vstIdx : Integer)
         presetToLoad = "Standard"
     end
     
-    // 4. Laden oder auf "-" belassen
+    // 4. Load or leave at "-"
     if presetToLoad != "-" then
         LoadGPPreset(BLK_VST[vstIdx], presetToLoad)
     end
@@ -7183,7 +7183,7 @@ Function BuildFilteredVstList()
     end
 End
 
-// SYNC BROWSER: Springt beim Slot-Wechsel oder Replace sofort zum korrekten Hersteller!
+// SYNC BROWSER: Jumps to the correct manufacturer immediately on slot change or replace!
 Function SyncBrowserToLoadedPlugin(loadedName : String)
     var i, p : Integer
     var found, pubFound, favFound : Boolean
@@ -7230,12 +7230,12 @@ Function SyncBrowserToLoadedPlugin(loadedName : String)
             i = i + 1 // Don't forget the outer counter!
         End
         
-        // 4. Fallback, falls das Plugin nicht gefunden wurde
+        // 4. Fallback if the plugin was not found
         if not found then
             CurrentPubIndex = 0; BuildFilteredVstList(); CurrentFavIndex = 0
         end
         
-    end // Ende des Sicherheits-Blocks
+    end // End of safety block
 End
 
 // =========================================================
@@ -7246,10 +7246,10 @@ Function FocusBrowserOnCurrentSlot()
     var realSlotIdx : Integer
     var loadedName : String
     
-    // 1. Array-Schutz
+    // 1. Array guard
     if Size(ReplaceableSlots) > 0 then
         
-        // 2. Map-Slot Index absichern
+        // 2. Guard the map-slot index
         if CurrentMapSlotIndex < 0 or CurrentMapSlotIndex >= Size(ReplaceableSlots) then 
             CurrentMapSlotIndex = 0 
         end
@@ -7269,7 +7269,7 @@ Function FocusBrowserOnCurrentSlot()
         IsBrowsingFavorites = false
         IsPresetLocked = false
         
-        // 7. Alles neu zeichnen!
+        // 7. Redraw everything!
         RefreshSafeReplacerUI()
         ScrollToCurrentVST()
     end
@@ -7298,7 +7298,7 @@ Function RebuildBrowserStateAfterReboot()
        // 4. Secure preset memory (fallback against null strings)
        if LoadedPresets[activeSlot] == "" then LoadedPresets[activeSlot] = "-" end
        
-       // 5. Lock aufheben & UI sauber zeichnen
+       // 5. Release lock & draw UI cleanly
        IsBrowsingFavorites = false
        IsPresetLocked = false
        RefreshSafeReplacerUI()
@@ -7307,7 +7307,7 @@ Function RebuildBrowserStateAfterReboot()
 End
 
 // =========================================================
-// 1. JOB IN DIE WARTESCHLANGE EINTRAGEN
+// 1. ADD JOB TO THE QUEUE
 // =========================================================
 Function AddJobToQueue(vstIdx : Integer, targetName : String, targetPath : String, isManualUpdate : Boolean, targetPreset : String)
    var newJob, manualStr : String
@@ -7336,12 +7336,12 @@ End
 
 Function ContinueActualReplace(success : Boolean, slotIdx : Integer, path : String, isManual : Boolean)
     if success then
-        Trace("HARD-FIRE: Ghost hand successful. Starting wake-up for slot " + (slotIdx + 1))
+        Trace("HARD-FIRE: GUI automation successful. Starting activation for slot " + (slotIdx + 1))
     else
-        Trace("HARD-FIRE: TIMEOUT! Ghost hand silent. Attempting wake-up blindly...")
+        Trace("HARD-FIRE: TIMEOUT! GUI automation unresponsive. Attempting activation without confirmation...")
     end
 
-    // Issue the wake-up call
+    // Issue the activation command
     SetPluginBypassed(BLK_VST[slotIdx], false)
     
     // Activate the TimerTick watchdog
@@ -7355,12 +7355,12 @@ Function FireActualReplace(slotIdx : Integer, path : String, isManual : Boolean)
    EmergencyKillSwitch = true
    
    if InSetlistMode() then
-       Trace("HARD-FIRE: Erzwinge Fullscreen via SystemActions...")
+       Trace("HARD-FIRE: Forcing Fullscreen via SystemActions...")
        
-       // Parameter 81 ist "Full Screen" bei den System Actions
+       // Parameter 81 is "Full Screen" in the System Actions
 //       SetParameter(SystemActions, 81, 1.0) 
        
-       // Kurze Pause, damit die Grafik den Fullscreen-Switch verarbeitet
+       // Short pause so the graphics can process the fullscreen switch
        Wait(800.0) 
        
        // Switch to Panels view (forces local focus for the following toggle)
@@ -7395,7 +7395,7 @@ Function TriggerNextQueueJob()
        if Size(parts) == 4 then
            nextIdx = StringToInt(parts[0])
            targetName = parts[1]
-           isManual = (parts[2] == "true") // <--- NEW: Das Flag aus dem Zettel lesen!
+           isManual = (parts[2] == "true") // <--- NEW: Read the flag from the ticket!
            cleanPath = SuperCleanPath(parts[3])
            
            Trace("QUEUE: Firing Replace directly on Slot " + (nextIdx+1) + " -> " + targetName)
@@ -7405,7 +7405,7 @@ Function TriggerNextQueueJob()
            ReplaceTargetName = targetName
            ReplaceTimeoutTimer = TimeSinceStartup() + 3000.0 
            
-           // FIRE! (Jetzt mit allen 3 Argumenten)
+           // FIRE! (Now with all 3 arguments)
            FireActualReplace(nextIdx, cleanPath, isManual)
        else
            GlobalReplaceQueue = "EMPTY"
@@ -7422,7 +7422,7 @@ Function ExecuteVSTReplace(vstIdx : Integer, targetName : String, targetPath : S
    elsif targetPath != "" then
        Trace("REPLACER: Queued VST " + (vstIdx + 1) + " swap to '" + cleanName + "'")
        
-       // NICHT MEHR ReplacePlugin aufrufen, sondern sauber in die Queue schieben!
+       // NO LONGER call ReplacePlugin directly, push cleanly into the queue instead!
        AddJobToQueue(vstIdx, cleanName, targetPath, isManualUpdate, "-")
    end
 End
@@ -7515,7 +7515,7 @@ Function LoadVstDatabase()
 End
 
 // =========================================================
-// ARRAY HEILER (Repariert den toten Pointer nach Replace)
+// ARRAY HEALER (Repairs the dead pointer after Replace)
 // =========================================================
 Function RefreshVstArray(idx : Integer)
    Select
@@ -7568,9 +7568,9 @@ Function ExecuteSmartBypass()
           if GetParameter(RECH, (k * 16) + i) > 0.5 then activeInputs = activeInputs + 1 end
        End
 
-       // --- NEU: KANAL BYPASS LOGIK ---
+       // --- NEW: CHANNEL BYPASS LOGIC ---
        if activeInputs > 0 then
-           // Channel is in use -> wake NoteProcessor!
+           // Channel is in use -> activate NoteProcessor
            if IsPluginBypassed(BLK_NoteProcessor[i]) then SetPluginBypassed(BLK_NoteProcessor[i], false) end
            
            // MULTI-VST CHECK (which VST is connected to this channel?)
@@ -7587,30 +7587,30 @@ Function ExecuteSmartBypass()
        end
    End
 
-   // 2. VSTs schlafen legen oder aufwecken
+   // 2. Bypass or activate VSTs based on routing state
    For i = 0; i < MAX_VSTS; i = i + 1 Do
        
-       // ---> DER ABSOLUTE OVERRIDE <---
+       // ---> THE ABSOLUTE OVERRIDE <---
        if Mem_ManualVSTBypass[i] == true then
-           // VST MUSS schlafen!
+           // VST MUST sleep!
            if IsPluginBypassed(BLK_VST[i]) == false then
                ParkFadersForVST(i)
                SetPluginBypassed(BLK_VST[i], true)
                if DebugMode then Trace("SMART BYPASS: VST " + (i+1) + " FORCED SLEEP (Manual Override).") end
            end
        else
-           // ---> NORMALE SMART LOGIK <---
+           // ---> NORMAL SMART LOGIC <---
            if vstNeeded[i] == true then
                if IsPluginBypassed(BLK_VST[i]) == true then
                    SetPluginBypassed(BLK_VST[i], false)
-                   RestoreFadersForVST(i) // Fader Positionen herstellen
-                   if DebugMode then Trace("SMART BYPASS: VST " + (i+1) + " aufgeweckt.") end
+                   RestoreFadersForVST(i) // Restore fader positions
+                   if DebugMode then Trace("SMART BYPASS: VST " + (i+1) + " woken up.") end
                end
            else
                if IsPluginBypassed(BLK_VST[i]) == false then
-                   ParkFadersForVST(i) // Fader in Sicherheit bringen
+                   ParkFadersForVST(i) // Stash faders to safety
                    SetPluginBypassed(BLK_VST[i], true)
-                   if DebugMode then Trace("SMART BYPASS: VST " + (i+1) + " schlafen gelegt.") end
+                   if DebugMode then Trace("SMART BYPASS: VST " + (i+1) + " bypassed.") end
                end
            end
        end
@@ -7695,7 +7695,7 @@ Function AnalyzeChannel(chIdx : Integer) Returns Integer
    var tagString, suffixString : String 
    var chName : String = "Ch" + (chIdx + 1)
    
-   // 1. ROUTING CHECK (Eingehende Verbindungen)
+   // 1. ROUTING CHECK (Incoming connections)
    activeInputs = 0
    For p = 0; p < 16; p = p + 1 Do
       if GetParameter(RECH, (p * 16) + chIdx) > 0.5 then activeInputs = activeInputs + 1 end
@@ -7720,14 +7720,14 @@ Function AnalyzeChannel(chIdx : Integer) Returns Integer
    if isFact_Total then tagString = tagString + "FACT" elsif isUser_Total then tagString = tagString + "STD" else tagString = tagString + "CUST" end
    tagString = tagString + "]"
    
-   // --- FARB-LOGIK ---
+   // --- COLOR LOGIC ---
    if activeInputs > 1 then colorCode = 2 
    elsif activeInputs == 0 and isCustom_Total then colorCode = 4; suffixString = " (Unused Edits)" 
    elsif activeInputs == 0 then colorCode = 0
    elsif activeInputs == 1 and isCustom_Total then colorCode = 3 
    else colorCode = 1 end
    
-   // --- NOTE PROCESSOR TAGS BAUEN (Direkt aus dem Plugin!) ---
+   // --- BUILD NOTE PROCESSOR TAGS (Directly from the plugin!) ---
    if GetParameter(BLK_NoteProcessor[chIdx], 14) > 0.5 then // p_ChordMode
       suffixString = suffixString + " [Root"
       if GetParameter(BLK_NoteProcessor[chIdx], 16) > 0.5 then suffixString = suffixString + "(H)]" else suffixString = suffixString + "]" end // Engine
@@ -7785,13 +7785,13 @@ Function UpdateMetaColors()
    OutputSyncTimer = TimeSinceStartup() + 150.0
    
    For i = 0; i < 16; i = i + 1 Do
-      // ... (Auto-Healer bleibt) ...
+      // ... (Auto-Healer stays) ...
       colorCode = AnalyzeChannel(i)
       SetChannelState(i, colorCode)
    End
     
    RefreshDiagDisplay()  
-   // ---> HIER WURDE ExecuteSmartBypass() ENTFERNT! <---
+   // ---> ExecuteSmartBypass() WAS REMOVED HERE! <---
    
    if healed then 
        UpdateInjectionLooperDisplay() 
@@ -8017,7 +8017,7 @@ Function CycleChannelScope(direction : Integer)
    // Fallback if (theoretically) no channel was in scope
    if currentIdx == -1 then currentIdx = 0 end
    
-   // Weiterschalten mit Endlosschleife
+   // Advance with wrap-around
    currentIdx = currentIdx + direction
    if currentIdx > 15 then currentIdx = 0
    elsif currentIdx < 0 then currentIdx = 15 end
@@ -8026,7 +8026,7 @@ Function CycleChannelScope(direction : Integer)
    For i = 0; i < 16; i = i + 1 Do OutputScope[i] = false End
    OutputScope[currentIdx] = true
    
-   // UI komplett aktualisieren
+   // Update UI completely
    UpdateMetaColors()
    SyncInputFeedback()
    UpdateUsageLabelDisplay()
@@ -8042,9 +8042,9 @@ End
 // ---------------------------------------------------------
 // VELOCITY FADE & SPLIT LOGIC (NEW SCRIPTLET MAPPING)
 // ---------------------------------------------------------
-// Richtungs-Enum: 1 = Up, -1 = Down, 0 = Refresh
+// Direction enum: 1 = Up, -1 = Down, 0 = Refresh
 // Type: 0=FadeIn, 1=FadeOut, 2=MinNote, 3=MaxNote
-// DirectVal: -1.0 = Benutze Inkrement, >= 0.0 = Setze Wert direkt
+// DirectVal: -1.0 = Use increment, >= 0.0 = Set value directly
 
 Function UpdateChannelFade(chIdx : Integer, type : Integer, direction : Integer, directVal : Double)
    var minN, maxN, range, currentIn, currentOut, val : Integer
@@ -8122,7 +8122,7 @@ Function SyncKBSplitWatchdog()
    If not IsLoadingSnapshot Then
       
       For i = 0; i < 16; i = i + 1 Do
-         // 1. Echte Werte aus dem Plugin lesen
+         // 1. Read actual values from the plugin
          pMin = GetParameter(BLK_MidiIn[i], 16)
          pMax = GetParameter(BLK_MidiIn[i], 17)
          
@@ -8146,10 +8146,10 @@ End
 // ============================================================================
 
 // ---------------------------------------------------------
-// THE MAGIC EAR (MIDI LEARN LISTENER)
+// MIDI LEARN LISTENER
 // ---------------------------------------------------------
 
-// 1. Die Intelligenz: Hier passiert die eigentliche Arbeit
+// 1. The brain: This is where the actual work happens
 Function ProcessMidiLearn(m : NoteMessage)
    var noteNum, pIdx, vel, i : Integer
    var paramVal : Double = 0.0
@@ -8165,10 +8165,10 @@ Function ProcessMidiLearn(m : NoteMessage)
           if OutputScope[i] then
              
              if IsLearningMin then
-                // Parameter 0 ist p_SplitMin in Deinem V7.1 NoteProcessor!
+                // Parameter 0 is p_SplitMin in your V7.1 NoteProcessor!
                 SetParameter(BLK_NoteProcessor[i], 0, paramVal)
              else
-                // Parameter 1 ist p_SplitMax in Deinem V7.1 NoteProcessor!
+                // Parameter 1 is p_SplitMax in your V7.1 NoteProcessor!
                 SetParameter(BLK_NoteProcessor[i], 1, paramVal)
              end
              
@@ -8180,14 +8180,14 @@ Function ProcessMidiLearn(m : NoteMessage)
           end
        End
        
-       // Auto-Off: Learn Modus beenden und Buttons ausschalten
+       // Auto-Off: End learn mode and turn off buttons
        IsLearningMin = false
        IsLearningMax = false
        SetWidgetValue(BTN_LearnMin, 0.0)
        SetWidgetValue(BTN_LearnMax, 0.0)
        
        
-       // UI aktualisieren
+       // Update UI
        UpdateInjectionSplitDisplay()
        UpdateMetaColors() // Split changed, channel may now be [CUST]
        
@@ -8208,12 +8208,12 @@ Function ProcessMidiLearn(m : NoteMessage)
                     pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_MaxVel")
                  end
                  
-                 // Ins Plugin injizieren
+                 // Inject into plugin
                  if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) end
               end
            End
            
-           // Auto-Off: Learn Modus beenden
+           // Auto-Off: End learn mode
            IsLearningVelMin = false
            IsLearningVelMax = false
            SetWidgetValue(BTN_Inject_NP_VelMinLearn, 0.0)
@@ -8332,7 +8332,7 @@ Function SyncRechUI()
     If paramCount < arraySize Then limit = paramCount Else limit = arraySize End
     
     For i = 0; i < limit; i = i + 1 Do
-        // 1. Wir berechnen die Koordinaten aus Sicht des Widget-Arrays (Row-Major)
+        // 1. We calculate the coordinates from the widget array's perspective (Row-Major)
         // i = 0..255. 
         // Row (Input Channel 0-15)
         row = i / 16 
@@ -8343,19 +8343,19 @@ Function SyncRechUI()
         // Target: Column * 16 + Row
         transposedIdx = (col * 16) + row
 
-        // 3. Sicherheitscheck und Zuweisung
+        // 3. Safety check and assignment
         if transposedIdx < paramCount then
             paramVal = GetParameter(RECH, transposedIdx)
             SetWidgetValue(W_RECH_Matrix[i], paramVal)
         end
         
-        // Kleiner Wait, um den GUI Thread nicht zu blockieren (bei 256 Widgets wichtig)
+        // Small wait to avoid blocking the GUI thread (important with 256 widgets)
         Wait(0.5)            
     End
 End
 
 // ---------------------------------------------------------
-// THE VST SURGEON: TEMPORARY FOCUS BYPASS 
+// TEMPORARY FOCUS BYPASS
 // ---------------------------------------------------------
 Function ApplyVstFocusBypass()
     var v, inRow, ch : Integer
@@ -8365,27 +8365,27 @@ Function ApplyVstFocusBypass()
     var toKill : Boolean Array = [false, false, false, false, false, false, false, false, false, false]
     var needsKill : Boolean = false
 
-    if DebugMode then Trace("=== START HARD-TRACE: VST SURGEON ===") end
+    if DebugMode then Trace("=== START HARD-TRACE: FOCUS BYPASS ===") end
 
-    // 1. WAKE UP (only when Focus Mode turns OFF, temporary bypasses are restored)
+    // 1. RESTORE (only when Focus Mode turns OFF, temporary bypasses are restored)
     if GetWidgetValue(BTN_Focus_Mode) < 0.5 or GlobalSystemMode != 0 then
         For v = 0; v < MAX_VSTS; v = v + 1 Do
             if Focus_Temp_Bypassed[v] then
                 SetPluginBypassed(BLK_VST[v], false)
                 Focus_Temp_Bypassed[v] = false
-                if DebugMode then Trace("  -> WAKE UP: VST " + (v+1) + " restored from temporary bypass.") end
+                if DebugMode then Trace("  -> RESTORE: VST " + (v+1) + " restored from temporary bypass.") end
             end
         End
-        if DebugMode then Trace("  -> Surgeon inactive. Focus is OFF.") end
+        if DebugMode then Trace("  -> Focus bypass inactive. Focus is OFF.") end
     
-    // 2. SCHARFSCHALTEN (Focus ist ON)
+    // 2. ARM (Focus is ON)
     else
         if DebugMode then Trace("  -> Focus is ON. Active VST: " + (Active_VST_Scope+1)) end
         
         // First reset temporary markers so we can recalculate them
         For v = 0; v < MAX_VSTS; v = v + 1 Do Focus_Temp_Bypassed[v] = false End
         
-        // A) Welche Hardware-Inputs befeuern unser gerade fokussiertes VST?
+        // A) Which hardware inputs are feeding our currently focused VST?
         traceMsg = "  -> Inputs feeding VST " + (Active_VST_Scope+1) + ":"
         For inRow = 0; inRow < 16; inRow = inRow + 1 Do
             For ch = 0; ch < 16; ch = ch + 1 Do
@@ -8397,9 +8397,9 @@ Function ApplyVstFocusBypass()
         End
         if DebugMode then Trace(traceMsg) end
 
-        // B) Konkurrenz SCANNEN
+        // B) SCAN for competitors
         For v = 0; v < MAX_VSTS; v = v + 1 Do
-            // Nur VSTs checken, die nicht unser Ziel sind und die momentan WACH sind!
+            // Only check VSTs that are not our target and are currently ACTIVE
             if v != Active_VST_Scope and not IsPluginBypassed(BLK_VST[v]) then
                 sharesInput = false
                 traceMsg = "  -> Checking VST " + (v+1) + " (Active). Feeds from:"
@@ -8415,7 +8415,7 @@ Function ApplyVstFocusBypass()
                     end
                 End
 
-                // Konkurrent markieren!
+                // Mark competitor!
                 if sharesInput then
                     if DebugMode then Trace(traceMsg + " ---> CONFLICT! MARKED FOR KILL.") end
                     toKill[v] = true
@@ -8424,7 +8424,7 @@ Function ApplyVstFocusBypass()
             end
         End
         
-        // C) EXEKUTION (Atomar und schnell!)
+        // C) EXECUTION (Atomic and fast!)
         if needsKill then
             For v = 0; v < MAX_VSTS; v = v + 1 Do
                 if toKill[v] then
@@ -8439,18 +8439,18 @@ Function ApplyVstFocusBypass()
             For v = 0; v < MAX_VSTS; v = v + 1 Do
                 if toKill[v] then
                     SetPluginBypassed(BLK_VST[v], true)
-                    Focus_Temp_Bypassed[v] = true // Mark as temporarily killed by the surgeon
+                    Focus_Temp_Bypassed[v] = true // Mark as temporarily bypassed by focus logic
                     if DebugMode then Trace("  -> KILLED: VST " + (v+1) + " bypassed.") end
                 end
             End
         end
     end
     
-    if DebugMode then Trace("=== END HARD-TRACE: VST SURGEON ===") end
+    if DebugMode then Trace("=== END HARD-TRACE: FOCUS BYPASS ===") end
 End
 
 // ---------------------------------------------------------
-// Zwingt den Channel-Scope, dem aktiven VST zu folgen
+// Forces the channel scope to follow the active VST
 // ---------------------------------------------------------
 Function SyncChannelScopeToVst(vstIdx : Integer)
     var i : Integer
@@ -8501,7 +8501,7 @@ Function EvaluateAutoSysMode()
    var i, newMode : Integer
    var looperArmed : Boolean = false
    
-   // Prio 1: Check ob Looper wartet oder aufnimmt (State 1, 3, 5, 6, 8)
+   // Prio 1: Check if looper is waiting or recording (State 1, 3, 5, 6, 8)
    i = 0
    While i < 16 and not looperArmed Do
        if Mem_Loop_State[i] == 1 or Mem_Loop_State[i] == 3 or Mem_Loop_State[i] == 5 or Mem_Loop_State[i] == 6 or Mem_Loop_State[i] == 8 then
@@ -8519,12 +8519,12 @@ Function EvaluateAutoSysMode()
         GlobalSystemMode = newMode
         Trace("SYS-MODE AUTO-SWITCH: Changed to " + SysModeNames[GlobalSystemMode])
         
-        // ---> NEU: WENN WIR IN DEN VOICE SELECTOR WECHSELN <---
+        // ---> NEW: WHEN WE SWITCH TO THE VOICE SELECTOR <---
         if GlobalSystemMode == 0 then
             SyncChannelScopeToVst(Active_VST_Scope)
         end
         
-        // SysEx an MiniLab senden!
+        // Send SysEx to MiniLab!
         if controllerDevIdx >= 0 and IsDeviceConnected(controllerDevIdx) then
             if GlobalSystemMode == 1 then SendDeviceSysEx(controllerDevIdx, "PROFILE_5")
             elsif GlobalSystemMode == 0 then SendDeviceSysEx(controllerDevIdx, "PROFILE_6")
@@ -8547,14 +8547,14 @@ Function UpdateSoloMuteState()
 
    EvaluateAutoSysMode()
    
-   // 1. STATUS SAMMELN & LOOPER REC-CHECK
+   // 1. GATHER STATUS & LOOPER REC-CHECK
    For outCol = 0; outCol < 16; outCol = outCol + 1 Do
-       LooperSoloMute[outCol] = false // Default: Nichts ist gemutet
+       LooperSoloMute[outCol] = false // Default: Nothing is muted
        
        if Mem_SoloStrict[outCol] == 1 then anyStrict = true end
        if Mem_SoloSmart[outCol] == 1 then anySmart = true end
        
-       // Nimmt der Looper im aktuellen Scope gerade auf?
+       // Is the looper in the current scope currently recording?
        if OutputScope[outCol] and (Mem_Loop_State[outCol] == 1 or Mem_Loop_State[outCol] == 3) then
            anyRecInScope = true
        end
@@ -8563,18 +8563,18 @@ Function UpdateSoloMuteState()
    // 2. FOCUS MODE LOGIC (the intelligent context switch - ABSOLUTE BOSS)
    if focusModeVal > 0.5 then
        isFocusArmed = true
-       if DebugMode then Trace("SOLO-MUTE: Focus Mode ist aktiv. Strict/Smart Solo in der Matrix ignoriert.") end
+       if DebugMode then Trace("SOLO-MUTE: Focus Mode is active. Strict/Smart Solo in the matrix ignored.") end
        
-       // --- SZENARIO A: LOOPER MODUS (1) -> Record Focus ---
+       // --- SCENARIO A: LOOPER MODE (1) -> Record Focus ---
        if GlobalSystemMode == 1 and anyRecInScope then
            For outCol = 0; outCol < 16; outCol = outCol + 1 Do
-               // Mute alles, was NICHT im Scope ist und NICHT gerade abspielt
+               // Mute everything that is NOT in scope and NOT currently playing
                if not OutputScope[outCol] and Mem_Loop_State[outCol] != 2 then
                    LooperSoloMute[outCol] = true
                end
            End
            
-       // --- SZENARIO B: VOICE SELECTOR (0) -> VST Jam Focus (Auto-Smart-Solo) ---
+       // --- SCENARIO B: VOICE SELECTOR (0) -> VST Jam Focus (Auto-Smart-Solo) ---
        elsif GlobalSystemMode == 0 then
            For outCol = 0; outCol < 16; outCol = outCol + 1 Do
                // Examine all channels NOT in focus
@@ -8594,19 +8594,19 @@ Function UpdateSoloMuteState()
                        end
                    End
                    
-                   // Wenn Konkurrenz auf demselben Input liegt: Wegmuten!
+                   // If a competitor shares the same input: mute it away!
                    if fedBySameInput then LooperSoloMute[outCol] = true end
                end
            End
        end
 
-   // 3. STRICT MODE (Der Diktator - regiert nur, wenn Focus Mode AUS ist!)
+   // 3. STRICT MODE (Exclusive priority — only active when Focus Mode is OFF)
    elsif anyStrict then
        For outCol = 0; outCol < 16; outCol = outCol + 1 Do
            if Mem_SoloStrict[outCol] == 0 then LooperSoloMute[outCol] = true end
        End
 
-   // 4. MANUELLER SMART MODE (Regiert nur, wenn Focus & Strict AUS sind!)
+   // 4. MANUAL SMART MODE (Only rules when Focus & Strict are OFF!)
    elsif anySmart then
        For outCol = 0; outCol < 16; outCol = outCol + 1 Do
            if Mem_SoloSmart[outCol] == 0 and not LooperSoloMute[outCol] then
@@ -8634,10 +8634,10 @@ Function UpdateSoloMuteState()
        end
    End
    
-   // A) Zuerst weckt der SmartBypass alles auf, was Routings hat
+   // A) First, SmartBypass activates everything that has routings
    ExecuteSmartBypass()
    
-   // B) THEN the surgeon puts interfering VSTs back to sleep
+   // B) THEN focus logic bypasses interfering VSTs
    ApplyVstFocusBypass()
    
    // C) FINALLY SmartAdapt checks the resulting reality and loads the map if needed
@@ -8663,7 +8663,7 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
    if isRecAction then
        For i = 0; i < 16; i = i + 1 Do
            if OutputScope[i] and IsChannelActiveForLooper(i) then
-               // Nutzt unsere bestehende Logik aus Phase 1!
+               // Uses our existing logic from Phase 1!
                if not ValidateLooperScopeConfig(Mem_Loop_Target[i], Mem_Loop_OutMode[i]) then
                    scopeIsValid = false
                end
@@ -8676,7 +8676,7 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
        end
    end
 
-   // Nur weitermachen, wenn der Scope legal ist (oder es nur ein Play/Stop Klick ist)
+   // Only continue if the scope is legal (or it's just a Play/Stop click)
    if scopeIsValid then
    
        // Iterate over ALL 16 channels
@@ -8742,7 +8742,7 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
                           newState = 4 // INSTANT STOPP
                           Trigger_NotesOff(i + 1) 
                       else
-                          newState = 7 // PENDING STOPP (Wartet auf Taktende)
+                          newState = 7 // PENDING STOP (Waiting for bar end)
                       end
                       
                    currentState == 7 Do // User presses again -> EMERGENCY STOP
@@ -8781,7 +8781,7 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
           BuildLooperConfigLines()
           UpdateInjectionLooperTransportUI()
        end
-   end // Ende des scopeIsValid Checks
+   end // End of scopeIsValid check
 End
 
 
@@ -8813,11 +8813,11 @@ Function ChangeVstScope(direction : Integer, directIdx : Integer)
            
            if pName != "Element" and pName != "" and pName != "-" then
                
-               // Case 1: VST is normally awake -> selectable
+               // Case 1: VST is normally active -> selectable
                if not IsPluginBypassed(BLK_VST[newScope]) then
                    foundActive = true
                    
-               // Case 2: Focus trap! VST is asleep (by surgeon),
+               // Case 2: Focus override: VST is bypassed (by focus logic),
                // but has an active cable in the RECH matrix -> selectable
                elsif GetWidgetValue(BTN_Focus_Mode) > 0.5 and GlobalSystemMode == 0 then
                    isRoutActive = false
@@ -8857,7 +8857,7 @@ Function ChangeVstScope(direction : Integer, directIdx : Integer)
    MacroFeedbackTimer = TimeSinceStartup() + 1500.0
    ShowVSTOverlay(">>> SCOPE: " + pName + " <<<", 1500.0)
    
-   // --->  AUTO-SHOW GUI LOGIK <---
+   // --->  AUTO-SHOW GUI LOGIC <---
    if GetWidgetValue(BTN_AutoShow_GUI) > 0.5 then
        if Active_VST_GUI > -1 and Active_VST_GUI != Active_VST_Scope then
            IsUpdatingGUI = true // <--- SCHUTZSCHILD AN
@@ -8950,7 +8950,7 @@ Function CycleChannelUsage(direction : Integer)
        newUsage = UsageCategories[catIdx]
        
        // 4. Apply to ALL selected scope channels
-       // (Hier ist For richtig, da wirklich alle 16 durchsucht werden sollen!)
+       // (For is correct here since we truly need to iterate all 16!)
        For i = 0; i < 16; i = i + 1 Do
           if OutputScope[i] then
              ChannelUsage[i] = newUsage
@@ -8969,7 +8969,7 @@ Function CycleScopeSection(direction : Integer)
     var currentIdx : Integer = CurrentEditScope
     var foundAnchor : Integer = -1
     
-    // 1. Finde heraus, in welcher Sektion wir uns gerade befinden
+    // 1. Find out which section we are currently in
     i = 0
     While i < Size(MacroGroup_Anchors) and foundAnchor == -1 Do
         if currentIdx == -1 then
@@ -8985,7 +8985,7 @@ Function CycleScopeSection(direction : Integer)
         i = i + 1
     End
     
-    if foundAnchor == -1 then foundAnchor = 1 end // Fallback auf Hardware Sliders
+    if foundAnchor == -1 then foundAnchor = 1 end // Fallback to Hardware Sliders
     
     // 2. Calculate target section (with wrap-around loop)
     foundAnchor = foundAnchor + direction
@@ -9015,7 +9015,7 @@ Function SetDefaultChannelScope()
    var i, firstActiveVST : Integer
    
    // 1. Set array status (only index 0 is true)
-   // (Hier ist For richtig, da wir wirklich alle 16 durchlaufen wollen)
+   // (For is correct here since we truly need to iterate all 16)
    For i = 0; i < 16; i = i + 1 Do
       if i == 0 then OutputScope[i] = true else OutputScope[i] = false end
    End
@@ -9052,7 +9052,7 @@ Function SetDefaultChannelScope()
    
    if DebugMode then Trace("DEFAULT SCOPE: Active_VST_Scope resetted to " + Active_VST_Scope) end
    
-   // 3. Das komplette UI zwingen, den neuen Scope zu zeichnen
+   // 3. Force the entire UI to draw the new scope
    UpdateMetaColors()
    SyncInputFeedback()
    UpdateUsageLabelDisplay()
@@ -9067,16 +9067,16 @@ Function ScanGlobalInstruments()
    var pName : String
    
    For i = 0; i < 16; i = i + 1 Do
-      // KORREKT: Wir nutzen die Hilfsfunktion, um die Nummer des VSTs zu bekommen!
+      // CORRECT: We use the helper function to get the VST number!
       vstIdx = GetPrimaryVSTForChannel(i)
       
-      // FIX: Hier darf keine harte 5 mehr stehen!
+      // FIX: No more hardcoded 5 allowed here!
       if vstIdx >= 0 and vstIdx < MAX_VSTS then
-         // Es ist ein Globales VST -> Name aus dem Plugin auslesen
+         // It's a Global VST -> read name from the plugin
          pName = GetPluginInfo(BLK_VST[vstIdx], 0)
          EffectiveInstrumentName[i] = pName
       else
-         // Es ist ein lokales VST (-1) -> Vorerst als LRS markieren
+         // It's a local VST (-1) -> mark as LRS for now
          // (Will be overwritten later by the OSC handshake)
          EffectiveInstrumentName[i] = "[LRS]" 
       end
@@ -9087,7 +9087,7 @@ End
 
 // ---------------------------------------------------------
 // HELPER: HARD RESET & BYPASS CHANNEL
-// (Wird beim Laden und bei Injection-Wechsel genutzt)
+// (Used during loading and injection changes)
 // ---------------------------------------------------------
 Function DeactivateChannel(chIdx : Integer)
    // 1. Reset to user defaults (clean up values)
@@ -9178,7 +9178,7 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
    var velRangeCh : Integer = -1; var rootCh : Integer = -1; var octCh : Integer = -1
    var humCh : Integer = -1; var quantCh : Integer = -1; var susCh : Integer = -1
 
-   // --- CROSSFADER CHECK (Hardware Zuweisung) ---
+   // --- CROSSFADER CHECK (Hardware assignment) ---
    if matchedMacro == CF_MacroIdx then
        SetWidgetValue(SLD_Crossfader, val)
     
@@ -9211,12 +9211,12 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
                
                // Send auto-center for knobs/faders
                SetParameter(ExternalArranger, matchedMacro, 0.5)
-               Last_RecPart_Val = 0.5 // Neue Mittelstellung merken!
+               Last_RecPart_Val = 0.5 // Remember new center position!
            elsif val < Last_RecPart_Val - 0.05 then 
                Last_RecPart_Val = val
            end
        else
-           Last_RecPart_Val = val // Erster Touch: Wert nur merken!
+           Last_RecPart_Val = val // First touch: just remember the value!
        end
 
    // =========================================================
@@ -9264,7 +9264,7 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
        
        if looperTrigCh > -1 then
            if val > 0.5 then // Only respond when the pad is PRESSED
-               // ... (Dein existierender Looper Select-Block ... )
+               // ... (Your existing looper select block ... )
                cState = Mem_Loop_State[looperTrigCh]
                nState = -1
                
@@ -9615,13 +9615,13 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
         // ARRANGER JOYSTICK
         if actionType == "Y_AXIS" then
             ChangeVstScope(dir, -1)
-            ApplyVstFocusBypass() // Surgeon greift sofort ein!
+            ApplyVstFocusBypass() // Apply focus bypass immediately
         elsif actionType == "X_AXIS" then
             TriggerVstPresetChange(dir)
             
         // MINILAB 3
         elsif actionType == "BUTTON" then
-            ChangeVstScope(dir, -1) // KNOPF = VST-Scope wechseln
+            ChangeVstScope(dir, -1) // BUTTON = switch VST scope
             ApplyVstFocusBypass() 
         elsif actionType == "ENCODER" then
             TriggerVstPresetChange(dir) // Wheel = cycle presets
@@ -9690,7 +9690,7 @@ Function ProcessHardwareNote(m : NoteMessage)
     if IsHardwareLearning then
         if IsNoteOn(m) then
             Trace("HAL Learn: Received Ch" + chan + ":Note" + noteNum + " -> Assigned to Macro " + (CurrentEditScope + 1))
-            AssignHardware(CurrentEditScope, chan, noteNum, true) // true = Es ist eine Note!
+            AssignHardware(CurrentEditScope, chan, noteNum, true) // true = It's a note!
             IsHardwareLearning = false
             SetWidgetValue(BTN_MacroLearn, 0.0) 
             UpdateControllerInfoDisplay()
@@ -9698,16 +9698,16 @@ Function ProcessHardwareNote(m : NoteMessage)
         
     // 2. EXECUTION MODE
     else
-        // Wandle NoteOn/Off in 1.0 und 0.0 um
+        // Convert NoteOn/Off to 1.0 and 0.0
         if IsNoteOn(m) then val = IntToFloat(GetVelocity(m)) / 127.0 else val = 0.0 end
         
-        // Durchsuche die HAL-Datenbank nach dieser Note
+        // Search the HAL database for this note
         For i = 0; i < HW_Count; i = i + 1 Do
             // IMPORTANT: Only search for notes!
             if HW_IsNote[i] and HW_Channel[i] == chan and HW_CC[i] == noteNum then
                 Trace("HAL: Note Triggered Macro " + (HW_MacroIdx[i] + 1) + " with Val " + val)
                 
-                // In den Universal-Motor werfen:
+                // Throw into the universal engine:
                 ExecuteHardwareMacro(HW_MacroIdx[i], val)
             end
         End
@@ -9740,8 +9740,8 @@ Function PerformSystemReset()
    SafeLoadPreset(BLK_VST[0], "Standard"); LoadedPresets[0] = "Standard"
    SafeLoadPreset(BLK_VST[1], "Standard"); LoadedPresets[1] = "Standard"
 
-   // 4. VST DYNAMIC RESET (VST 3 bis 10)
-   SetWidgetLabel(MEM_ReplaceState, "EMPTY") // Zwingend alte Leichen vorher killen!
+   // 4. VST DYNAMIC RESET (VST 3 to 10)
+   SetWidgetLabel(MEM_ReplaceState, "EMPTY") // Clear previous state first
    
    For i = 2; i < MAX_VSTS; i = i + 1 Do 
        if GetPluginInfo(BLK_VST[i], 0) != "Element" then
@@ -9870,13 +9870,13 @@ Function ResetData()
    OSC_SendStringSpecific("/UI/SetChords", "", Local_IP, Local_PORT)
    OSC_SendStringSpecific("/UI/SetBarCount", "Bar: 1", Local_IP, Local_PORT)
    
-   // FIX: Wir zwingen den Slider explizit auf 1.0 (ganz oben)
+   // FIX: We force the slider explicitly to 1.0 (all the way up)
    OSC_SendDoubleSpecific("/UI/SetScrubber", 1.0, Local_IP, Local_PORT)
    
    // ---> Looper: Make the receiver deaf for 1 second <---
    ScrubberTaubTimer = TimeSinceStartup() + 1000.0
    
-   // Das Global-Panel Offset-Display sofort nullen
+   // Zero the global panel offset display immediately
    LBL_OffsetValue.SetWidgetLabel("0")
    
    Trace("Data Reset Executed (Slider forced to Top)")
@@ -9899,7 +9899,7 @@ Function JumpToRegMemAnchor(regNum : Integer)
     // Search the timeline array for the pressed RegMem
     While i < Size(Arr_TL_Bar) and not found Do
         if Arr_TL_Type[i] == "RegMem" and Arr_TL_Val[i] == regNum then
-            // Wir merken uns das allererste Vorkommen im Song (als Fallback)
+            // We remember the very first occurrence in the song (as fallback)
             if firstFoundBar == -1 then firstFoundBar = Arr_TL_Bar[i] end
 
             // Search for the occurrence that lies AHEAD (in the future)
@@ -9911,7 +9911,7 @@ Function JumpToRegMemAnchor(regNum : Integer)
         i = i + 1 // Always increment
     End
 
-    // Wenn wir in der Zukunft nichts finden, fangen wir beim ersten Vorkommen (Fallback) an
+    // If we find nothing ahead, start at the first occurrence (fallback)
     if not found and firstFoundBar != -1 then
         targetBar = firstFoundBar
         found = true
@@ -9919,20 +9919,20 @@ Function JumpToRegMemAnchor(regNum : Integer)
 
     // === EXECUTE THE JUMP ===
     if found then
-        Trace("PROMPTER: PAUSE Navigation -> Springe zu Takt " + targetBar)
+        Trace("PROMPTER: PAUSE Navigation -> Jumping to bar " + targetBar)
         
         CurrentBar = targetBar
         GlobalBarOffset = targetBar - LastSystemBar
 		LastBarStartTime = TimeSinceStartup()
         
-        // Slider synchronisieren
+        // Synchronize slider
         if SongDurationBars > 0 then sliderPos = 1.0 - (IntToFloat(CurrentBar) / IntToFloat(SongDurationBars)) end
         OSC_SendDoubleSpecific("/UI/SetScrubber", sliderPos, Local_IP, Local_PORT)
         
-        // Display aktualisieren
+        // Update display
         UpdatePrompter(false)
     else
-        Trace("PROMPTER: RegMem " + regNum + " existiert nicht in der Timeline. Ignoriert.")
+        Trace("PROMPTER: RegMem " + regNum + " does not exist in the timeline. Ignored.")
     end
 End
 
@@ -9971,10 +9971,10 @@ Trace("PROMPTER: TimeJump -> Intentional forward jump detected. Pulling GP forwa
 Trace("PROMPTER: TimeJump -> Disabled. Ignoring forward jump.")
         end
 
-    // 3. REGEL B: Fehlerkorrektur (Autopilot) 
+    // 3. RULE B: Error correction (Autopilot)
     elsif pressedRegNum != currentRegNum and currentRegNum != -1 then
         if GetWidgetValue(BTN_Autopilot) > 0.5 then
-            Trace("PROMPTER: Autopilot -> FALSCHE TASTE (" + pressedRegNum + ")! Korrigiere sofort auf " + currentRegNum)
+            Trace("PROMPTER: Autopilot -> WRONG KEY (" + pressedRegNum + ")! Correcting immediately to " + currentRegNum)
             
             if currentRegNum == 1 then correctionMsg = # F0 43 73 01 52 25 11 00 02 00 00 F7
             elsif currentRegNum == 2 then correctionMsg = # F0 43 73 01 52 25 11 00 02 00 01 F7
@@ -9992,7 +9992,7 @@ Trace("PROMPTER: TimeJump -> Disabled. Ignoring forward jump.")
                 SendSysexNowToMidiOutDevice(GetDeviceMidiOut(arrangerDevIdx), correctionMsg)
             end
         else
-            Trace("PROMPTER: Autopilot -> Deaktiviert. Falsche Taste (" + pressedRegNum + ") wird toleriert.")
+            Trace("PROMPTER: Autopilot -> Deactivated. Wrong key (" + pressedRegNum + ") is tolerated.")
         end
         
     else
@@ -10001,7 +10001,7 @@ Trace("PROMPTER: TimeJump -> Disabled. Ignoring forward jump.")
 End
 
 Function FinishRecording()
-    // --- 1. ALLE DEKLARATIONEN GANZ NACH OBEN ---
+    // --- 1. ALL DECLARATIONS AT THE VERY TOP ---
     var i, endBar : Integer
     var tempBar, tempVal, tempOffset : Integer Array
     var tempType : String Array
@@ -10021,11 +10021,11 @@ Function FinishRecording()
     var t_type : String
     var saveResult : Boolean
 
-    // --- 2. INITIALISIERUNG ---
+    // --- 2. INITIALIZATION ---
     currentSongName = GetCurrentSongName()
     snapshotPath = GetSnapshotPath(currentSongName)
     
-    // ANPASSEN: Je nachdem, welche Endung dein Pfad hat (.gpchord, .txt, etc.)
+    // ADJUST: Depending on which extension your path has (.gpchord, .txt, etc.)
     iniPath = ReplaceString(snapshotPath, ".gpchord", ".ini", false) 
     
     newContent = ""
@@ -10036,7 +10036,7 @@ Function FinishRecording()
     Trace("PROMPTER: REC finished. Range: bar " + RecordStartBar + " to " + endBar)
 
     // ==========================================
-    // 3. ARRAYS MERGEN & CLEANUP (REPLACE LOGIK)
+    // 3. MERGE ARRAYS & CLEANUP (REPLACE LOGIC)
     // ==========================================
     if RecordMode == 2 then
         for i = 0; i < Size(Arr_TL_Bar); i = i + 1 do
@@ -10057,13 +10057,13 @@ Function FinishRecording()
     end
 
     // ==========================================
-    // 4. TIMELINE SORTIEREN (Chronologisch)
+    // 4. SORT TIMELINE (Chronologically)
     // ==========================================
     While swapped Do
         swapped = false
         for i = 0; i < Size(Arr_TL_Bar) - 1; i = i + 1 do
             if Arr_TL_Bar[i] > Arr_TL_Bar[i+1] then
-                // Werte tauschen (Bubble Sort)
+                // Swap values (Bubble Sort)
                 t_bar = Arr_TL_Bar[i]; Arr_TL_Bar[i] = Arr_TL_Bar[i+1]; Arr_TL_Bar[i+1] = t_bar
                 t_type = Arr_TL_Type[i]; Arr_TL_Type[i] = Arr_TL_Type[i+1]; Arr_TL_Type[i+1] = t_type
                 t_val = Arr_TL_Val[i]; Arr_TL_Val[i] = Arr_TL_Val[i+1]; Arr_TL_Val[i+1] = t_val
@@ -10073,7 +10073,7 @@ Function FinishRecording()
         end
     End
 
-    // ---> DAS SPEICHERN WURDE HIER ENTFERNT <---
+    // ---> SAVING WAS REMOVED HERE <---
     Trace("PROMPTER: Take merged into RAM. Ready for playback or save.")
     RecordMode = 0
 End
@@ -10090,7 +10090,7 @@ Function ParseSongData()
    var isNewSectionMarker : Boolean = false
    var tempNewName : String = ""
    
-   Trace("PROMPTER: Parser gestartet (Clean Text Mode)...")
+   Trace("PROMPTER: Parser started (Clean Text Mode)...")
    
    // --- ARRAYS LEEREN ---
    Arr_BarTriggers = []; Arr_PartText_Raw = []; Arr_SectionNames = []; Arr_Cues = []
@@ -10102,7 +10102,7 @@ Function ParseSongData()
    
    i = 0; While i < 16 Do Arr_PartAnchors <-- -1; i = i + 1 End
    
-   // Initialisierung
+   // Initialization
    currentBarTrigger = 1
    highestBarFound = 1
    currentSectionName = "Start"
@@ -10129,7 +10129,7 @@ Function ParseSongData()
                  isNewSectionMarker = false
                  tempNewName = ""
 
-                  // 1. SECTION MARKERS (# Name oder {label: Name})
+                  // 1. SECTION MARKERS (# Name or {label: Name})
                  if IndexOfSubstring(line, "# ", false) == 0 Then
                      isSectionLine = true
                      tempNewName = TrimString(ReplaceString(line, "#", "", false))
@@ -10152,8 +10152,8 @@ Function ParseSongData()
                          Arr_SectionLineIndices <-- lineIdx
                          Arr_Cues <-- currentCue
                          
-                         // ---> DAS MAGISCHE GUMMIBAND <---
-                         // Jeder gefundene Part bekommt provisorisch 10 Takte Platz.
+                         // ---> DYNAMIC LINE WRAPPING <---
+                         // Each found part gets a provisional 10 bars of space.
                          // Will be overwritten later by LoadSongTimeline with real values
                          currentBarTrigger = currentBarTrigger + 10 
                          
@@ -10164,7 +10164,7 @@ Function ParseSongData()
                      currentSectionName = tempNewName
                  end
                  
-                 // 2. TRANSPOSE TAG (Bleibt erhalten)
+                 // 2. TRANSPOSE TAG (Preserved)
                  if IndexOfSubstring(line, "{transpose:", false) > -1 Then
                      if transposeFound == false Then
                          transValStr = ExtractTagValue(line, "{transpose:")
@@ -10175,7 +10175,7 @@ Function ParseSongData()
                      isSectionLine = true
                  End
 
-                 // 3. CUES / COMMENTS (Bleibt erhalten)
+                 // 3. CUES / COMMENTS (Preserved)
                  if IndexOfSubstring(line, "{c:", false) > -1 Then 
                      currentCue = ExtractTagValue(line, "{c:") 
                      isSectionLine = true
@@ -10199,7 +10199,7 @@ Function ParseSongData()
               lineIdx = lineIdx + 1; loopGuard = loopGuard + 1
        End 
        
-       // --- FINAL FLUSH (Letzten Block sichern) ---
+       // --- FINAL FLUSH (Save the last block) ---
        If Length(TrimString(currentBlockText)) > 0 or currentSectionName != "" Then
            Arr_BarTriggers <-- currentBarTrigger
            Arr_PartText_Raw <-- currentBlockText
@@ -10210,7 +10210,7 @@ Function ParseSongData()
        // Length calculation (will be corrected later by the .ini)
        SongDurationBars = currentBarTrigger + 10 // Buffer for the end
        
-       // Reset auf Start
+       // Reset to start
        CurrentBar = 1; GlobalBarOffset = 1 - LastSystemBar; LastFiredBar = -1; CurrentState = 4 
        RecalculateTextDisplay(); OSC_SendDoubleSpecific("/UI/SetScrubber", 1.0, Local_IP, Local_PORT)
    End
@@ -10223,10 +10223,10 @@ End
 Function CreateSkeletonFile()
     var songName : String; var filePath : String; var skeleton : String; var currentBPM : Double = 0.0 
     
-    // Wir nehmen den aktuellen Songnamen direkt aus GP
+    // We take the current song name directly from GP
     songName = GetCurrentSongName()
     
-    // WICHTIG: Falls der Name noch das .ini-Virus hat, waschen!
+    // IMPORTANT: If the name still has a leftover .ini extension, strip it
     songName = ReplaceString(songName, ".ini", "", false)
     
     filePath = GetChordProFile(songName); currentBPM = GetBPM()
@@ -10264,16 +10264,16 @@ Function LoadSongText(songName : String)
    Trace("---------------------------------------------------")
    Trace("PROMPTER: Song check for: '" + cleanName + "'")
    
-   ResetData() // Setzt Status initial auf 9 (Loading)
+   ResetData() // Sets status initially to 9 (Loading)
    
    If FileExists(filePath) Then
-       Trace("PROMPTER: Datei gefunden. Lade...")
+       Trace("PROMPTER: File found. Loading...")
        content = LoadStringFromTextFile(filePath)
        Arr_FileLines = SplitString(content, NEW_LINE)
-       ParseSongData() // Parser setzt Status auf 3 oder 4, wenn Content da ist
+       ParseSongData() // Parser sets status to 3 or 4 when content is present
    Else
-       Trace("PROMPTER: Datei fehlt -> Erstelle Skeleton automatisch...")
-       // Wir nutzen deine bestehende Funktion, um die leere Struktur zu schreiben
+       Trace("PROMPTER: File missing -> Creating skeleton automatically...")
+       // We use your existing function to write the empty structure
        CreateSkeletonFile() 
        
        // IMPORTANT: Set status to 2 (waiting for paste)
@@ -10340,7 +10340,7 @@ Function SaveSongSnapshot()
        // 3. VST
        content = content + NEW_LINE + "; --- VST ---" + NEW_LINE
        For i = 0; i < MAX_VSTS; i = i + 1 Do 
-           // NEUE REGEL: Speichern, wenn VST aktiv ist ODER manuell auf Bypass gezwungen wurde
+           // NEW RULE: Save when VST is active OR was manually forced to bypass
            if not IsPluginBypassed(BLK_VST[i]) or Mem_ManualVSTBypass[i] == true then 
                vstName = LoadedPresets[i]
                if vstName == "" or vstName == "-" then vstName = "Standard" end
@@ -10400,9 +10400,9 @@ Function SaveSongSnapshot()
              if foundReference then
                  content = content + "Ch" + (i+1) + "_Config=COPY_CH" + (refIndex + 1) + NEW_LINE
              else
-                 // KEINE KOPIE -> EIGENE WERTE SPEICHERN (Delta-Logik)
+                 // NO COPY -> SAVE OWN VALUES (Delta logic)
                  For p = 0; p < pCount; p = p + 1 Do 
-                    // Wir filtern Mute, Solo und Panic heraus
+                    // We filter out Mute, Solo and Panic
                     if IsNPConfigParam(BLK_NoteProcessor[i], p) then
                         val = GetParameter(BLK_NoteProcessor[i], p)
                         
@@ -10479,11 +10479,11 @@ Function LoadSongTimeline(songFilePath : String)
     var inSection : Boolean = false
     var targetOptAuto, targetOptJump,targetOptPlay : Double = 1.0
     
-    // Arrays sauber leeren
+    // Clean out arrays
     Arr_TL_Bar = []; Arr_TL_Type = []; Arr_TL_Val = []; Arr_TL_Offset = []
 	Arr_TL_Fired <-- false
     
-    // Wir machen aus ".gpchord" einfach ".ini"
+    // We simply convert ".gpchord" to ".ini"
     iniPath = ReplaceString(songFilePath, ".gpchord", ".ini", false)
     
     if FileExists(iniPath) then
@@ -10492,10 +10492,10 @@ Function LoadSongTimeline(songFilePath : String)
         for i = 0; i < Size(lines); i = i + 1 do
             line = TrimString(lines[i])
             
-            // Befinden wir uns im richtigen [Timeline] Block?
+            // Are we in the correct [Timeline] block?
             if IndexOfSubstring(line, "[Timeline]", false) == 0 then
                 inSection = true
-            // Ein neuer Block beginnt -> wir sind fertig mit Suchen
+            // A new block begins -> we are done searching
             elsif IndexOfSubstring(line, "[", false) == 0 and line != "[Timeline]" then
                 inSection = false
             // We are in the block and the line has an "="
@@ -10516,7 +10516,7 @@ Function LoadSongTimeline(songFilePath : String)
                         eOffset = 0 
                     end
                     
-                    // Ab in den pfeilschnellen Arbeitsspeicher damit!
+                    // Store in memory for fast access
                     Arr_TL_Bar <-- eBar
                     Arr_TL_Type <-- eType
                     Arr_TL_Val <-- eVal
@@ -10537,7 +10537,7 @@ Function LoadSongTimeline(songFilePath : String)
         end
         Trace("PROMPTER: Timeline loaded. " + Size(Arr_TL_Bar) + " events found.")
     else
-        Trace("PROMPTER: Keine INI Datei gefunden. Timeline ist leer.")
+        Trace("PROMPTER: No INI file found. Timeline is empty.")
     end
     BuildRecDisplayLines()
     RefreshRecDisplay(1.0)
@@ -10654,11 +10654,11 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                           if presetName != "" then targetPresets[vstIdx] = presetName end 
                       elsif subParts[1] == "Name" then
                           targetVstNames[vstIdx] = valStr
-                      // ---> NEU: Einlesen & Tracing <---
+                      // ---> NEW: Read & Tracing <---
                       elsif subParts[1] == "ManualBypass" then
                           if valStr == "1" then 
                               targetManualBypass[vstIdx] = true 
-                              Trace("INI-LOAD: VST " + (vstIdx+1) + " ManualBypass = TRUE gelesen!")
+                              Trace("INI-LOAD: VST " + (vstIdx+1) + " ManualBypass = TRUE read!")
                           end
                       end
                   end
@@ -10755,7 +10755,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                                     p = 0
                                     // ---> SAFE WHILE-LOOP <---
                                     While p < pCount and paramIdx == -1 Do
-                                        // WICHTIG: TrimString filtert versteckte Leerzeichen vom Plugin-Namen!
+                                        // IMPORTANT: TrimString filters hidden whitespace from the plugin name!
                                         if TrimString(GetParameterName(BLK_NoteProcessor[chIdx], p)) == paramNameOrIdx then
                                             paramIdx = p
                                         end
@@ -10796,7 +10796,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
         CurrentSyncMode = targetSyncMode
         UpdateSyncLabel()
         
-        // --- SMART BYPASS BERECHNUNG ---
+        // --- SMART BYPASS CALCULATION ---
         For i = 0; i < MAX_VSTS; i = i + 1 Do vstNeeded[i] = false End
         
         For i = 0; i < MAX_VSTS; i = i + 1 Do
@@ -10836,17 +10836,17 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
         
         if requiresReboot then
             if TimeSinceStartup() < 10000.0 then
-                Trace("SONG LOAD: Boot-Phase erkannt! Geisterhand blockiert. Warte auf manuellen Start.")
+                Trace("SONG LOAD: Boot phase detected. GUI automation blocked. Waiting for manual start.")
                 IsPresetLocked = true
                 SetWidgetLabel(LBL_VSTConfiguration, NEW_LINE + NEW_LINE + "   >>> VST MISMATCH DETECTED <<<" + NEW_LINE + "   System is booting. Press REPLACE to fix.")
             else
-                Trace("SONG LOAD: Script requires VST replacement(s). Starting Queue & Geisterhand...")
+                Trace("SONG LOAD: Script requires VST replacement(s). Starting Queue & GUI automation...")
                 TriggerNextQueueJob()
             end
         else
             Trace("SONG LOAD: Building Routing and Presets...")
             
-            // 2. PRESET LADEN & SMART BYPASS
+            // 2. LOAD PRESET & SMART BYPASS
             For i = 0; i < MAX_VSTS; i = i + 1 Do
                 if not isManualRecovery then
                     currentPreset = LoadedPresets[i]
@@ -10928,7 +10928,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                 ChannelUsage[i] = targetUsage[i]
              End
             
-            // --- LOOPER STATE WIEDERHERSTELLEN ---
+            // --- RESTORE LOOPER STATE ---
             SetWidgetValue(BTN_Loop_HostSync, targetHostSync)
             SetWidgetValue(BTN_Loop_CountIn, targetCountIn)
             
@@ -11035,7 +11035,7 @@ End
 Function SwitchToSongByName_Safe(name : String) Returns Boolean
     var i : Integer = 0
     var found : Boolean = false
-    var isDone : Boolean = false // ---> NEU: Unser sauberes Abbruch-Flag <---
+    var isDone : Boolean = false // ---> NEW: Our clean abort flag <---
     
     While i < GetSongCount() and not isDone Do
         if GetSongName(i) == name then
@@ -11090,10 +11090,10 @@ Function SaveStructureFromClipboard()
            headerStr = "{title: " + songName + "}" + NEW_LINE
        end
 
-       // 3. Das pure Sandwich zusammenbauen
+       // 3. Assemble the pure sandwich
        fullNewContent = headerStr + NEW_LINE + washedClipboard
 
-       // 4. Speichern & sofortiges Refresh des Bildschirms
+       // 4. Save & immediate screen refresh
        If SaveStringToTextFile(filePath, fullNewContent) Then
           Trace("Structure Saved! Reloading Display...")
           LoadSongText(songName) 
@@ -11121,7 +11121,7 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
         jobs = SplitString(GlobalReplaceQueue, ";")
         parts = SplitString(jobs[0], "|")
 
-        Trace("PROCESS: Job 0 hat " + Size(parts) + " Teile.")
+        Trace("PROCESS: Job 0 has " + Size(parts) + " parts.")
 
         if Size(parts) >= 4 then
             targetIdx = StringToInt(parts[0])
@@ -11129,13 +11129,13 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
             isManual = (parts[2] == "true")
             if Size(parts) >= 5 then targetPreset = parts[4] end
 
-            Trace("PROCESS: Repariere Array...")
+            Trace("PROCESS: Repairing array...")
             RefreshVstArray(targetIdx)
             actualName = GetPluginInfo(BLK_VST[targetIdx], 0)
-            Trace("PROCESS: Echter Name ist -> " + actualName)
+            Trace("PROCESS: Actual name is -> " + actualName)
 
             if actualName == targetName then
-                Trace("PROCESS: MATCH! Setze Plugin Caption...")
+                Trace("PROCESS: MATCH! Setting Plugin Caption...")
                 SetPluginCaption(BLK_VST[targetIdx], targetName)
                 
                 // --- MANUELLE GUI-AKTIONEN ---
@@ -11143,10 +11143,10 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
                     Trace("PROCESS: Switching back to Setlist View...")
                     SwitchToSetlistView()
                     
-                    // ---> NEU: AKTIV WARTEN BIS SETLIST-MODUS WIEDER DA IST <---
+                    // ---> NEW: ACTIVELY WAIT UNTIL SETLIST MODE IS BACK <---
                     viewSafety = 0
                     While not InSetlistMode() and viewSafety < 20 Do
-                        Trace("PROCESS: Warte auf Setlist-View... (Versuch " + viewSafety + ")")
+                        Trace("PROCESS: Waiting for Setlist View... (Attempt " + viewSafety + ")")
                         Wait(100.0)
                         viewSafety = viewSafety + 1
                     End
@@ -11154,17 +11154,17 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
                     if InSetlistMode() then 
                         Trace("PROCESS: SUCCESS! Back in Setlist mode.") 
                     else 
-                        Trace("PROCESS: WARNUNG! Immer noch nicht im Setlist-Modus!") 
+                        Trace("PROCESS: WARNING! Still not in Setlist mode!") 
                     end
                     // -------------------------------------------------------------
 
-                    Trace("PROCESS: Zeige Overlay...")
+                    Trace("PROCESS: Showing overlay...")
                     ShowVSTOverlay(targetName + " LOADED!", 2000.0)
                 end 
                 
-                // --- FIX: WURDE EIN PRESET IN DER QUEUE MITGEGEBEN? ---
+                // --- FIX: WAS A PRESET INCLUDED IN THE QUEUE? ---
                 if not isManual and targetPreset != "-" and targetPreset != "" then
-                    Trace("PROCESS: Stelle INI-Preset wieder her -> " + targetPreset)
+                    Trace("PROCESS: Restoring INI preset -> " + targetPreset)
                     SafeLoadPreset(BLK_VST[targetIdx], targetPreset)
                     LoadedPresets[targetIdx] = targetPreset
                     SetWidgetLabel(LBL_VSTPreset, targetPreset)
@@ -11189,7 +11189,7 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
                 SyncBrowserToLoadedPlugin(targetName)
                 RefreshSafeReplacerUI()
                 
-                // --- WARTESCHLANGE AKTUALISIEREN ---
+                // --- UPDATE QUEUE ---
                 remainingQueue = ""
                 if Size(jobs) > 1 then
                     For k = 1; k < Size(jobs); k = k + 1 Do
@@ -11201,17 +11201,17 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
                 SetWidgetLabel(MEM_ReplaceState, remainingQueue)
 
                 // -------------------------------------------------------------
-                // HIER IST DIE WEICHE:
+                // HERE IS THE SWITCH POINT:
                 // -------------------------------------------------------------
                 if remainingQueue != "" then
                     // More to load -> script will die again shortly
                     TriggerNextQueueJob()
                 else
-                    // WARTESCHLANGE IST LEER! Alle Plugins sind getauscht.
+                    // QUEUE IS EMPTY! All plugins have been swapped.
                     ScanGlobalInstruments()
                     
                     // ---> NEU: HIER KOMMT DER CHEF-SYNC REIN! <---
-                    // Bringt die Arrays, den Publisher, das VST und die UI wieder exakt in Einklang!
+                    // Brings the arrays, publisher, VST and UI back into perfect sync!
                     FocusBrowserOnCurrentSlot() 
                     
                     // Update the remaining 4 info lines in the display
@@ -11219,27 +11219,27 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
                     
                     // ========================================================
                     // ---> DER BUGFIX <---
-                    // Wurde die Queue durch einen automatischen Song-Wechsel 
+                    // Was the queue triggered by an automatic song change
                     // triggered? Then we need to finish loading the song now!
                     // ========================================================
                     if not isManual and InSetlistMode() then
                         Trace("PROCESS: Auto-Boot finished. Resuming Song Load...")
-                        // isManualRecovery auf 'true' verhindert eine Endlosschleife!
+                        // isManualRecovery set to 'true' prevents an infinite loop!
                         LoadSongSnapshot(GetCurrentSongName(), true)
                     end
                 end
 
                 IsPresetLocked = false 
-                Trace("PROCESS: --- ERFOLG KOMPLETT DURCHGELAUFEN ---")
+                Trace("PROCESS: --- SUCCESS COMPLETED IN FULL ---")
 
             else
-                Trace("PROCESS: FAILED! Erwartet '" + targetName + "', aber es ist '" + actualName + "'")
+                Trace("PROCESS: FAILED! Expected '" + targetName + "', but got '" + actualName + "'")
                 GlobalReplaceQueue = "EMPTY"
                 SetWidgetLabel(MEM_ReplaceState, "EMPTY")
                 IsPresetLocked = true
                 
                 SwitchToSetlistView()
-                Wait(100.0) // Hier reicht ein kurzes Warten, da wir ohnehin abbrechen
+                Wait(100.0) // A short wait is enough here since we're aborting anyway
                 
                 SetWidgetLabel(LBL_VSTConfiguration, NEW_LINE + NEW_LINE + "   >>> --- PRESS REPLACE --- <<<" + NEW_LINE + "   To load: " + targetName + NEW_LINE + NEW_LINE + "   [!] NOT SUCCESSFUL [!]")
                 ShowVSTOverlay("FAILED: " + targetName, 4000.0)
@@ -11272,18 +11272,18 @@ Function EvaluateTransportSync()
     var playing : Boolean = PendingPlayheadState
     var i : Integer
     
-    // Die reine Wahrheit: Hat das Scriptlet in den letzten 800ms "HIER!" gerufen?
+    // The plain truth: Did the scriptlet shout "HERE!" in the last 800ms?
     var timeSinceHW : Double = TimeSinceStartup() - LastHardwarePulseTime
     var isHW : Boolean = (timeSinceHW < 800.0 and timeSinceHW >= 0.0) 
 
     Trace(">>> EvaluateTransportSync: Play=" + playing + " | HW_Pulse=" + isHW)
 
     // ========================================================
-    // DEIN GENIALER WATCHDOG (Nur bei Stopp aktiv!)
+    // TRANSPORT WATCHDOG (Only active on stop)
     // ========================================================
     if not playing then
         StopWatchdogTimer = TimeSinceStartup() + 2500.0 
-        Trace("WATCHDOG: Playhead gestoppt. Lausche auf Geister-Noten...")
+        Trace("WATCHDOG: Playhead stopped. Listening for ghost notes...")
         
         if GetWidgetValue(BTN_Loop_HostSync) > 0.5 then
             For i = 0; i < 16; i = i + 1 Do
@@ -11293,7 +11293,7 @@ Function EvaluateTransportSync()
             elsif Mem_Loop_State[i] == 5 then 
                 Mem_Loop_State[i] = 0 
             end
-            Trigger_NotesOff(i + 1) // Noten sicherheitshalber killen
+            Trigger_NotesOff(i + 1) // Kill notes as a safety measure
         End
         BuildLooperConfigLines()
         UpdateInjectionLooperTransportUI()
@@ -11303,17 +11303,17 @@ Function EvaluateTransportSync()
     end
 
     // ========================================================
-    // DIE NEUE EINWEG-SPIEGEL LOGIK
+    // THE NEW ONE-WAY MIRROR LOGIC
     // ========================================================
 
-    // --- MODUS 0: ISOLATED (GUI cannot control arranger) ---
+    // --- MODE 0: ISOLATED (GUI cannot control arranger) ---
     if CurrentSyncMode == 0 then 
         IsPerformanceActive = playing
         if not playing then
 //            EnablePlayhead(false) 
             Trace("ETS: [OK] ETS: ISOLATED: Arranger started.")
         else
-            Trace("ETS: [OK] ETS: ISOLATED: GP hat gestartet")
+            Trace("ETS: [OK] ETS: ISOLATED: GP has started")
         end
     
     // --- MODE 1: ARRANGER LEADS (GUI cannot control arranger) ---
@@ -11327,7 +11327,7 @@ Function EvaluateTransportSync()
             Trace("ETS: [OK] ETS: ARRANGER LEADS: Arranger action. GP was running natively.")
         end
         
-    // --- MODUS 2: GP LEADS (Arranger cannot start GP) ---
+    // --- MODE 2: GP LEADS (Arranger cannot start GP) ---
     elsif CurrentSyncMode == 2 then 
         IsPerformanceActive = playing
         if not isHW then
@@ -11343,7 +11343,7 @@ Function EvaluateTransportSync()
             StyleTriggerResetTimer = TimeSinceStartup() + 60.0
         end
 
-    // --- MODUS 3: FULL SYNC ---
+    // --- MODE 3: FULL SYNC ---
     elsif CurrentSyncMode == 3 then 
         IsPerformanceActive = playing
         if not isHW then
@@ -11360,7 +11360,7 @@ Function EvaluateTransportSync()
             Trace("ETS: [OK] FULL SYNC: Arranger action. GP ran natively. (No echo needed)")
         end
         
-    // --- MODUS 4: INITIAL LATCH ---
+    // --- MODE 4: INITIAL LATCH ---
     elsif CurrentSyncMode == 4 then 
         if playing then
             if isHW then
@@ -11498,7 +11498,7 @@ Initialization
    Arr_Subbar_LEDs = [LBL_Subbar_1, LBL_Subbar_2, LBL_Subbar_3, LBL_Subbar_4]
    
    // B. Load hardware & text databases
-   LoadHardwareMap() // <- Jetzt sicher weit oben!
+   LoadHardwareMap() // <- Now safely near the top!
    LoadVstDatabase()
    BuildFilteredVstList()
 
@@ -11602,7 +11602,7 @@ Initialization
    queueStr = GetWidgetLabel(MEM_ReplaceState)
    isManualReboot = false
    
-   // Wir schauen kurz auf den Zettel: War der Tod ein manueller Tausch?
+   // Quick peek at the ticket: Was the death a manual swap?
    if queueStr != "EMPTY" and queueStr != "" then
        jobs = SplitString(queueStr, ";")
        parts = SplitString(jobs[0], "|")
@@ -11632,7 +11632,7 @@ Initialization
    SetWidgetLabel(LBL_SyncMode, SyncModeNames[CurrentSyncMode])
    
    // Hand over full control to the boot inspector
-   ProcessTopQueueJobResult(true) // true = Wir sind im Boot-Modus
+   ProcessTopQueueJobResult(true) // true = We are in boot mode
    
    BuildRecDisplayLines()
    RefreshRecDisplay(1.0)
@@ -12566,7 +12566,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
            if paramIdx != SCRUB_MacroIdx then
                if DebugMode then Trace("MACRO-IN: Arranger Slider/Knob " + (paramIdx + 1) + " -> " + Round(newVal * 127.0)) end
                
-               // Schickt den Wert an das HUD (false = Macro, kein direkter CC)
+               // Send the value to the HUD (false = Macro, not a direct CC)
                TriggerMacroFeedback(paramIdx, false, newVal) 
            end
            // ==========================================================
@@ -12596,14 +12596,14 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
                         
                         // --- SLEEP SWITCH LOGIC (Pull-To-Sleep) ---
                         if Link_IsSleepSwitch[i] then
-                            if newVal < 0.005 then // Fader ist (fast) 0
+                            if newVal < 0.005 then // Fader is (nearly) 0
                                 if not IsPluginBypassed(BLK_VST[Link_BlockIdx[i]]) then
                                     SetPluginBypassed(BLK_VST[Link_BlockIdx[i]], true)
                                     targetChannel = GetChannelForVST(Link_BlockIdx[i])
                                     Trigger_NotesOff(targetChannel)
                                     if DebugMode then Trace("SLEEP SWITCH: VST" + (Link_BlockIdx[i]+1) + " bypassed (Fader 0).") end
                                 end
-                            else // Fader wird hochgezogen
+                            else // Fader is being pulled up
                                 if IsPluginBypassed(BLK_VST[Link_BlockIdx[i]]) then
                                     SetPluginBypassed(BLK_VST[Link_BlockIdx[i]], false)
                                     if DebugMode then Trace("SLEEP SWITCH: VST" + (Link_BlockIdx[i]+1) + " awoken (Fader > 0).") end
@@ -12615,7 +12615,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
                         // Scaling
                         scaledVal = Link_MinVal[i] + (newVal * (Link_MaxVal[i] - Link_MinVal[i]))
                         
-                        // --- AUSGABE: CC ODER PARAMETER? ---
+                        // --- OUTPUT: CC OR PARAMETER? ---
                         if Link_IsCC[i] == true then
                             midiVal = Round(scaledVal * 127.0)
                             if midiVal < 0 then midiVal = 0 elsif midiVal > 127 then midiVal = 127 end
@@ -12664,7 +12664,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerS
             // ---------------------------------------------------
             // BUGFIX: GP LEADS - THE GUARD
             // ---------------------------------------------------
-            // When GP LEADS (2) is active and the GP transport is SLEEPING,
+            // When GP LEADS (2) is active and the GP transport is STOPPED,
             // but the arranger starts independently, fire an immediate STOP echo!
             if CurrentSyncMode == 2 and IsPlayheadEnabled() == false then
                 Trace("   [X] ARRANGER_STYLE (2): Arranger started in isolation! Sending abort echo...")
@@ -12675,24 +12675,24 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerS
     End
     
     if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
-        // Index 44 ist unser Flag_HW_Start vom Scriptlet
+        // Index 44 is our Flag_HW_Start from the Scriptlet
         if paramIdx == 44 and newVal > 0.5 then
             Trace(">>> ARRANGER_STYLE (2&3): HARDWARE START/STOP BUTTON ON ARRANGER PRESSED!")
         
-            // Wir toggeln GP. Da der Playhead umschaltet, feuert der SystemEvent (oben) 
-            // und sends a safety echo to the arranger. Da er die Taste aber 
+            // We toggle GP. Since the playhead switches, the SystemEvent (above) fires
+            // and sends a safety echo to the arranger. Since the button
             // was just pressed anyway, so this is harmless!
-            IsCorrectingPlayhead = false // Wir wollen, dass der SystemEvent triggert!
+            IsCorrectingPlayhead = false // We want the SystemEvent to trigger!
             EnablePlayhead(not PendingPlayheadState)
         end
     End
     
     // TIMELINE RECORDING FOR PART CHANGES (STYLE)
     // ========================================================
-    // Aufzeichnen, wenn REC an ist UND es ein Tastendruck ist (> 0.5)
+    // Record when REC is on AND it's a key press (> 0.5)
     if RecordMode > 0 and newVal > 0.5 then
         
-        // System-Pings herausfiltern (Start/Stop, HW-Flags)
+        // Filter out system pings (Start/Stop, HW flags)
         // P_STYLE_START_STOP = 1, P_STYLE_HW_START = 29, Arranger HW button = 44
         if paramIdx != 1 and paramIdx != 29 and paramIdx != 44 then
             RecordTimelineEvent("Style", paramIdx)
@@ -12759,8 +12759,8 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1
         Trace("MINILAB IN: CC " + cc + " | Val: " + val + " | Ch: " + ch)
     end
 
-    // 1. MINILAB BUTTON (Druck)
-    // Wir lauschen auf beide Konstanten, um sicherzugehen!
+    // 1. MINILAB BUTTON (Press)
+    // We listen for both constants to be safe!
     if ctrlIdx >= 0 and GetControlType(ctrlIdx) == CTYPE_BUTTON and val > 0 then
         Trace("MINILAB: Button erkannt! Sende an Router...")
         ProcessSystemNavigation(1, "BUTTON", 1)
@@ -12769,7 +12769,7 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1
     elsif ctrlIdx >= 0 and GetControlType(ctrlIdx) == CTYPE_ENCODER then
         if val >= 65 then dir = 1 elsif val <= 63 then dir = -1 end
         if dir != 0 then 
-            Trace("MINILAB: Encoder erkannt! Richtung: " + dir)
+            Trace("MINILAB: Encoder detected! Direction: " + dir)
             ProcessSystemNavigation(1, "ENCODER", dir) 
         end
     
@@ -12808,13 +12808,13 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0
         end
     end
     
-    // 3. Tastatur-Split Lernen (falls aktiv)
+    // 3. Keyboard split learning (if active)
     ProcessMidiLearn(m)
     
     // 4. Looper
     FeedLooper_Note(m)
     
-    // 5. Note an den Block weiterreichen
+    // 5. Pass note to the block
     SendNow(DeviceIn_0, m)
 End
 
@@ -12825,13 +12825,13 @@ On NoteEvent(m : NoteMessage) from DeviceIn_1
     // 1. Call central HAL logic for macros
     ProcessHardwareNote(m)
     
-    // 2. Tastatur-Split Lernen (falls man es vom MiniLab aus steuern will)
+    // 2. Keyboard split learning (if you want to control it from the MiniLab)
     ProcessMidiLearn(m)
     
     // 3. Looper
     FeedLooper_Note(m)
     
-    // 4. Note an den Block weiterreichen
+    // 4. Pass note to the block
     SendNow(DeviceIn_1, m)
 End
 
@@ -12867,15 +12867,15 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
    var SysEx_RegButton1 : String = "F0 43 73 01 52 25 11 00 02 00 00 F7"
    var currentGPName : String
    var k : Integer
-   var foundMap : Boolean // ---> HIER OBEN MUSS ES STEHEN! <---
+   var foundMap : Boolean // ---> THIS MUST BE DECLARED UP HERE! <---
    
-   // 1. SYSTEM SPERREN
+   // 1. LOCK SYSTEM
    CurrentState = 9 // LOADING
    IsSaving = false
    IsLoadingSnapshot = true // Important: Set lock immediately!
    
    // ========================================================
-   // NEU: Write Mode & Record Modes beim Songwechsel killen!
+   // NEW: Kill Write Mode & Record Modes on song change!
    // ========================================================
    SetWidgetValue(BTN_Record_Overdub, 0.0)
    SetWidgetValue(BTN_Record_Replace, 0.0)
@@ -12885,7 +12885,7 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
    
    Trace("Song Switch Initiated: " + oldSongIndex + " -> " + newSongIndex)
    
-   // 2. NOTES OFF (Sicherheit)
+   // 2. NOTES OFF (Safety)
    For k = 0; k < 16; k = k + 1 Do
       AllNotesOff(BLK_MidiIn[k])
    End
@@ -12922,8 +12922,8 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
           i = i - 1
       End
       
-      // 4. LAZY LOAD TRIGGER SETZEN
-      // Anstatt hier sofort 'LoadSongSnapshot' aufzurufen (was den Crash verursacht),
+      // 4. SET LAZY LOAD TRIGGER
+      // Instead of calling 'LoadSongSnapshot' immediately here (which causes the crash),
       // store the song and load it later in TimerTick after 200ms.
       
       If InSetlistMode() Then 
@@ -12953,7 +12953,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
             UpdateSyncLabel()
             
             // =========================================================
-            // MODUS 0: ISOLATED
+            // MODE 0: ISOLATED
             // =========================================================
             if CurrentSyncMode == 0 then
                 PendingPlayheadState = playing
@@ -12970,7 +12970,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
                 if playing then   
                   // Keine Aktion
                 else
-                     // --- STOPP-LOGIK ---
+                     // --- STOP LOGIC ---
                      timeSinceHW = TimeSinceStartup() - LastHardwarePulseTime
                      isArrangerPush = (timeSinceHW < 250.0 and timeSinceHW >= 0.0)
                      Trace(">>> [ARRANGER LEADS]: TRANSPORT: GP STOP (Arranger). Suppressing.")
@@ -12980,7 +12980,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
             end
             
             // =========================================================
-            // MODUS 2: GP LEADS
+            // MODE 2: GP LEADS
             // =========================================================
             if CurrentSyncMode == 2 then
                 PendingPlayheadState = playing
@@ -12994,15 +12994,15 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
             if CurrentSyncMode == 3 then
                 PendingPlayheadState = playing
                 
-                // ---> HIER FEHLTE DER TIMER! Ohne ihn wird das UI nie geupdatet! <---
+                // ---> THE TIMER WAS MISSING HERE! Without it the UI never gets updated! <---
                 if playing then PlayheadEvalTimer = TimeSinceStartup() + 150.0 else PlayheadEvalTimer = TimeSinceStartup() + 300.0 end
                 
                 if playing then
-                    // --- START-LOGIK ---
+                    // --- START LOGIC ---
                     StartWatchdogTimer = TimeSinceStartup() + 200.0
                     Trace(">>> TRANSPORT: GP START. Waiting for arranger confirmation (notes)...")
                 else
-                    // --- STOPP-LOGIK ---
+                    // --- STOP LOGIC ---
                     timeSinceHW = TimeSinceStartup() - LastHardwarePulseTime
                     isArrangerPush = (timeSinceHW < 250.0 and timeSinceHW >= 0.0)
 
@@ -13020,7 +13020,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
             end
                 
             // =========================================================
-            // MODUS 4: INITIAL LATCH
+            // MODE 4: INITIAL LATCH
             // =========================================================
             if CurrentSyncMode == 4 then
                 PendingPlayheadState = playing
@@ -13038,7 +13038,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
    var syncFired : Boolean = false
    var targetEndBar, tAct, nSt, jTgt, i : Integer
    
-   // DIE WAHRHEIT AUS DEM LOG: GP IST PERFEKT!
+   // THE TRUTH FROM THE LOG: GP IS PERFECT!
    LastSystemBar = bar
    RealTransportBar = bar 
    CurrentBeat = beat 
@@ -13052,13 +13052,13 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
        CurrentBar = LastSystemBar + GlobalBarOffset
    end
    
-   // --- DIE STOPPUHR ---
+   // --- THE STOPWATCH ---
    if beat == 1 then
        LastBarStartTime = TimeSinceStartup()
    end
 
    // ==================================================================
-   // 1. LOOPER AUTO-TRANSITION (Das rettet dich vor MIDI-Clock Jitter!)
+   // 1. LOOPER AUTO-TRANSITION (This saves you from MIDI-Clock jitter!)
    // ==================================================================
    if beat == 1 then
       For ch = 0; ch < 16; ch = ch + 1 Do
@@ -13066,7 +13066,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
          if Mem_Loop_State[ch] == 1 and Mem_Loop_Length[ch] > 0 then
              targetEndBar = LoopAnchorBar[ch] + Mem_Loop_Length[ch]
              
-             // Wenn wir die Ziellinie exakt erreichen!
+             // When we hit the finish line exactly!
              if CurrentBar >= targetEndBar then
                  LoopLengthMS[ch] = TimeSinceStartup() - LoopStartTime[ch]
                  CloseLooperBuffer(ch)
@@ -13083,19 +13083,19 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
                  LoopAnchorBeat[ch] = CurrentBeat
                  LoopAnchorTick[ch] = Global_CurrentTick
                  
-                 // --- AUTO JUMP LOGIK ---
+                 // --- AUTO JUMP LOGIC ---
                  jTgt = Mem_Loop_Target[ch]
                  if jTgt != -1 then 
-                     if DebugMode then Trace("LOOPER: Auto-Pilot Jump von Ch" + (ch+1) + " zu Ch" + (jTgt+1)) end
+                     if DebugMode then Trace("LOOPER: Auto-Pilot Jump from Ch" + (ch+1) + " to Ch" + (jTgt+1)) end
                      
-                     // 1. UI Fokus umschalten
+                     // 1. Switch UI focus
                      For i = 0; i < 16; i = i + 1 Do OutputScope[i] = false End
                      OutputScope[jTgt] = true
                      UpdateMetaColors(); SyncInputFeedback(); UpdateUsageLabelDisplay()
                      RefreshAllInjectionDisplays(); ScrollToCurrentChannel()
                      
-                     // 2. ---> NEU: ZIEL KANAL SOFORT STARTEN! <---
-                     if Mem_Loop_State[jTgt] == 0 then // Wenn Ziel leer ist -> Aufnahme!
+                     // 2. ---> NEW: START TARGET CHANNEL IMMEDIATELY! <---
+                     if Mem_Loop_State[jTgt] == 0 then // If target is empty -> Record!
                          Mem_Loop_State[jTgt] = 1
                          ClearLooperArrays(jTgt)
                          LoopStartTime[jTgt] = TimeSinceStartup()
@@ -13110,7 +13110,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
                          end
                          if DebugMode then Trace("LOOPER: Target channel " + (jTgt+1) + " immediately switched to REC!") end
                          
-                     elsif Mem_Loop_State[jTgt] == 4 then // Wenn Ziel gestoppt ist -> Play!
+                     elsif Mem_Loop_State[jTgt] == 4 then // If target is stopped -> Play!
                          Mem_Loop_State[jTgt] = 2
                          LoopStartTime[jTgt] = TimeSinceStartup(); LoopNextEventIdx[jTgt] = 0 
                          LoopAnchorBar[jTgt] = CurrentBar
@@ -13142,7 +13142,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
             ClearLooperArrays(ch)
             LoopStartTime[ch] = TimeSinceStartup()
             
-            // Anker absolut starr auf die "1" einrasten lassen
+            // Lock the anchor rigidly to beat "1"
             LoopAnchorBar[ch] = CurrentBar
             LoopAnchorBeat[ch] = CurrentBeat
             LoopAnchorTick[ch] = Global_CurrentTick
@@ -13185,7 +13185,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
       End
    end
    
-   // Takt-Text aktualisieren (Bar 1.4 / 4 etc.)
+   // Update bar text (Bar 1.4 / 4 etc.)
    BuildLooperConfigLines() 
    
    if syncFired then 
@@ -13226,8 +13226,8 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
    If msgSize >= 6 Then
       byte1 = SM_GetValue(m, 1); byte2 = SM_GetValue(m, 2); byte3 = SM_GetValue(m, 3)
       
-      // ---> NEU: DER SYSEX HEARTBEAT <---
-      // 0x43 ist die Hersteller-ID von Yamaha. Every message from the arranger carries this stamp!
+      // ---> NEW: THE SYSEX HEARTBEAT <---
+      // 0x43 is the manufacturer ID of Yamaha. Every message from the arranger carries this stamp!
       if byte1 == 0x43 then
           LastHardwarePulseTime = TimeSinceStartup()
       end
@@ -13296,16 +13296,16 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
          // --- REGISTRATION MEMORY SWITCH ---
          Elsif byte5 == 0x25 Then 
             if msgSize >= 12 Then
-               // FIX: Der Wert steht an Index 10 (nicht 11). 11 ist F7.
+               // FIX: The value is at index 10 (not 11). 11 is F7.
                regButtonIndex = SM_GetValue(m, 10) 
-               regNumber = regButtonIndex + 1 // Damit wir logische Zahlen von 1 bis 10 haben
+               regNumber = regButtonIndex + 1 // So we have logical numbers from 1 to 10
                
                Trace("PROMPTER: Arranger sends RegMem " + regNumber)
                
                if not InSetlistMode() Then SwitchToSetlistView(); Wait(200.0) End
 
                // =========================================================
-               // NEU: HARDWARE RE-SYNC (Der Boss-Move)
+               // NEW: HARDWARE RE-SYNC (Hardware state sync)
                // =========================================================
                // 1. LOCK THE GATE! Block all fader inputs immediately,
                // so arranger motors don't overwrite our GP setup!
@@ -13314,7 +13314,7 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
                // 2. Set timer to force our values back after 300ms
                HardwareSyncTimer = TimeSinceStartup() + 300.0
                
-               // === 1. AUFZEICHNUNG (Wird ignoriert, wenn REC aus ist) ===
+               // === 1. RECORDING (Ignored when REC is off) ===
                RecordTimelineEvent("RegMem", regNumber)
                
                // === 2. TIME-MACHINE LOGIC (only execute when NOT recording) ===
@@ -13344,19 +13344,19 @@ End
 
 // --- ADDED BLOCK ---
 On OSCMessageReceived(m : OSCMessage) Matching "/Command/RequestUIUpdate"
-    // Wird gefeuert, wenn der lokale Rackspace aktiviert wird.
-    // Zwingt die globale Engine, den aktuellen Text sofort an die frischen Displays zu senden.
+    // Fires when the local rackspace is activated.
+    // Forces the global engine to immediately send the current text to the fresh displays.
     Trace("OSC: Local Rackspace requested UI Update.")
     UpdatePrompter(true)
 End
 
 On OSCMessageReceived(m : OSCMessage) Matching "/GP/ViewReady"
-    Trace("<<< OSC-IN: Nachricht '/GP/ViewReady' von Python EMPFANGEN! <<<")
+    Trace("<<< OSC-IN: Message '/GP/ViewReady' RECEIVED from Python! <<<")
     
     if OSC_IsWaitingForViewSwitch then
-        Trace("<<< OSC-IN: Status war 'Wartend'. Starte 3s Stabilisierungs-Timer... <<<")
+        Trace("<<< OSC-IN: Status was 'Waiting'. Starting 3s stabilization timer... <<<")
         
-        // Warten auf View-Switch beenden
+        // End waiting for view switch
         OSC_IsWaitingForViewSwitch = false
         OSC_ViewSwitchTimeout = 0.0
         
@@ -13364,7 +13364,7 @@ On OSCMessageReceived(m : OSCMessage) Matching "/GP/ViewReady"
         // This provides the 3-second observation pause without freezing GP.
         PostViewSwitchDelayTimer = TimeSinceStartup() + 3000.0 
     else
-        Trace("<<< OSC-IN: Ignoriert (Skript hat nicht auf View-Switch gewartet).")
+        Trace("<<< OSC-IN: Ignored (script was not waiting for view switch).")
     end
 End
 
@@ -13394,24 +13394,24 @@ On TimerTick(ms : Double)
    // A. SYSTEM LOGIC (PRIORITY: ALWAYS RUNS, EVEN WITH ACTIVE KILLSWITCH)
    // ========================================================================
 
-   // 1. STABILISIERUNGS-TIMER (Ersetzt den 3s Wait nach View-Switch)
+   // 1. STABILIZATION TIMER (Replaces the 3s wait after view switch)
    if PostViewSwitchDelayTimer > 0.0 then
        if TimeSinceStartup() > PostViewSwitchDelayTimer then
            PostViewSwitchDelayTimer = 0.0 
-           Trace("TIMER: 3s Stabilisierung beendet. Starte Weckruf...")
+           Trace("TIMER: 3s stabilization finished. Starting activation sequence...")
            ContinueActualReplace(true, PendingReplaceSlotIdx, PendingReplacePath, PendingReplaceIsManual)
        end
    end
 
-   // 2. WAKE-UP POLLING
+   // 2. ACTIVATION POLLING
    if IsWaitingForWakeUp then
        if TimeSinceStartup() > WakeUpCheckTimer then
            isStillBypassed = IsPluginBypassed(BLK_VST[PendingReplaceSlotIdx])
            
            if not isStillBypassed then
-               // PLUGIN IST BEREIT -> JETZT DER SCHARFE SCHUSS
+               // PLUGIN IS READY -> NOW THE LIVE SHOT
                IsWaitingForWakeUp = false 
-               Trace("HARD-FIRE: SUCCESS! Plugin is Awake. Firing ReplacePlugin NOW.")
+               Trace("HARD-FIRE: SUCCESS! Plugin is active. Executing ReplacePlugin now.")
                
                Select
                    PendingReplaceSlotIdx == 0 Do ReplacePlugin(VST1_GRS, PendingReplacePath, "")
@@ -13434,9 +13434,9 @@ On TimerTick(ms : Double)
            elsif WakeUpRetryCount < 20 then
                WakeUpRetryCount = WakeUpRetryCount + 1
                WakeUpCheckTimer = TimeSinceStartup() + 200.0
-               Trace("HARD-FIRE: Engine is still waking up... (Retry " + WakeUpRetryCount + ")")
+               Trace("HARD-FIRE: Engine is still activating... (Retry " + WakeUpRetryCount + ")")
            else
-               Trace("HARD-FIRE: CRITICAL ERROR - Plugin refused to wake up.")
+               Trace("HARD-FIRE: CRITICAL ERROR - Plugin failed to activate.")
                IsWaitingForWakeUp = false
                SwitchToSetlistView()
                EmergencyKillSwitch = false 
@@ -13501,7 +13501,7 @@ On TimerTick(ms : Double)
         GPTransportEvaluationTimer = 0.0
             
         if TimeSinceStartup() < SyncLockTimer then
-            Trace(">>> ECHO SENDER: Bounce blockiert (800ms Schutz aktiv).")
+            Trace(">>> ECHO SENDER: Bounce blocked (800ms protection active).")
         else
             SyncLockTimer = TimeSinceStartup() + 800.0
             Trace(">>> ECHO SENDER: Sending START/STOP to arranger.")
@@ -13511,17 +13511,17 @@ On TimerTick(ms : Double)
      end
 
    // ========================================================================
-   // B. EINGEFRORENER BEREICH (WIRD VOM KILLSWITCH BLOCKIERT)
+   // B. FROZEN SECTION (BLOCKED BY THE KILLSWITCH)
    // ========================================================================
    if EmergencyKillSwitch == false then 
        
-       // --- GLOBAL BLINK ENGINE (Das smarte Metronom & Countdown) ---
+       // --- GLOBAL BLINK ENGINE (The smart metronome & countdown) ---
        maxCountInBeats = 0
        
        for k_blink = 0; k_blink < 16; k_blink = k_blink + 1 do
            if Mem_Loop_State[k_blink] != 0 and Mem_Loop_State[k_blink] != 4 then anyLooperActive = true end
            
-           // Finde heraus, ob ein Looper gerade im Count-In ist (State 8)
+           // Find out if a looper is currently in count-in (State 8)
            if Mem_Loop_State[k_blink] == 8 then
                msLeft_blink = LoopFreeArmTimer[k_blink] - TimeSinceStartup()
                if msLeft_blink < 0.0 then msLeft_blink = 0.0 end
@@ -13557,7 +13557,7 @@ On TimerTick(ms : Double)
                SetWidgetValue(LBL_Subbar_3, if Global_BlinkState == 3.0 then 1.0 else 0.0 end)
                SetWidgetValue(LBL_Subbar_4, if Global_BlinkState >= 4.0 then 1.0 else 0.0 end)
                
-           // FALL C: SONG STEHT, WARTET AUF SYNC -> Nur LED 1 blinkt (Armed-Status)
+           // CASE C: SONG IS STOPPED, WAITING FOR SYNC -> Only LED 1 blinks (Armed status)
            else
                if TimeSinceStartup() > Global_BlinkTimer then
                    Global_BlinkTimer = TimeSinceStartup() + msPerBeat
@@ -13586,7 +13586,7 @@ On TimerTick(ms : Double)
                        if not IsPlayheadEnabled() then
                            if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
                                FireDirectArrangerTransport()
-                               LastHardwarePulseTime = TimeSinceStartup() + 1000.0 // Echo-Schutz
+                               LastHardwarePulseTime = TimeSinceStartup() + 1000.0 // Echo protection
                            else
                                IsPerformanceActive = true
                                UpdateSyncLabel()
@@ -13598,7 +13598,7 @@ On TimerTick(ms : Double)
                        if DebugMode then Trace("COUNT-IN FINISHED: Arranger/GP started. Looper waiting for sync (State 5).") end
                        
                    else
-                       // HOST SYNC [OFF]: Isoliert starten!
+                       // HOST SYNC [OFF]: Start isolated!
                        Mem_Loop_State[k_loop] = 1 // REC
                        ClearLooperArrays(k_loop)
                        
@@ -13619,7 +13619,7 @@ On TimerTick(ms : Double)
                        IgnoreUIFeedbackTimer = TimeSinceStartup() + 1500.0
                        UpdateInjectionLooperTransportUI()
                        
-                       if DebugMode then Trace("COUNT-IN FINISHED: HostSync OFF. Looper startet isoliert (State 1).") end
+                       if DebugMode then Trace("COUNT-IN FINISHED: HostSync OFF. Looper starts isolated (State 1).") end
                    end
                    
                end
@@ -13628,7 +13628,7 @@ On TimerTick(ms : Double)
        
        ProcessLooperPlayback()
        
-       // --- ISOLIERTE AUTO-TRANSITION (WENN HOST SYNC OFF IST) ---
+       // --- ISOLATED AUTO-TRANSITION (WHEN HOST SYNC IS OFF) ---
        For k_loop = 0; k_loop < 16; k_loop = k_loop + 1 Do
            if Mem_Loop_State[k_loop] == 1 and Mem_Loop_Length[k_loop] > 0 then
                if GetWidgetValue(BTN_Loop_HostSync) < 0.5 then
@@ -13636,7 +13636,7 @@ On TimerTick(ms : Double)
                        
                        CloseLooperBuffer(k_loop)
                        
-                       // Gleiche Logik wie im Grid-Modus
+                       // Same logic as in grid mode
                        if Mem_Loop_Action[k_loop] == 0 then Mem_Loop_State[k_loop] = 2 
                        elsif Mem_Loop_Action[k_loop] == 1 then Mem_Loop_State[k_loop] = 3 
                        elsif Mem_Loop_Action[k_loop] == 2 then Mem_Loop_State[k_loop] = 4 end
@@ -13667,7 +13667,7 @@ On TimerTick(ms : Double)
                        IgnoreUIFeedbackTimer = TimeSinceStartup() + 1500.0
                        BuildLooperConfigLines()
                        UpdateInjectionLooperTransportUI()
-                       if DebugMode then Trace("LOOPER: Isoliertes Auto-Transition (HostSync OFF) auf Ch " + (k_loop+1)) end
+                       if DebugMode then Trace("LOOPER: Isolated auto-transition (HostSync OFF) on Ch " + (k_loop+1)) end
                    end
                end
            end
@@ -13723,7 +13723,7 @@ On TimerTick(ms : Double)
           end
         end
 
-        // --- LAZY LOADER & RESTLICHE LOGIK ---
+        // --- LAZY LOADER & REMAINING LOGIC ---
         if DelayedLoadTimer > 0.0 then
           if TimeSinceStartup() > DelayedLoadTimer then
               Trace("LAZY LOAD: Executing LoadSongSnapshot now...")
@@ -13732,7 +13732,7 @@ On TimerTick(ms : Double)
           end
         end
 
-        // --- Elektronische Taste am Scriptlet wieder loslassen ---
+        // --- Release the electronic key on the scriptlet ---
         if StyleTriggerResetTimer > 0.0 and TimeSinceStartup() > StyleTriggerResetTimer then
             SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 0.0)
             StyleTriggerResetTimer = 0.0
@@ -13815,7 +13815,7 @@ On TimerTick(ms : Double)
               SnapshotPostLoadTimer = 0.0
               
               // ========================================================
-              // ---> NEU: INITIALES AUTO-SHOW NACH DEM SONG-LADEN <---
+              // ---> NEW: INITIAL AUTO-SHOW AFTER SONG LOADING <---
               // ========================================================
               if GetWidgetValue(BTN_AutoShow_GUI) > 0.5 then
                   // The system already knows from loading which VST has focus.
@@ -13859,7 +13859,7 @@ On TimerTick(ms : Double)
 
         // WATCHDOG FOR VIEW SWITCH (Python callback)
         if OSC_IsWaitingForViewSwitch and TimeSinceStartup() > OSC_ViewSwitchTimeout then
-             Trace("!!! WATCHDOG: TIMEOUT !!! Keine Antwort von Python. Erzwinge Weckruf...")
+             Trace("!!! WATCHDOG: TIMEOUT !!! No response from Python. Forcing activation sequence...")
              OSC_IsWaitingForViewSwitch = false; OSC_ViewSwitchTimeout = 0.0
              ContinueActualReplace(false, PendingReplaceSlotIdx, PendingReplacePath, PendingReplaceIsManual)
         end
