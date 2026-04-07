@@ -1857,11 +1857,11 @@ Function RefreshSafeReplacerUI()
        realSlotIdx = ReplaceableSlots[CurrentMapSlotIndex]
        loadedPluginName = GetPluginInfo(BLK_VST[realSlotIdx], 0)
        
-       SetWidgetLabel(LBL_MAP, "VST " + (realSlotIdx + 1))
+       SetWidgetLabel(LBL_MAP, "Layer " + (realSlotIdx + 1))
        
        // --- RESIDENT PROTECTION MODE ---
        if realSlotIdx < 2 then 
-           SetWidgetLabel(LBL_Publisher, "--- RESIDENT ---")
+           SetWidgetLabel(LBL_Publisher, "--- LOADED ---")
            SetWidgetLabel(LBL_VST, loadedPluginName)
            SetWidgetLabel(LBL_VSTPreset, LoadedPresets[realSlotIdx])
            IsPresetLocked = false
@@ -2175,7 +2175,7 @@ Function UpdateVstInfoDisplay()
        if chStr == "" then chStr = "None" end
 
        // 4 lines per VST entry
-       VstInfo_Lines <-- "VST " + (i + 1) + ": [" + vstName + "] " + statusStr
+       VstInfo_Lines <-- "Layer " + (i + 1) + ": [" + vstName + "] " + statusStr
        VstInfo_Lines <-- "   Preset: " + presetStr
        VstInfo_Lines <-- "   Channels: " + chStr
        VstInfo_Lines <-- "" 
