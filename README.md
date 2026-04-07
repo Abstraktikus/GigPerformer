@@ -68,11 +68,12 @@ A 4-mode system accessible via joystick/sustain pedal:
 
 Planned features, roughly in order of implementation:
 
-1. **Timeline SYS-MODE** — Navigate song sections (Intro, Verse, Chorus...) via joystick in a dedicated SYS-MODE, jump between parts in real time
+1. **Timeline SYS-MODE** — Navigate song sections (Intro, Verse, Chorus...) via joystick in a dedicated SYS-MODE. Supports section jumps as well as macro automation recording along the timeline
 2. **Automatic Bar Synchronization** — Detect the current song position by matching manual section changes (SYSREG) and played chords within an AnchorWindow against the timeline
 3. **MIDI Recorder & Player** — Record and play back MIDI performances, bar-aligned to the timeline
 4. **Overdub Layers** — Stack multiple recording takes on top of each other, building up arrangements layer by layer
 5. **Backing Tracks Integration** — Trigger and sync audio backing tracks to the timeline with automatic cue points and transport control
+6. **LFO Engine** — Scriptable LFOs linked to Controller Map macros for automated parameter modulation (filter sweeps, tremolo, panning, etc.)
 
 ## Requirements
 
