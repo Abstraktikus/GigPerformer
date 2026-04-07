@@ -141,6 +141,10 @@ Global_Crossfade=0.5
 ControllerMap=Standard_VST1
 ```
 
+## Status
+
+> **Work in progress.** This project is under active development and has **not been used on stage yet**. It has only been tested with a **Yamaha Genos2** as the arranger workstation. Other hardware setups may require adjustments to `DeviceConfig.txt` and the HAL configuration. Use at your own risk — contributions and feedback are welcome!
+
 ## License
 
 This project is shared for educational purposes. The GPScript code is original work. Gig Performer is a product of [Deskew Technologies](https://gigperformer.com).
