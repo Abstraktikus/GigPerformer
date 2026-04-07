@@ -1,0 +1,202 @@
+[Map:Standard]
+; Default Layout for multiple VSTs (Full Range 0.0 - 1.0)
+Macro1 = VST1_GRS:48 {0.0, 1.0}
+Macro2 = VST1_GRS:49 {0.0, 1.0}
+Macro3 = VST1_GRS:50 {0.0, 1.0}
+Macro4 = VST1_GRS:51 {0.0, 1.0}
+Macro5 = VST1_GRS:52 {0.0, 1.0}
+Macro6 = VST1_GRS:53 {0.0, 1.0}
+Macro7 = Ch12:CC7:Volume V_Lab
+Macro8 = VST1_GRS:0 {0.0, 1.0}
+Macro9 = VST1_GRS:1 {0.0, 1.0}
+Macro10 = VST1_GRS:2 {0.0, 1.0}
+Macro11 = VST1_GRS:3 {0.0, 1.0}
+Macro12 = VST1_GRS:4 {0.0, 1.0}
+Macro13 = VST1_GRS:5 {0.0, 1.0}
+Macro14 = VST1_GRS:6 {0.0, 1.0}
+Macro15 = Ch13:CC7:Volume Triton
+Macro16 = SCRUBBER
+Macro17 = VST_SCOPE_PREV
+Macro18 = VST_SCOPE_NEXT
+Macro19 = VST_PREV
+Macro20 = VST_NEXT
+Macro21 = REC_SONGPART
+Macro22 = SOLO_SMART_CH1
+Macro23 = SOLO_STRICT_CH1
+Macro24 = USER_MUTE_CH1
+CC11 = CROSSFADER
+CC64 = SYSTEM_TOGGLE
+
+[Map:Standard_VST1]
+; --- Omnisphere ---
+Macro1 = VST1_GRS:48 
+Macro2 = VST1_GRS:49 
+Macro3 = VST1_GRS:50 
+Macro4 = VST1_GRS:52 
+Macro5 = VST1_GRS:63 
+Macro6 = CROSSFADER
+Macro7 = VST1:0 {0.0, 1.0} | VST1:1 {0.0, 1.0} | VST1:2 {0.0, 1.0} | VST1:3 {0.0, 1.0} | VST1:4 {0.0, 1.0} | VST1:5 {0.0, 1.0} | VST1:6 {0.0, 1.0}
+Macro8 = VST1_GRS:0
+Macro9 = VST1_GRS:1
+Macro10 = VST1_GRS:2
+Macro11 = VST1_GRS:3
+Macro12 = VST1_GRS:4
+Macro13 = VST1_GRS:5
+Macro14 = VST1_GRS:6
+Macro15 = VST1_GRS:7
+Macro16 = SCRUBBER
+Macro17 = VST_SCOPE_PREV
+Macro18 = VST_SCOPE_NEXT
+Macro19 = VST_PREV
+Macro20 = VST_NEXT
+Macro21 = REC_SONGPART
+CC11 = CROSSFADER
+CC64 = SYSTEM_TOGGLE
+
+[Map:Standard_VST2]
+Macro1 = Ch11:CC74 {0.0, 1.0}
+Macro2 = Ch11:CC71 {0.0, 1.0}
+Macro3 = Ch11:CC76 {0.0, 1.0}
+Macro4 = Ch11:CC77 {0.0, 1.0}
+Macro5 = Ch11:CC93 {0.0, 1.0}
+Macro6 = Ch11:CC18 {0.0, 1.0}
+Macro7 = Ch11:CC19 {0.0, 1.0}
+Macro8 = Ch11:CC73 {0.0, 1.0}
+Macro9 = Ch11:CC75 {0.0, 1.0}
+Macro10 = Ch11:CC79 {0.0, 1.0}
+Macro11 = Ch11:CC72 {0.0, 1.0}
+Macro12 = Ch11:CC80 {0.0, 1.0}
+Macro13 = Ch11:CC81 {0.0, 1.0}
+Macro14 = Ch11:CC82 {0.0, 1.0}
+Macro15 = Ch11:CC83 {0.0, 1.0}
+Macro17 = Ch11:CC85 {0.0, 1.0}
+Macro18 = VST2_GRS:41 {0.0, 1.0} 
+Macro19 = VST2_GRS:42 {0.0, 1.0}
+Macro20 = VST2_GRS:43 {0.0, 1.0}
+Macro21 = VST2_GRS:44 {0.0, 1.0}
+CC11 = CROSSFADER
+CC64 = SYSTEM_TOGGLE
+
+[Map:Standard_VST3]
+; --- Triton Extreme (via MIDI CC) ---
+Macro1 = Ch13:CC17:Knob1
+Macro2 = Ch13:CC19:Knob2
+Macro3 = Ch13:CC20:Knob3
+Macro4 = Ch13:CC21:Knob4
+Macro5 = VST_SCOPE
+Macro6 = CROSSFADER
+Macro8 = Ch13:CC02:Breath
+Macro9 = Ch13:CC16:Ribbon
+Macro10 = Ch13:CC16:Slider
+Macro11 = Ch13:CC16:SW1
+Macro12 = Ch13:CC16:SW2
+Macro13 = Ch12:CC83:External
+Macro16 = SCRUBBER
+Macro17 = VST_SCOPE_PREV
+Macro18 = VST_SCOPE_NEXT
+Macro19 = VST_PREV
+Macro20 = VST_NEXT
+Macro21 = REC_SONGPART
+CC11 = CROSSFADER
+CC64 = SYSTEM_TOGGLE
+
+[Map:Standard_VST4]
+Macro4 = VST_SCOPE
+Macro5 = VST_BROWSE
+Macro6 = CROSSFADER
+Macro16 = SCRUBBER
+Macro17 = VST_SCOPE_PREV
+Macro18 = VST_SCOPE_NEXT
+Macro19 = VST_PREV
+Macro20 = VST_NEXT
+Macro21 = REC_SONGPART
+CC11 = CROSSFADER
+CC64 = SYSTEM_TOGGLE
+
+[Map:Standard_VST5]
+Macro4 = VST_SCOPE
+Macro5 = VST_BROWSE
+Macro6 = CROSSFADER
+Macro16 = SCRUBBER
+Macro17 = VST_SCOPE_PREV
+Macro18 = VST_SCOPE_NEXT
+Macro19 = VST_PREV
+Macro20 = VST_NEXT
+Macro21 = REC_SONGPART
+CC11 = CROSSFADER
+CC64 = SYSTEM_TOGGLE
+
+[Map:Standard_VST6]
+Macro4 = VST_SCOPE
+Macro5 = VST_BROWSE
+Macro6 = CROSSFADER
+Macro16 = SCRUBBER
+Macro17 = VST_SCOPE_PREV
+Macro18 = VST_SCOPE_NEXT
+Macro19 = VST_PREV
+Macro20 = VST_NEXT
+Macro21 = REC_SONGPART
+CC11 = CROSSFADER
+CC64 = SYSTEM_TOGGLE
+
+[Map:Standard_VST7]
+Macro4 = VST_SCOPE
+Macro5 = VST_BROWSE
+Macro6 = CROSSFADER
+Macro16 = SCRUBBER
+Macro17 = VST_SCOPE_PREV
+Macro18 = VST_SCOPE_NEXT
+Macro19 = VST_PREV
+Macro20 = VST_NEXT
+Macro21 = REC_SONGPART
+CC11 = CROSSFADER
+CC64 = SYSTEM_TOGGLE
+
+[Map:Standard_VST8]
+Macro4 = VST_SCOPE
+Macro5 = VST_BROWSE
+Macro6 = CROSSFADER
+Macro16 = SCRUBBER
+Macro17 = VST_SCOPE_PREV
+Macro18 = VST_SCOPE_NEXT
+Macro19 = VST_PREV
+Macro20 = VST_NEXT
+Macro21 = REC_SONGPART
+CC11 = CROSSFADER
+CC64 = SYSTEM_TOGGLE
+
+[Map:Standard_VST9]
+Macro4 = VST_SCOPE
+Macro5 = VST_BROWSE
+Macro6 = CROSSFADER
+Macro16 = SCRUBBER
+Macro17 = VST_SCOPE_PREV
+Macro18 = VST_SCOPE_NEXT
+Macro19 = VST_PREV
+Macro20 = VST_NEXT
+Macro21 = REC_SONGPART
+CC11 = CROSSFADER
+CC64 = SYSTEM_TOGGLE
+
+[Map:SlowHip80erDream]
+Macro1 = Ch11:CC74:Brightness {0.0, 1.0} | Ch11:CC74:Timbre {0.0, 1.0} | Ch12:CC74:Timbre {0.0, 1.0}
+Macro2 = Ch11:CC76:Time {0.0, 1.0} | VST1_GRS:49:1 Global Filt Res
+Macro3 = Ch11:CC77:Movement {0.0, 1.0} | VST1_GRS:50:1 Global Filt Env
+Macro4 = VST1_GRS:48:1 Global Filt Cut | Ch11:CC18:Phaser {0.0, 1.0} | Ch12:CC18:Phaser {0.0, 1.0}
+Macro5 = VST_SCOPE
+Macro6 = VST_BROWSE
+Macro8 = VST1_GRS:0:Level (p1) {0.000, 0.289}
+Macro9 = VST1_GRS:1:Level (p2) {0.000, 0.442}
+Macro10 = VST1_GRS:2:Level (p3) {0.000, 0.464}
+Macro11 = VST1_GRS:3:Level (p4) {0.000, 0.182}
+Macro13 = Ch11:CC17:Master Volume {0.0, 1.0}
+Macro14 = Ch12:CC17:Master Volume {0.0, 1.0}
+Macro15 = VST1_GRS:7:Level (p8) {0.000, 0.235}
+Macro16 = SCRUBBER
+Macro17 = VST_SCOPE_PREV
+Macro18 = VST_SCOPE_NEXT
+Macro19 = VST_PREV
+Macro20 = VST_NEXT
+Macro21 = REC_SONGPART
+CC11 = CROSSFADER
+CC64 = SYSTEM_TOGGLE

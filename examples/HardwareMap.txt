@@ -1,0 +1,29 @@
+[Assignment:Standard]
+; Controller Bindings (Auto-Generated)
+Macro21 = Ch1:CC74 | Ch10:Note50
+Macro51 = Ch8:CC110
+Macro52 = Ch8:CC114
+Macro53 = Ch8:CC115
+Macro54 = Ch8:CC116
+Macro61 = Ch8:CC111 
+Macro62 = Ch8:CC112 
+Macro63 = Ch8:CC113
+Macro83 = Ch6:CC110
+Macro84 = Ch6:CC111
+Macro85 = Ch6:CC112
+Macro86 = Ch6:CC113
+Macro87 = Ch6:CC114
+Macro88 = Ch6:CC115
+Macro89 = Ch6:CC116
+Macro90 = Ch6:CC117
+Macro91 = Ch7:CC110
+Macro92 = Ch7:CC111
+Macro93 = Ch7:CC112
+Macro94 = Ch7:CC113
+Macro95 = Ch7:CC114
+Macro96 = Ch7:CC115
+Macro97 = Ch7:CC116
+Macro98 = Ch7:CC117
+
+
+  
