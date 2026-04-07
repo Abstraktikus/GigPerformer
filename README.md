@@ -10,7 +10,7 @@ The Global Rackspace script turns Gig Performer into a full-featured live comman
 
 ### Song Management & Chord Display
 
-Load songs from a setlist, display chord sheets with section markers (Intro, Verse, Chorus...), and navigate through song parts in real time. The timeline tracks your position with bar counters and section cues.
+Load songs from a setlist, display chord sheets with section markers (Intro, Verse, Chorus...), and navigate through song parts in real time. The timeline tracks your position with bar counters and section cues. Chord sheets use the original ChordPro format (`.gpchord`) and can be imported via clipboard — for example from [Ultimate Guitar](https://tabs.ultimate-guitar.com/).
 
 ![Song & Timeline — Transport sync, timeline recording, and transpose](images/Song%20&%20TImeline.png)
 
@@ -51,8 +51,6 @@ A dual-zone crossfader blending VST audio outputs (up to 16 channels) against MI
 Define named controller maps per song that assign hardware knobs/sliders to VST parameters and MIDI CCs. Includes macro learning, scene morphing with min/max capture, and Smart Adapt for automatic parameter linking.
 
 ![Controller Maps — Macro assignments with scene morphing](images/Controller%20Map.png)
-
-![Controller Map Sections — Detailed macro routing view](images/Controller%20Map%20Sections.png)
 
 ### Hardware Abstraction Layer (HAL)
 
