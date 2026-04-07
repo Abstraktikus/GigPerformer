@@ -64,6 +64,16 @@ A 4-mode system accessible via joystick/sustain pedal:
 - **Controller Map** — switch and edit macro assignments
 - **Strip-Control** — channel strip parameters
 
+## Roadmap
+
+Planned features, roughly in order of implementation:
+
+1. **Timeline SYS-MODE** — Navigate song sections (Intro, Verse, Chorus...) via joystick in a dedicated SYS-MODE, jump between parts in real time
+2. **Automatic Bar Synchronization** — Detect the current song position by matching manual section changes (SYSREG) and played chords within an AnchorWindow against the timeline
+3. **MIDI Recorder & Player** — Record and play back MIDI performances, bar-aligned to the timeline
+4. **Overdub Layers** — Stack multiple recording takes on top of each other, building up arrangements layer by layer
+5. **Backing Tracks Integration** — Trigger and sync audio backing tracks to the timeline with automatic cue points and transport control
+
 ## Requirements
 
 - [Gig Performer 5.x](https://gigperformer.com) (GPScript support required)
