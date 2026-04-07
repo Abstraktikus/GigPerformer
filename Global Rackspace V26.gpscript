@@ -9486,7 +9486,7 @@ End
 // ---------------------------------------------------------
 // HAL: UNIVERSAL SYSTEM NAVIGATION ROUTER
 // ---------------------------------------------------------
-// Cycles the strip theme (Y-axis in STRIP-CONTROL mode).
+// Cycles the strip theme (X-axis in STRIP-CONTROL mode).
 // Themes are the toggle-able macro groups: Octaver, Humanizer, Quantizer, Auto Sustain, etc.
 Function CycleStripTheme(dir : Integer)
    Strip_ThemeIdx = Strip_ThemeIdx + dir
@@ -9662,20 +9662,18 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
             CycleCtrlMap(dir)                // Button = cycle all maps
         end
 
-    // --- 3: STRIP-CONTROL (Grid: Theme x Channel) ---
+    // --- 3: STRIP-CONTROL (Grid: Channel x Theme) ---
     elsif GlobalSystemMode == 3 then
         if actionType == "Y_AXIS" then
-            if dir == 1 then
-                CycleStripTheme(1)           // Y-Up = browse themes (Octaver -> Humanizer -> ...)
-            end
+            CycleStripChannel(dir)           // Y-Up/Down = select channel (like Looper)
         elsif actionType == "X_AXIS" then
             if dir == -1 then
-                CycleStripChannel(-1)        // X-Left = prev channel with active VST
+                CycleStripTheme(-1)          // X-Left = prev theme (Octaver -> Humanizer -> ...)
             elsif dir == 1 then
                 ToggleStripMacro()           // X-Right = toggle macro at grid position
             end
         elsif actionType == "ENCODER" then
-            CycleStripTheme(dir)             // Wheel = browse themes
+            CycleStripChannel(dir)           // Wheel = switch channels (like Looper)
         elsif actionType == "BUTTON" then
             ToggleStripMacro()               // Button = toggle macro at grid position
         end
