@@ -7599,6 +7599,21 @@ Function SelectGlobalSystemMode(targetMode : Integer)
     MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
 End
 
+Function StartTimelineRecording()
+    // Start count-in
+    TimelineCountInTimer = TimeSinceStartup() + GetCountInDurationMS()
+    TimelineRecActive = false  // Not yet — wait for count-in to expire
+    TimelineCurrentPartIdx = 1 // First manual marker = part 1 (Intro is implicit at t=0)
+    PreviewPartIdx = 0
+
+    // Clear working arrays
+    Arr_Rec_TimeMS = []; Arr_Rec_Type = []; Arr_Rec_Val = []
+
+    Trace("TIMELINE: Count-in started, expires in " + Round(GetCountInDurationMS()) + "ms")
+    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: Count-In... <<<", Local_IP, Local_PORT)
+    MacroFeedbackTimer = TimeSinceStartup() + GetCountInDurationMS() + 500.0
+End
+
 // ---------------------------------------------------------
 // REALTIME SMART BYPASS
 // Monitors the matrix live and puts unused VSTs & channels to sleep
@@ -13600,8 +13615,17 @@ On TimerTick(ms : Double)
            end
        end
 
+       // Timeline count-in contributes to the same LED display
+       if TimelineCountInTimer > 0.0 and not TimelineRecActive then
+           msLeft_blink = TimelineCountInTimer - TimeSinceStartup()
+           if msLeft_blink > 0.0 then
+               remB = Round((msLeft_blink + (msPerBeat / 2.0)) / msPerBeat)
+               if remB > maxCountInBeats then maxCountInBeats = remB end
+           end
+       end
+
        if anyLooperActive then
-           
+
            // CASE A: COUNT-IN RUNNING (transport still stopped)
            if maxCountInBeats > 0 then
                ledIndex = 4 - ((maxCountInBeats - 1) % 4)
@@ -13689,11 +13713,24 @@ On TimerTick(ms : Double)
                        
                        if DebugMode then Trace("COUNT-IN FINISHED: HostSync OFF. Looper starts isolated (State 1).") end
                    end
-                   
+
                end
            end
        End
-       
+
+       // --- TIMELINE COUNT-IN MONITOR ---
+       if TimelineCountInTimer > 0.0 and not TimelineRecActive then
+           if TimeSinceStartup() >= TimelineCountInTimer then
+               TimelineCountInTimer = 0.0
+               TimelineRecActive = true
+               RecordStartTimeMS = TimeSinceStartup()
+
+               Trace("TIMELINE: Count-in expired. Recording started at " + Round(RecordStartTimeMS) + "ms")
+               OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: REC <<<", Local_IP, Local_PORT)
+               MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+           end
+       end
+
        ProcessLooperPlayback()
        
        // --- ISOLATED AUTO-TRANSITION (WHEN HOST SYNC IS OFF) ---
