@@ -10442,6 +10442,92 @@ Function FinishRecording()
 End
 
 // ---------------------------------------------------------
+// ANCHOR: CHORD-TO-ROOT PARSER
+// ---------------------------------------------------------
+
+Function ChordNameToRoot(chordName : String) Returns Integer
+   // Extracts root pitch class (0-11) from chord name like "Dm", "F#m7", "Bb"
+   // Returns -1 if unparseable
+   var root : Integer = -1
+   var first, second : String
+
+   if Length(chordName) == 0 then result = -1
+   else
+       first = CopySubstring(chordName, 0, 1)
+
+       if first == "C" then root = 0
+       elsif first == "D" then root = 2
+       elsif first == "E" then root = 4
+       elsif first == "F" then root = 5
+       elsif first == "G" then root = 7
+       elsif first == "A" then root = 9
+       elsif first == "B" then root = 11
+       elsif first == "H" then root = 11
+       end
+
+       if root >= 0 and Length(chordName) >= 2 then
+           second = CopySubstring(chordName, 1, 1)
+           if second == "#" then
+               root = root + 1
+               if root > 11 then root = 0 end
+           elsif second == "b" then
+               root = root - 1
+               if root < 0 then root = 11 end
+           end
+       end
+
+       result = root
+   end
+End
+
+Function ParsePartRoots()
+   // Extracts root pitch classes from Arr_PartText_Raw chord notation [Dm], [F], etc.
+   // Populates flat arrays: Arr_PartRootSeq, Arr_PartRootStart, Arr_PartRootLen
+   var i, j, blockLen, rootPC, lastRoot : Integer
+   var block, chordName, c : String
+   var inChord : Boolean = false
+   var partStart, partCount : Integer
+
+   Arr_PartRootSeq = []; Arr_PartRootStart = []; Arr_PartRootLen = []
+
+   For i = 0; i < Size(Arr_PartText_Raw); i = i + 1 Do
+       block = Arr_PartText_Raw[i]
+       blockLen = Length(block)
+       partStart = Size(Arr_PartRootSeq)
+       partCount = 0
+       lastRoot = -1
+       chordName = ""
+       inChord = false
+
+       j = 0
+       While j < blockLen Do
+           c = CopySubstring(block, j, 1)
+           if c == "[" then
+               inChord = true
+               chordName = ""
+           elsif c == "]" then
+               inChord = false
+               rootPC = ChordNameToRoot(chordName)
+               // Deduplicate consecutive identical roots
+               if rootPC >= 0 and rootPC != lastRoot then
+                   Arr_PartRootSeq <-- rootPC
+                   partCount = partCount + 1
+                   lastRoot = rootPC
+               end
+           elsif inChord then
+               chordName = chordName + c
+           end
+           j = j + 1
+       End
+
+       Arr_PartRootStart <-- partStart
+       Arr_PartRootLen <-- partCount
+   End
+
+   Trace("ANCHOR: Parsed " + Size(Arr_PartRootSeq) + " roots across " + Size(Arr_PartRootStart) + " parts.")
+End
+
+// ---------------------------------------------------------
 // PARSER & LOADER FOR CHORD VIEWER (CLEAN TEXT EDITION)
 // ---------------------------------------------------------
 
@@ -10574,8 +10660,12 @@ Function ParseSongData()
        SongDurationBars = currentBarTrigger + 10 // Buffer for the end
        
        // Reset to start
-       CurrentBar = 1; GlobalBarOffset = 1 - LastSystemBar; LastFiredBar = -1; CurrentState = 4 
+       CurrentBar = 1; GlobalBarOffset = 1 - LastSystemBar; LastFiredBar = -1; CurrentState = 4
        RecalculateTextDisplay(); OSC_SendDoubleSpecific("/UI/SetScrubber", 1.0, Local_IP, Local_PORT)
+
+       // Parse root sequences for AnchorPlayback
+       ParsePartRoots()
+       UpdateAnchorChannels()
    End
 End
 
