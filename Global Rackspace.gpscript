@@ -13383,6 +13383,10 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
    AnchorRootCursor = 0
    AnchorMatchCount = 0
    AnchorLastRoot = -1
+   AnchorLowerChIdx = -1
+   AnchorUpperChIdx = -1
+   AnchorDetectedRootIdx = -1
+   AnchorHasNotesIdx = -1
 
    ShowVSTOverlay("LOADING SONG...", 3000.0)
    
@@ -13963,10 +13967,12 @@ Function ProcessAnchorPlayback()
                        end
                    end
 
-                   // 6. TRIGGER part change at threshold
-                   if AnchorMatchCount >= 2 then
+                   // 6. TRIGGER part change at dynamic threshold (min 1 for single-chord parts)
+                   var matchThreshold : Integer = Arr_PartRootLen[nextPartIdx]
+                   if matchThreshold > 2 then matchThreshold = 2 end
+                   if matchThreshold > 0 and AnchorMatchCount >= matchThreshold then
                        AnchorCurrentPartIdx = nextPartIdx
-                       AnchorRootCursor = AnchorMatchCount
+                       AnchorRootCursor = 0  // Restart tracking in new part
                        AnchorMatchCount = 0
                        ExecuteAnchorPartChange(AnchorCurrentPartIdx)
                    end
