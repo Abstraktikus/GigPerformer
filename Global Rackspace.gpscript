@@ -250,6 +250,7 @@ Var
    BTN_TL_HostSync : Widget
    BTN_Loop_Play, BTN_Loop_Rec, BTN_Loop_Clear                    : Widget 
    LBL_Subbar_1, LBL_Subbar_2, LBL_Subbar_3, LBL_Subbar_4         : Widget
+   LBL_TL_Subbar_1, LBL_TL_Subbar_2, LBL_TL_Subbar_3, LBL_TL_Subbar_4 : Widget
    
    // --- Widget Arrays ---
    BTN_Ch1_In, BTN_Ch2_In, BTN_Ch3_In, BTN_Ch4_In, BTN_Ch5_In, BTN_Ch6_In, BTN_Ch7_In, BTN_Ch8_In, BTN_Ch9_In, BTN_Ch10_In, BTN_Ch11_In, BTN_Ch12_In, BTN_Ch13_In, BTN_Ch14_In, BTN_Ch15_In, BTN_Ch16_In : Widget
@@ -14167,6 +14168,10 @@ On TimerTick(ms : Double)
                SetWidgetValue(LBL_Subbar_2, if ledIndex == 2 then 1.0 else 0.0 end)
                SetWidgetValue(LBL_Subbar_3, if ledIndex == 3 then 1.0 else 0.0 end)
                SetWidgetValue(LBL_Subbar_4, if ledIndex == 4 then 1.0 else 0.0 end)
+               SetWidgetValue(LBL_TL_Subbar_1, if ledIndex == 1 then 1.0 else 0.0 end)
+               SetWidgetValue(LBL_TL_Subbar_2, if ledIndex == 2 then 1.0 else 0.0 end)
+               SetWidgetValue(LBL_TL_Subbar_3, if ledIndex == 3 then 1.0 else 0.0 end)
+               SetWidgetValue(LBL_TL_Subbar_4, if ledIndex == 4 then 1.0 else 0.0 end)
                
                if TimeSinceStartup() > Global_BlinkTimer then
                    Global_BlinkTimer = TimeSinceStartup() + msPerBeat
@@ -14181,6 +14186,10 @@ On TimerTick(ms : Double)
                SetWidgetValue(LBL_Subbar_2, if Global_BlinkState == 2.0 then 1.0 else 0.0 end)
                SetWidgetValue(LBL_Subbar_3, if Global_BlinkState == 3.0 then 1.0 else 0.0 end)
                SetWidgetValue(LBL_Subbar_4, if Global_BlinkState >= 4.0 then 1.0 else 0.0 end)
+               SetWidgetValue(LBL_TL_Subbar_1, if Global_BlinkState == 1.0 then 1.0 else 0.0 end)
+               SetWidgetValue(LBL_TL_Subbar_2, if Global_BlinkState == 2.0 then 1.0 else 0.0 end)
+               SetWidgetValue(LBL_TL_Subbar_3, if Global_BlinkState == 3.0 then 1.0 else 0.0 end)
+               SetWidgetValue(LBL_TL_Subbar_4, if Global_BlinkState >= 4.0 then 1.0 else 0.0 end)
                
            // CASE C: SONG IS STOPPED, WAITING FOR SYNC -> Only LED 1 blinks (Armed status)
            else
@@ -14194,10 +14203,15 @@ On TimerTick(ms : Double)
                SetWidgetValue(LBL_Subbar_2, 0.0)
                SetWidgetValue(LBL_Subbar_3, 0.0)
                SetWidgetValue(LBL_Subbar_4, 0.0)
+               SetWidgetValue(LBL_TL_Subbar_1, Global_BlinkState)
+               SetWidgetValue(LBL_TL_Subbar_2, 0.0)
+               SetWidgetValue(LBL_TL_Subbar_3, 0.0)
+               SetWidgetValue(LBL_TL_Subbar_4, 0.0)
            end
        else
            // Looper inaktiv -> Alle LEDs aus
            SetWidgetValue(LBL_Subbar_1, 0.0); SetWidgetValue(LBL_Subbar_2, 0.0); SetWidgetValue(LBL_Subbar_3, 0.0); SetWidgetValue(LBL_Subbar_4, 0.0)
+           SetWidgetValue(LBL_TL_Subbar_1, 0.0); SetWidgetValue(LBL_TL_Subbar_2, 0.0); SetWidgetValue(LBL_TL_Subbar_3, 0.0); SetWidgetValue(LBL_TL_Subbar_4, 0.0)
        end
 
        // --- MONITOR FREE ARM COUNTDOWN (Status 8) ---
