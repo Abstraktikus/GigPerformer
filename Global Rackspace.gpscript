@@ -4875,7 +4875,7 @@ Function BuildRecDisplayLines()
                 else valStr = "Set: Unknown Part" end
             else valStr = "Value: " + Snap_TL_Val[i] end
 
-            line = tms + "ms | " + valStr
+            line = IntToString(tms) + "ms | " + valStr
 
             RecDisplayLines <-- line
         end
@@ -4903,7 +4903,7 @@ Function BuildRecDisplayLines()
                     else valStr = "Set: Unknown Part" end
                 else valStr = "Value: " + Arr_Rec_Val[i] end
 
-                line = tms + "ms | " + valStr + " [NEW]"
+                line = IntToString(tms) + "ms | " + valStr + " [NEW]"
 
                 RecDisplayLines <-- line
             end
