@@ -2247,7 +2247,7 @@ Function UpdateUsageLabelDisplay()
    
    if firstScopeIdx == -1 then
       SetWidgetLabel(LBL_ChannelUsage, "No Scope")
-      SetWidgetLabel(LBL_Manual, "None")
+      SetWidgetLabel(LBL_Manual, ManualNames[0])
       SetWidgetLabel(LBL_VSTRouting, "-")
 
       // No selection -> hide buttons
@@ -9237,7 +9237,7 @@ Function UpdateAnchorChannels()
 
    // Cache parameter indices (only need to do this once, all NoteProcessors have same layout)
    if AnchorDetectedRootIdx == -1 then
-       var probeIdx : Integer = 0
+       var probeIdx : Integer = -1
        if AnchorLowerChIdx >= 0 then probeIdx = AnchorLowerChIdx
        elsif AnchorUpperChIdx >= 0 then probeIdx = AnchorUpperChIdx
        end
