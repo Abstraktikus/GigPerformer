@@ -308,6 +308,8 @@ Var
     TimelineCountInTimer : Double = 0.0      // Absolute expiry time for count-in
     RecordStartTimeMS : Double = 0.0         // Set when count-in expires (t=0)
     RecordEndTimeMS : Double = 0.0           // Set at END OF SONG
+    RecordedBPM : Double = 120.0           // BPM at recording time (from Song.ini)
+    RecordedTimeSig : Integer = 4          // Time signature at recording time
     PlaybackStartTimeMS : Double = 0.0       // Set when playback begins
     TimelinePlaybackActive : Boolean = false // True during ms-based playback
 
@@ -7561,6 +7563,7 @@ Function CycleGlobalSystemMode()
    var modeName : String
 
    StickySystemMode = -1  // Reset sticky on explicit mode change
+   SystemModeActive = true
 
    GlobalSystemMode = GlobalSystemMode + 1
    if GlobalSystemMode > 4 then GlobalSystemMode = 0 end
@@ -7599,8 +7602,11 @@ Function StartTimelineRecording()
     TimelineCurrentPartIdx = 1 // First manual marker = part 1 (Intro is implicit at t=0)
     PreviewPartIdx = 0
 
-    // Clear working arrays
-    Arr_Rec_TimeMS = []; Arr_Rec_Type = []; Arr_Rec_Val = []
+    // In Overdub mode, keep existing working arrays (append to them)
+    // In Replace mode, clear them
+    if TimelineRecState != 1 then
+        Arr_Rec_TimeMS = []; Arr_Rec_Type = []; Arr_Rec_Val = []
+    end
 
     Trace("TIMELINE: Count-in started, expires in " + Round(GetCountInDurationMS()) + "ms")
     OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: Count-In... <<<", Local_IP, Local_PORT)
@@ -7610,12 +7616,21 @@ End
 Function CommitTimelineRecording()
     var i : Integer
 
-    // Copy Working → Committed
-    Snap_TL_TimeMS = []; Snap_TL_Type = []; Snap_TL_Val = []
-    for i = 0; i < Size(Arr_Rec_TimeMS); i = i + 1 do
-        Snap_TL_TimeMS <-- Arr_Rec_TimeMS[i]
-        Snap_TL_Type <-- Arr_Rec_Type[i]
-        Snap_TL_Val <-- Arr_Rec_Val[i]
+    if TimelineRecState == 1 then
+        // Overdub: Append new events to existing committed events
+        for i = 0; i < Size(Arr_Rec_TimeMS); i = i + 1 do
+            Snap_TL_TimeMS <-- Arr_Rec_TimeMS[i]
+            Snap_TL_Type <-- Arr_Rec_Type[i]
+            Snap_TL_Val <-- Arr_Rec_Val[i]
+        end
+    else
+        // Replace: Overwrite committed with working
+        Snap_TL_TimeMS = []; Snap_TL_Type = []; Snap_TL_Val = []
+        for i = 0; i < Size(Arr_Rec_TimeMS); i = i + 1 do
+            Snap_TL_TimeMS <-- Arr_Rec_TimeMS[i]
+            Snap_TL_Type <-- Arr_Rec_Type[i]
+            Snap_TL_Val <-- Arr_Rec_Val[i]
+        end
     end
     Snap_TL_Fired = []
 
@@ -7632,6 +7647,10 @@ Function DiscardTimelineRecording()
     Trace("TIMELINE: Recording discarded.")
     OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> RECORDING DISCARDED <<<", Local_IP, Local_PORT)
     MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+
+    // Restart recording immediately so user can re-record
+    TimelineRecState = 0  // Reset to Replace
+    StartTimelineRecording()
 End
 
 Function ExecuteRecSongpart()
@@ -7710,9 +7729,16 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
         end
     elsif eventType == "Style" then
         TriggerStyleAction(eventVal)
+    elsif eventType == "RegMem" then
+        if eventVal >= 0 then
+            Trace("TIMELINE: RegMem -> " + eventVal)
+            SetParameter(ExternalArranger, eventVal, 1.0)
+        end
     elsif eventType == "Marker" then
         if eventVal >= 0 and eventVal < Size(Arr_SectionNames) then
             PreviewPartIdx = eventVal
+            OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + Arr_SectionNames[eventVal] + " <<<", Local_IP, Local_PORT)
+            MacroFeedbackTimer = TimeSinceStartup() + 2000.0
             Trace("TIMELINE: Part -> " + Arr_SectionNames[eventVal])
         end
     end
@@ -7741,8 +7767,8 @@ End
 
 Function CalculateBarFromMS(timeMS : Double) Returns Integer
     var msPerBar : Double
-    var bpm : Double = GetBPM()
-    var timeSig : Integer = GetTimeSigNumerator()
+    var bpm : Double = RecordedBPM
+    var timeSig : Integer = RecordedTimeSig
 
     if bpm < 1.0 then bpm = 120.0 end
     if timeSig <= 0 then timeSig = 4 end
@@ -9582,6 +9608,13 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
                if OutputScope[susCh] then UpdateInjectionNPDisplay() end
            end
 
+       // --- SYSMODE CYCLE / SELECT ---
+       elsif matchedMacro == SYSMODE_CYCLE_MacroIdx and val > 0.5 then
+           CycleGlobalSystemMode()
+           SystemModeActive = true
+       elsif matchedMacro == SYSMODE_SELECT_MacroIdx then
+           SelectGlobalSystemMode(Round(val * 4.0))
+
        // --- EXTERNE MORPHS (ApplyEditorTest) ---
        else
            ApplyEditorTest(val)
@@ -10783,6 +10816,10 @@ Function LoadSongTimeline(songFilePath : String)
                 // Parse metadata keys
                 if key == "TotalDurationMS" then
                     RecordEndTimeMS = StringToDouble(valStr)
+                elsif key == "StartBPM" then
+                    RecordedBPM = StringToDouble(valStr)
+                elsif key == "TimeSignature" then
+                    RecordedTimeSig = StringToInt(valStr)
 
                 // Parse event lines: Event_N=<ms>, <Type>, <Value>
                 elsif IndexOfSubstring(key, "Event_", false) == 0 then
@@ -13824,6 +13861,7 @@ On TimerTick(ms : Double)
            if msLeft_blink > 0.0 then
                remB = Round((msLeft_blink + (msPerBeat / 2.0)) / msPerBeat)
                if remB > maxCountInBeats then maxCountInBeats = remB end
+               anyLooperActive = true  // Ensure LED display updates during Timeline count-in
            end
        end
 
