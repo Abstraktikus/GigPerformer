@@ -70,7 +70,8 @@ Var
    HumanRoutingMap : String Array = ["1", "1", "1", "1", "1", "1", "1", "1", "9", "10", "2", "2", "3", "4", "5,6", "7,8"]
    SECTION_KEYWORDS : String Array = ["Intro", "Verse", "Chorus", "Bridge", "Solo", "Outro", "Interlude", "Pre-Chorus", "Instrumental", "Coda", "Hook", "Refrain", "Break"]
    SyncModeNames : String Array = ["ISOLATED", "ARRANGER LEADS", "GP LEADS", "FULL SYNC", "INITIAL LATCH"]
-   UsageCategories : String Array = ["Free", "Upper", "Lower", "Multi Pad 1", "Multi Pad 2", "Multi Pad 3", "Multi Pad 4", "Drums 1", "Drums 2", "Bass", "Chord 1", "Chord 2", "Pad", "Phrase 1", "Phrase 2", "Strings 1", "Strings 2", "Piano", "Lead 1", "Lead 2", "PolySynth 1", "PolySynth 2", "Brass 1", "Brass 2", "Woodwind", "Choir 1", "Choir 2", "Bells 1", "Bells 2", "Accordion", "Organ 1", "Organ 2"] 
+   UsageCategories : String Array = ["Free", "Multi Pad 1", "Multi Pad 2", "Multi Pad 3", "Multi Pad 4", "Drums 1", "Drums 2", "Bass", "Chord 1", "Chord 2", "Pad", "Phrase 1", "Phrase 2", "Strings 1", "Strings 2", "Piano", "Lead 1", "Lead 2", "PolySynth 1", "PolySynth 2", "Brass 1", "Brass 2", "Woodwind", "Choir 1", "Choir 2", "Bells 1", "Bells 2", "Accordion", "Organ 1", "Organ 2"]
+   ManualNames : String Array = ["None", "Upper", "Lower"]
    NoteNamesSharp : String Array = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
    NoteNamesFlat  : String Array = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
    
@@ -204,6 +205,7 @@ Var
 
    // --- Channel Injection ---
    LBL_ChannelUsage, BTN_ChannelUsage_Prev, BTN_ChannelUsage_Next                : Widget
+   BTN_Manual_Prev, LBL_Manual, BTN_Manual_Next                                  : Widget
    LBL_VSTRouting, W_VelocityMeter                                               : Widget
    LBL_Injection_Split, BTN_Inject_KBSplit_Lowest, BTN_Inject_KBSplit_Highest    : Widget
    BTN_LearnMin, BTN_LearnMax                                                    : Widget
@@ -313,6 +315,16 @@ Var
     PlaybackStartTimeMS : Double = 0.0       // Set when playback begins
     TimelinePlaybackActive : Boolean = false // True during ms-based playback
 
+    // --- ANCHORPLAYBACK STATE ---
+    AnchorLowerChIdx      : Integer = -1    // First channel with Manual = Lower
+    AnchorUpperChIdx      : Integer = -1    // First channel with Manual = Upper
+    AnchorCurrentPartIdx  : Integer = 0     // Which part Anchor thinks is active
+    AnchorRootCursor      : Integer = 0     // Position in current part's root sequence
+    AnchorMatchCount      : Integer = 0     // Consecutive matches against NEXT part
+    AnchorLastRoot        : Integer = -1    // Last detected root (pitch class), -1 = none
+    AnchorDetectedRootIdx : Integer = -1    // Cached param index for p_DetectedRoot
+    AnchorHasNotesIdx     : Integer = -1    // Cached param index for p_HasNotes
+
    FirstRunDone, FactoryLearnDone : Boolean = false
 
    InputSyncTimer, OutputSyncTimer, SnapshotPostLoadTimer : Double = 0.0
@@ -379,6 +391,7 @@ Var
    Mem_SoloStrict         : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_SoloSmart          : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_UserMute           : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+   Mem_Manual             : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_ManualVSTBypass    : Boolean Array = [false, false, false, false, false, false, false, false, false, false]
    
    Mem_NP_ChordMode       : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -555,7 +568,12 @@ Var
    Snap_TL_Type : String Array
    Snap_TL_Val : Integer Array
    Snap_TL_Fired : Boolean Array
-   
+
+   // --- ANCHOR ROOT SEQUENCE (parsed from .gpchord) ---
+   Arr_PartRootSeq   : Integer Array   // All roots concatenated (pitch classes 0-11)
+   Arr_PartRootStart : Integer Array   // Start index in Arr_PartRootSeq per part
+   Arr_PartRootLen   : Integer Array   // Number of roots per part
+
    // --- Animation & Style ---
    Anim_Active    : Boolean Array = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
    Anim_Start, Anim_Target, Anim_StartTime, Anim_Duration, Arr_Anim_DurMS,Arr_Anim_Target : Double Array  = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -2229,12 +2247,14 @@ Function UpdateUsageLabelDisplay()
    
    if firstScopeIdx == -1 then
       SetWidgetLabel(LBL_ChannelUsage, "No Scope")
+      SetWidgetLabel(LBL_Manual, "None")
       SetWidgetLabel(LBL_VSTRouting, "-")
-      
+
       // No selection -> hide buttons
       For i = 0; i < 3; i = i + 1 Do SetWidgetHideOnPresentation(W_Inject_Bypass[i], true) End
    else
       SetWidgetLabel(LBL_ChannelUsage, ChannelUsage[firstScopeIdx])
+      SetWidgetLabel(LBL_Manual, ManualNames[Mem_Manual[firstScopeIdx]])
       
       // 1. Find up to 3 VSTs assigned to this channel
       count = 0
@@ -9184,6 +9204,52 @@ Function CycleChannelUsage(direction : Integer)
    end // Ende vom Zaun
 End
 
+Function CycleManual(direction : Integer)
+   var firstScopeIdx, currentVal, newVal, i : Integer
+
+   firstScopeIdx = GetFirstActiveScope()
+
+   if firstScopeIdx > -1 then
+       currentVal = Mem_Manual[firstScopeIdx]
+       newVal = currentVal + direction
+       if newVal < 0 then newVal = 2
+       elsif newVal > 2 then newVal = 0 end
+
+       For i = 0; i < 16; i = i + 1 Do
+           if OutputScope[i] then
+               Mem_Manual[i] = newVal
+           end
+       End
+
+       SetWidgetLabel(LBL_Manual, ManualNames[newVal])
+       UpdateAnchorChannels()
+   end
+End
+
+Function UpdateAnchorChannels()
+   var i : Integer
+   AnchorLowerChIdx = -1
+   AnchorUpperChIdx = -1
+   For i = 0; i < 16; i = i + 1 Do
+       if Mem_Manual[i] == 2 and AnchorLowerChIdx == -1 then AnchorLowerChIdx = i end
+       if Mem_Manual[i] == 1 and AnchorUpperChIdx == -1 then AnchorUpperChIdx = i end
+   End
+
+   // Cache parameter indices (only need to do this once, all NoteProcessors have same layout)
+   if AnchorDetectedRootIdx == -1 then
+       var probeIdx : Integer = 0
+       if AnchorLowerChIdx >= 0 then probeIdx = AnchorLowerChIdx
+       elsif AnchorUpperChIdx >= 0 then probeIdx = AnchorUpperChIdx
+       end
+       if probeIdx >= 0 then
+           AnchorDetectedRootIdx = GetParamIdxByName(BLK_NoteProcessor[probeIdx], "p_DetectedRoot")
+           AnchorHasNotesIdx = GetParamIdxByName(BLK_NoteProcessor[probeIdx], "p_HasNotes")
+       end
+   end
+
+   Trace("ANCHOR: Lower=Ch" + IntToString(AnchorLowerChIdx + 1) + " Upper=Ch" + IntToString(AnchorUpperChIdx + 1))
+End
+
 Function CycleScopeSection(direction : Integer)
     var i : Integer
     var currentIdx : Integer = CurrentEditScope
@@ -10692,6 +10758,7 @@ Function SaveSongSnapshot()
              if Mem_SoloStrict[i] == 1 then content = content + "Ch" + (i+1) + "_SoloStrict=1" + NEW_LINE end
              if Mem_SoloSmart[i] == 1 then content = content + "Ch" + (i+1) + "_SoloSmart=1" + NEW_LINE end
              if Mem_UserMute[i] == 1 then content = content + "Ch" + (i+1) + "_UserMute=1" + NEW_LINE end
+             if Mem_Manual[i] > 0 then content = content + "Ch" + (i+1) + "_Manual=" + IntToString(Mem_Manual[i]) + NEW_LINE end
              if OutputScope[i] then content = content + "Ch" + (i+1) + "_Scope=1" + NEW_LINE end
              
              if foundReference then
@@ -10884,7 +10951,8 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
    var targetCopyRef : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
    var targetSoloStrict : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    var targetSoloSmart  : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-   var targetUserMute   : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] 
+   var targetUserMute   : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+   var targetManual     : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    var targetScope : Boolean Array = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
    var targetManualBypass : Boolean Array = [false, false, false, false, false, false, false, false, false, false]
    var scopeFound : Boolean = false
@@ -11035,7 +11103,9 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                            elsif IndexOfSubstring(key, "_SoloSmart", false) > -1 then
                                targetSoloSmart[chIdx] = StringToInt(valStr)  
                            elsif IndexOfSubstring(key, "_UserMute", false) > -1 then
-                               targetUserMute[chIdx] = StringToInt(valStr)  
+                               targetUserMute[chIdx] = StringToInt(valStr)
+                           elsif IndexOfSubstring(key, "_Manual", false) > -1 then
+                               targetManual[chIdx] = StringToInt(valStr)
                            elsif IndexOfSubstring(key, "_Scope", false) > -1 then
                                if val > 0.5 then 
                                    targetScope[chIdx] = true
@@ -11225,6 +11295,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                    Mem_SoloStrict[i] = 0 //targetSoloStrict[i]
                    Mem_SoloSmart[i]  = 0 //targetSoloSmart[i]
                    Mem_UserMute[i]   = 0 //targetUserMute[i]
+                   Mem_Manual[i] = targetManual[i]
                    
                    // Pass mute status to the plugin
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_UserMute"); if idx > -1 then SetParameter(BLK_NoteProcessor[i], idx, IntToFloat(targetUserMute[i])) end
@@ -11233,7 +11304,8 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                 end
                 ChannelUsage[i] = targetUsage[i]
              End
-            
+            UpdateAnchorChannels()
+
             // --- RESTORE LOOPER STATE ---
             SetWidgetValue(BTN_Loop_HostSync, targetHostSync)
             SetWidgetValue(BTN_Loop_CountIn, targetCountIn)
@@ -11971,6 +12043,20 @@ On WidgetValueChanged(val : Double) from BTN_ChannelUsage_Prev
    if val > 0.5 then
       CycleChannelUsage(-1)
       SetWidgetValue(BTN_ChannelUsage_Prev, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_Manual_Next
+   if val > 0.5 then
+       CycleManual(1)
+       SetWidgetValue(BTN_Manual_Next, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_Manual_Prev
+   if val > 0.5 then
+       CycleManual(-1)
+       SetWidgetValue(BTN_Manual_Prev, 0.0)
    end
 End
 
@@ -13203,6 +13289,10 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
    SetWidgetValue(BTN_Record_Replace, 0.0)
    RecordMode = 0
    StripLiveDirty = false
+   AnchorCurrentPartIdx = 0
+   AnchorRootCursor = 0
+   AnchorMatchCount = 0
+   AnchorLastRoot = -1
 
    ShowVSTOverlay("LOADING SONG...", 3000.0)
    
