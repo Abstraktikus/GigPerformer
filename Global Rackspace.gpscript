@@ -13202,7 +13202,8 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
    SetWidgetValue(BTN_Record_Overdub, 0.0)
    SetWidgetValue(BTN_Record_Replace, 0.0)
    RecordMode = 0
-   
+   StripLiveDirty = false
+
    ShowVSTOverlay("LOADING SONG...", 3000.0)
    
    Trace("Song Switch Initiated: " + oldSongIndex + " -> " + newSongIndex)
@@ -14136,6 +14137,14 @@ On TimerTick(ms : Double)
                 if msSinceSongStart > Snap_TL_TimeMS[Size(Snap_TL_TimeMS) - 1] + 1000.0 then
                     TimelinePlaybackActive = false
                     Trace("TIMELINE: Playback finished.")
+                    // Restore configured state if STRIP made live changes
+                    if StripLiveDirty then
+                        LoadControllerMap(CurrentCtrlMapName)
+                        StripLiveDirty = false
+                        Trace("STRIP: Live changes restored via controller map reload.")
+                        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> STRIP RESTORED <<<", Local_IP, Local_PORT)
+                        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+                    end
                 end
             end
         end
