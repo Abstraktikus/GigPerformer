@@ -2911,7 +2911,11 @@ Function UpdateControllerInfoDisplay()
            // --- VST SCOPE & BROWSE DISPLAY ---
            elsif (not isCC and s == VST_SCOPE_MacroIdx) or (isCC and s == VST_SCOPE_CCIdx) then
                CtrlInfo_Lines <-- hwStr + ": >> VST Scope Select (Encoder)"
-               
+           elsif (not isCC and s == SYSMODE_CYCLE_MacroIdx) or (isCC and s == SYSMODE_CYCLE_CCIdx) then
+               CtrlInfo_Lines <-- hwStr + ": >> SYS-MODE Cycle"
+           elsif (not isCC and s == SYSMODE_SELECT_MacroIdx) or (isCC and s == SYSMODE_SELECT_CCIdx) then
+               CtrlInfo_Lines <-- hwStr + ": >> SYS-MODE Select (0-4)"
+
            elsif (not isCC and s == VST_BROWSE_MacroIdx) or (isCC and s == VST_BROWSE_CCIdx) then
                CtrlInfo_Lines <-- hwStr + ": >> VST Preset Browse (Encoder)"
                
@@ -5781,6 +5785,10 @@ Function LoadControllerMap(mapName : String)
                                    if isSrcCC then VST_BROWSE_CCIdx = sliderIdx else VST_BROWSE_MacroIdx = sliderIdx end
                                elsif valuePart == "VST_SCOPE" then
                                    if isSrcCC then VST_SCOPE_CCIdx = sliderIdx else VST_SCOPE_MacroIdx = sliderIdx end
+                               elsif valuePart == "SYSMODE_CYCLE" then
+                                   if isSrcCC then SYSMODE_CYCLE_CCIdx = sliderIdx else SYSMODE_CYCLE_MacroIdx = sliderIdx end
+                               elsif valuePart == "SYSMODE_SELECT" then
+                                   if isSrcCC then SYSMODE_SELECT_CCIdx = sliderIdx else SYSMODE_SELECT_MacroIdx = sliderIdx end
                                elsif valuePart == "VST_SCOPE_PREV" then
                                    if isSrcCC then VST_SCOPE_PREV_CCIdx = sliderIdx else VST_SCOPE_PREV_MacroIdx = sliderIdx end
                                elsif valuePart == "VST_SCOPE_NEXT" then
@@ -7584,6 +7592,25 @@ Function CycleGlobalSystemMode()
    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
    MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+End
+
+Function SelectGlobalSystemMode(targetMode : Integer)
+    var modeName : String
+
+    if targetMode < 0 or targetMode > 4 then
+        Trace("SYSMODE_SELECT: Invalid mode " + targetMode)
+        Exit
+    end
+
+    StickySystemMode = -1  // Reset sticky on explicit mode change
+    GlobalSystemMode = targetMode
+    SystemModeActive = true
+
+    modeName = SysModeNames[GlobalSystemMode]
+    Trace("SYS-MODE: Selected " + modeName)
+    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
+    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+    MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
 End
 
 // ---------------------------------------------------------
@@ -9483,9 +9510,16 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
                Last_RecPart_Val = val
            end
            
-       elsif VST_SCOPE_CCIdx == cc and val > 0.5 then 
+       elsif VST_SCOPE_CCIdx == cc and val > 0.5 then
            ChangeVstScope(-1, Round(val * (MAX_VSTS - 1)))
-           
+
+       // --- SYSMODE MACROS ---
+       elsif SYSMODE_CYCLE_CCIdx == cc and val > 0.5 then
+           CycleGlobalSystemMode()
+           SystemModeActive = true
+       elsif SYSMODE_SELECT_CCIdx == cc then
+           SelectGlobalSystemMode(Round(val * 4.0))  // val 0.0-1.0 maps to mode 0-4
+
        // SYSTEM TOGGLE FOR DIRECT CCs
        elsif SYSTEM_TOGGLE_CCIdx == cc then
            if val > 0.5 then
