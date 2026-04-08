@@ -7704,6 +7704,48 @@ Function PartJumpPreview(dir : Integer)
     Trace("TIMELINE: Preview part " + PreviewPartIdx + " = " + partName)
 End
 
+Function FireTimelineEvent(eventType : String, eventVal : Integer)
+    if eventType == "Macro" then
+        SetParameter(ExternalArranger, eventVal, 1.0)
+    elsif eventType == "Map" then
+        if eventVal >= 0 and eventVal < Size(CtrlMapList) then
+            Trace("TIMELINE: Auto-Switching Map to -> " + CtrlMapList[eventVal])
+            LoadControllerMap(CtrlMapList[eventVal])
+            HardwareSyncTimer = TimeSinceStartup() + 400.0
+            OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TL-MAP: " + CtrlMapList[eventVal] + " <<<", Local_IP, Local_PORT)
+            MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        end
+    elsif eventType == "Style" then
+        TriggerStyleAction(eventVal)
+    elsif eventType == "Marker" then
+        if eventVal >= 0 and eventVal < Size(Arr_SectionNames) then
+            PreviewPartIdx = eventVal
+            Trace("TIMELINE: Part -> " + Arr_SectionNames[eventVal])
+        end
+    end
+End
+
+Function StartTimelinePlayback()
+    var i : Integer
+
+    if Size(Snap_TL_TimeMS) == 0 then
+        Trace("TIMELINE: No events to play back.")
+        Exit
+    end
+
+    PlaybackStartTimeMS = TimeSinceStartup()
+    TimelinePlaybackActive = true
+    PreviewPartIdx = 0
+
+    // Reset fired flags
+    Snap_TL_Fired = []
+    for i = 0; i < Size(Snap_TL_TimeMS); i = i + 1 do
+        Snap_TL_Fired <-- false
+    end
+
+    Trace("TIMELINE: Playback started at " + Round(PlaybackStartTimeMS) + "ms, " + Size(Snap_TL_TimeMS) + " events.")
+End
+
 // ---------------------------------------------------------
 // REALTIME SMART BYPASS
 // Monitors the matrix live and puts unused VSTs & channels to sleep
@@ -11601,13 +11643,20 @@ Function EvaluateTransportSync()
         end
     end
     
+    // --- Timeline auto-start on transport ---
+    if playing then
+        if not TimelinePlaybackActive and not TimelineRecActive and Size(Snap_TL_TimeMS) > 0 then
+            StartTimelinePlayback()
+        end
+    end
+
     // --- UI Updates ---
     if RecordMode > 0 then
         BuildRecDisplayLines()
         RefreshRecDisplay(GetWidgetValue(SLD_CurrentState))
     end
-    
-    ProcessTopQueueJobResult(true) 
+
+    ProcessTopQueueJobResult(true)
 End
 
 
@@ -13025,9 +13074,18 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0
         end
     end
     
+    // Timeline NoteOn-detection playback start
+    if IsNoteOn(m) then
+        if not TimelinePlaybackActive and not TimelineRecActive and Size(Snap_TL_TimeMS) > 0 then
+            if GetWidgetValue(BTN_TL_HostSync) > 0.5 and not IsPlayheadEnabled() then
+                StartTimelinePlayback()
+            end
+        end
+    end
+
     // 3. Keyboard split learning (if active)
     ProcessMidiLearn(m)
-    
+
     // 4. Looper
     FeedLooper_Note(m)
     
@@ -13420,11 +13478,8 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
        end
    end
    
-   // --- TIMELINE TRIGGER RESET ---
-   for e = 0; e < Size(Arr_TL_Bar); e = e + 1 do
-        if Arr_TL_Bar[e] == CurrentBar then Arr_TL_Fired[e] = false end
-   end
-   
+   // --- TIMELINE TRIGGER RESET (removed: ms-based playback resets Snap_TL_Fired at start) ---
+
    // ---> TIME DOMAIN TRACE <---
    if beat == 1 and subbeat == 0 then
        if DebugMode then TraceTimeDomains() end
@@ -13598,6 +13653,7 @@ On TimerTick(ms : Double)
      maxCountInBeats, remB, ledIndex : Integer
      msLeft_blink : Double = 0.0; timeSinceHW : Double = 0.0; t_progress : Double = 0.0; 
      a_val : Double = 0.0; msSinceBarStart : Double = 0.0; currentBPM_Tick : Double = 0.0; msPerBeat : Double = 0.0
+     msSinceSongStart : Double = 0.0
      
    // ========================================================================
    // --- INITIALIZATION FOR THIS TICK ---
@@ -14017,31 +14073,21 @@ On TimerTick(ms : Double)
         
         if LastBarStartTime > 0.0 then msSinceBarStart = TimeSinceStartup() - LastBarStartTime end
         
-        // ========================================================================
-        // ---> TIMELINE ACTION EXECUTOR <---
-        // ========================================================================
-        if RecordMode == 0 and IsPerformanceActive and GetWidgetValue(BTN_MIDIAnchorPlayback) > 0.5 then
-            for tl_idx = 0; tl_idx < Size(Arr_TL_Bar); tl_idx = tl_idx + 1 do
-                if Arr_TL_Bar[tl_idx] == CurrentBar and Arr_TL_Fired[tl_idx] == false then
-                    if msSinceBarStart >= IntToFloat(Arr_TL_Offset[tl_idx]) then
-                        
-                        if Arr_TL_Type[tl_idx] == "Macro" then SetParameter(ExternalArranger, Arr_TL_Val[tl_idx], 1.0) end
-                        
-                        if Arr_TL_Type[tl_idx] == "Map" then
-                            if Arr_TL_Val[tl_idx] >= 0 and Arr_TL_Val[tl_idx] < Size(CtrlMapList) then
-                                Trace("TIMELINE: Auto-Switching Map to -> " + CtrlMapList[Arr_TL_Val[tl_idx]])
-                                LoadControllerMap(CtrlMapList[Arr_TL_Val[tl_idx]])
-                                
-                                HardwareSyncTimer = TimeSinceStartup() + 400.0 // Fader smooth nachziehen
-                                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TL-MAP: " + CtrlMapList[Arr_TL_Val[tl_idx]] + " <<<", Local_IP, Local_PORT)
-                                MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-                            end
-                        end
-                        
-                        if Arr_TL_Type[tl_idx] == "Style" then TriggerStyleAction(Arr_TL_Val[tl_idx]) end
-                        
-                        Arr_TL_Fired[tl_idx] = true
-                    end
+        // --- TIMELINE PLAYBACK (ms-based) ---
+        if TimelinePlaybackActive and not TimelineRecActive then
+            msSinceSongStart = TimeSinceStartup() - PlaybackStartTimeMS
+            for tl_idx = 0; tl_idx < Size(Snap_TL_TimeMS); tl_idx = tl_idx + 1 do
+                if Snap_TL_TimeMS[tl_idx] <= msSinceSongStart and Snap_TL_Fired[tl_idx] == false then
+                    FireTimelineEvent(Snap_TL_Type[tl_idx], Snap_TL_Val[tl_idx])
+                    Snap_TL_Fired[tl_idx] = true
+                end
+            end
+
+            // Stop playback after last event + 1 second buffer
+            if Size(Snap_TL_TimeMS) > 0 then
+                if msSinceSongStart > Snap_TL_TimeMS[Size(Snap_TL_TimeMS) - 1] + 1000.0 then
+                    TimelinePlaybackActive = false
+                    Trace("TIMELINE: Playback finished.")
                 end
             end
         end
