@@ -5329,7 +5329,7 @@ Function BuildZebraBlocks()
 End
 
 Function RecordTimelineEvent(eventType : String, eventVal : Integer)
-    var eventTimeMS : Double
+    var eventTimeMS : Double = 0.0
 
     // GUARD: Only record when Timeline REC is active
     if not TimelineRecActive then
@@ -7758,7 +7758,7 @@ Function StartTimelinePlayback()
 End
 
 Function CalculateBarFromMS(timeMS : Double) Returns Integer
-    var msPerBar : Double
+    var msPerBar : Double = 0.0
     var bpm : Double = RecordedBPM
     var timeSig : Integer = RecordedTimeSig
 
@@ -10775,7 +10775,7 @@ Function LoadSongTimeline(songFilePath : String)
     var lines, parts, kvParts : String Array
     var line, valStr, eType, key : String
     var i, eVal : Integer
-    var eTimeMS : Double
+    var eTimeMS : Double = 0.0
     var inSection : Boolean = false
 
     // Clean out arrays
