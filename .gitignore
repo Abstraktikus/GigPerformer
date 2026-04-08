@@ -1,0 +1,13 @@
+# Claude Code local settings
+.claude/
+
+# Python tools & analysis scripts
+analyze.py
+test_short.py
+build_deps.sh
+tools/
+
+# Misc
+.txt
+__pycache__/
+*.pyc
