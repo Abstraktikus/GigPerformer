@@ -78,7 +78,7 @@ Var
    // ========================================================================
    // SECTION 3: HARDWARE ABSTRACTION LAYER — DEVICE & CONTROL REGISTRY
    // ========================================================================
-   SysModeNames : String Array = ["VOICE SELECTOR", "LOOPER CONTROL", "CONTROLLER MAP", "STRIP-CONTROL"]
+   SysModeNames : String Array = ["VOICE SELECTOR", "LOOPER CONTROL", "CONTROLLER MAP", "STRIP-CONTROL", "TIMELINE"]
 
    // --- Capability Flags (bitfield, combinable) ---
    CAP_NONE              : Integer = 0
@@ -245,6 +245,7 @@ Var
    BTN_LoopOut_Prev, LBL_LoopOut, BTN_LoopOut_Next                : Widget
    BTN_LoopStop_Prev, LBL_LoopStop, BTN_LoopStop_Next             : Widget
    BTN_Loop_HostSync, BTN_Loop_CountIn                            : Widget
+   BTN_TL_HostSync : Widget
    BTN_Loop_Play, BTN_Loop_Rec, BTN_Loop_Clear                    : Widget 
    LBL_Subbar_1, LBL_Subbar_2, LBL_Subbar_3, LBL_Subbar_4         : Widget
    
@@ -290,6 +291,26 @@ Var
    DeferredBootRecovery, DeferredManualReboot, IgnoreMorphEcho : Boolean = false
    EmergencyKillSwitch : Boolean = false
    SystemModeActive : Boolean = false
+
+    // --- TIMELINE SUB-MODE STATE ---
+    TimelineSubMode : Integer = 0        // 0 = PLAY, 1 = REC
+    TimelineRecState : Integer = 0       // 0 = Replace, 1 = Overdub, 2 = Discard
+    TimelineRecActive : Boolean = false  // True while ms timer is running
+    TimelineCurrentPartIdx : Integer = 1 // Next part to record (0 = Intro implicit)
+    PreviewPartIdx : Integer = 0         // Part Jump preview index
+
+    // --- STICKY SYS-MODE STATE (all modes) ---
+    StickySystemMode : Integer = -1          // -1 = no sticky, 0-4 = remembered mode
+    StickyTimelineSubMode : Integer = 0
+    StickyTimelineRecState : Integer = 0
+
+    // --- TIMELINE TIMING ---
+    TimelineCountInTimer : Double = 0.0      // Absolute expiry time for count-in
+    RecordStartTimeMS : Double = 0.0         // Set when count-in expires (t=0)
+    RecordEndTimeMS : Double = 0.0           // Set at END OF SONG
+    PlaybackStartTimeMS : Double = 0.0       // Set when playback begins
+    TimelinePlaybackActive : Boolean = false // True during ms-based playback
+
    FirstRunDone, FactoryLearnDone : Boolean = false
 
    InputSyncTimer, OutputSyncTimer, SnapshotPostLoadTimer : Double = 0.0
@@ -413,6 +434,8 @@ Var
    CF_MacroIdx : Integer = 6; CF_CCIdx : Integer = -1  
    SCRUB_MacroIdx : Integer = -1; SCRUB_CCIdx : Integer = -1
    VST_SCOPE_MacroIdx : Integer = -1; VST_SCOPE_CCIdx : Integer = -1
+   SYSMODE_CYCLE_MacroIdx : Integer = -1; SYSMODE_CYCLE_CCIdx : Integer = -1
+   SYSMODE_SELECT_MacroIdx : Integer = -1; SYSMODE_SELECT_CCIdx : Integer = -1
    VST_BROWSE_MacroIdx : Integer = -1; VST_BROWSE_CCIdx : Integer = -1
    VST_SCOPE_PREV_MacroIdx : Integer = -1; VST_SCOPE_PREV_CCIdx : Integer = -1
    VST_SCOPE_NEXT_MacroIdx : Integer = -1; VST_SCOPE_NEXT_CCIdx : Integer = -1
@@ -517,8 +540,18 @@ Var
    
    Arr_FileLines, Arr_SectionNames, Arr_Cues, Arr_PartText_Raw, Arr_Text_Chords, Arr_Text_Lyrics : String Array
    Arr_TL_Type, Arr_Rec_Type : String Array
-   Arr_SectionLineIndices, Arr_BarTriggers, Arr_PartAnchors, Arr_TL_Bar, Arr_Rec_Bar, Arr_TL_Val, Arr_Rec_Val, Arr_TL_Offset, Arr_Rec_Offset : Integer Array 
+   Arr_SectionLineIndices, Arr_BarTriggers, Arr_PartAnchors, Arr_TL_Val, Arr_Rec_Val : Integer Array
+   Arr_TL_Bar, Arr_TL_Offset, Arr_Rec_Bar, Arr_Rec_Offset : Integer Array  // Legacy bar arrays (kept for bar calculation)
    Arr_TL_Fired : Boolean Array
+
+   // --- MS-BASED TIMELINE ARRAYS ---
+   // Working (current recording session)
+   Arr_Rec_TimeMS : Double Array        // Absolute ms since RecordStartTimeMS
+   // Committed (last good state = playback source)
+   Snap_TL_TimeMS : Double Array
+   Snap_TL_Type : String Array
+   Snap_TL_Val : Integer Array
+   Snap_TL_Fired : Boolean Array
    
    // --- Animation & Style ---
    Anim_Active    : Boolean Array = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
