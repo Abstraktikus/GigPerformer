@@ -9790,12 +9790,14 @@ Function ToggleStripMacro()
          currentVal = Mem_SoloSmart[ch]
          newVal = 1 - currentVal
          Mem_SoloSmart[ch] = newVal
+         if newVal == 1 then Mem_SoloStrict[ch] = 0 end // Mutual exclusion
          paramName = "Smart Solo"
 
       Strip_ThemeIdx == 4  Do // Strict Solo
          currentVal = Mem_SoloStrict[ch]
          newVal = 1 - currentVal
          Mem_SoloStrict[ch] = newVal
+         if newVal == 1 then Mem_SoloSmart[ch] = 0 end // Mutual exclusion
          paramName = "Strict Solo"
 
       Strip_ThemeIdx == 5  Do // User Mute
@@ -9853,6 +9855,8 @@ Function ToggleStripMacro()
       MacroFeedbackTimer = TimeSinceStartup() + 2000.0
       MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
       Trace("STRIP TOGGLE: Ch " + IntToString(ch + 1) + " | " + paramName + " = " + statusStr)
+      StripLiveDirty = true
+      UpdateSoloMuteState()
       UpdateMetaColors()
    end
 End
