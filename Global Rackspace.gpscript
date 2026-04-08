@@ -5334,20 +5334,19 @@ Function RecordTimelineEvent(eventType : String, eventVal : Integer)
     // GUARD: Only record when Timeline REC is active
     if not TimelineRecActive then
         Trace("TIMELINE-REC: Ignored (not active)")
-        Exit
+    else
+        eventTimeMS = TimeSinceStartup() - RecordStartTimeMS
+
+        // Write to working arrays
+        Arr_Rec_TimeMS <-- eventTimeMS
+        Arr_Rec_Type <-- eventType
+        Arr_Rec_Val <-- eventVal
+
+        Trace("TIMELINE-REC: " + eventType + " val=" + eventVal + " at " + Round(eventTimeMS) + "ms")
+
+        BuildRecDisplayLines()
+        RefreshRecDisplay(GetWidgetValue(SLD_CurrentState))
     end
-
-    eventTimeMS = TimeSinceStartup() - RecordStartTimeMS
-
-    // Write to working arrays
-    Arr_Rec_TimeMS <-- eventTimeMS
-    Arr_Rec_Type <-- eventType
-    Arr_Rec_Val <-- eventVal
-
-    Trace("TIMELINE-REC: " + eventType + " val=" + eventVal + " at " + Round(eventTimeMS) + "ms")
-
-    BuildRecDisplayLines()
-    RefreshRecDisplay(GetWidgetValue(SLD_CurrentState))
 End
 
 Function RecalculateTextDisplay()
@@ -7581,18 +7580,17 @@ Function SelectGlobalSystemMode(targetMode : Integer)
 
     if targetMode < 0 or targetMode > 4 then
         Trace("SYSMODE_SELECT: Invalid mode " + targetMode)
-        Exit
+    else
+        StickySystemMode = -1  // Reset sticky on explicit mode change
+        GlobalSystemMode = targetMode
+        SystemModeActive = true
+
+        modeName = SysModeNames[GlobalSystemMode]
+        Trace("SYS-MODE: Selected " + modeName)
+        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
+        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
     end
-
-    StickySystemMode = -1  // Reset sticky on explicit mode change
-    GlobalSystemMode = targetMode
-    SystemModeActive = true
-
-    modeName = SysModeNames[GlobalSystemMode]
-    Trace("SYS-MODE: Selected " + modeName)
-    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
-    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-    MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
 End
 
 Function StartTimelineRecording()
@@ -7658,22 +7656,18 @@ Function ExecuteRecSongpart()
 
     if not TimelineRecActive then
         Trace("TIMELINE: REC_SONGPART ignored (not recording)")
-        Exit
-    end
 
     // No parts loaded — single-marker recording (marks song end)
-    if Size(Arr_SectionNames) == 0 then
+    elsif Size(Arr_SectionNames) == 0 then
         RecordEndTimeMS = TimeSinceStartup() - RecordStartTimeMS
         RecordTimelineEvent("Marker", 0)
         CommitTimelineRecording()
         TimelineSubMode = 0
         OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SONG RECORDED <<<", Local_IP, Local_PORT)
         MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-        Exit
-    end
 
     // Last part already recorded — this press = END OF SONG
-    if TimelineCurrentPartIdx >= Size(Arr_SectionNames) then
+    elsif TimelineCurrentPartIdx >= Size(Arr_SectionNames) then
         RecordEndTimeMS = TimeSinceStartup() - RecordStartTimeMS
         RecordTimelineEvent("Marker", TimelineCurrentPartIdx)
         CommitTimelineRecording()
@@ -7681,18 +7675,18 @@ Function ExecuteRecSongpart()
         OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SONG RECORDED <<<", Local_IP, Local_PORT)
         MacroFeedbackTimer = TimeSinceStartup() + 2000.0
         Trace("TIMELINE: END OF SONG at " + Round(RecordEndTimeMS) + "ms")
-        Exit
+
+    else
+        // Normal part marker
+        partName = Arr_SectionNames[TimelineCurrentPartIdx]
+        RecordTimelineEvent("Marker", TimelineCurrentPartIdx)
+
+        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> PART: " + partName + " <<<", Local_IP, Local_PORT)
+        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+
+        TimelineCurrentPartIdx = TimelineCurrentPartIdx + 1
+        Trace("TIMELINE: Recorded part " + partName + ", next idx=" + TimelineCurrentPartIdx)
     end
-
-    // Normal part marker
-    partName = Arr_SectionNames[TimelineCurrentPartIdx]
-    RecordTimelineEvent("Marker", TimelineCurrentPartIdx)
-
-    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> PART: " + partName + " <<<", Local_IP, Local_PORT)
-    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-
-    TimelineCurrentPartIdx = TimelineCurrentPartIdx + 1
-    Trace("TIMELINE: Recorded part " + partName + ", next idx=" + TimelineCurrentPartIdx)
 End
 
 Function PartJumpPreview(dir : Integer)
@@ -7701,19 +7695,18 @@ Function PartJumpPreview(dir : Integer)
     if Size(Arr_SectionNames) == 0 then
         OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> NO PARTS LOADED <<<", Local_IP, Local_PORT)
         MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-        Exit
+    else
+        PreviewPartIdx = PreviewPartIdx + dir
+        if PreviewPartIdx < 0 then PreviewPartIdx = 0 end
+        if PreviewPartIdx >= Size(Arr_SectionNames) then PreviewPartIdx = Size(Arr_SectionNames) - 1 end
+
+        partName = Arr_SectionNames[PreviewPartIdx]
+
+        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + partName + " <<<", Local_IP, Local_PORT)
+        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+
+        Trace("TIMELINE: Preview part " + PreviewPartIdx + " = " + partName)
     end
-
-    PreviewPartIdx = PreviewPartIdx + dir
-    if PreviewPartIdx < 0 then PreviewPartIdx = 0 end
-    if PreviewPartIdx >= Size(Arr_SectionNames) then PreviewPartIdx = Size(Arr_SectionNames) - 1 end
-
-    partName = Arr_SectionNames[PreviewPartIdx]
-
-    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + partName + " <<<", Local_IP, Local_PORT)
-    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-
-    Trace("TIMELINE: Preview part " + PreviewPartIdx + " = " + partName)
 End
 
 Function FireTimelineEvent(eventType : String, eventVal : Integer)
@@ -7749,20 +7742,19 @@ Function StartTimelinePlayback()
 
     if Size(Snap_TL_TimeMS) == 0 then
         Trace("TIMELINE: No events to play back.")
-        Exit
+    else
+        PlaybackStartTimeMS = TimeSinceStartup()
+        TimelinePlaybackActive = true
+        PreviewPartIdx = 0
+
+        // Reset fired flags
+        Snap_TL_Fired = []
+        for i = 0; i < Size(Snap_TL_TimeMS); i = i + 1 do
+            Snap_TL_Fired <-- false
+        end
+
+        Trace("TIMELINE: Playback started at " + Round(PlaybackStartTimeMS) + "ms, " + Size(Snap_TL_TimeMS) + " events.")
     end
-
-    PlaybackStartTimeMS = TimeSinceStartup()
-    TimelinePlaybackActive = true
-    PreviewPartIdx = 0
-
-    // Reset fired flags
-    Snap_TL_Fired = []
-    for i = 0; i < Size(Snap_TL_TimeMS); i = i + 1 do
-        Snap_TL_Fired <-- false
-    end
-
-    Trace("TIMELINE: Playback started at " + Round(PlaybackStartTimeMS) + "ms, " + Size(Snap_TL_TimeMS) + " events.")
 End
 
 Function CalculateBarFromMS(timeMS : Double) Returns Integer
