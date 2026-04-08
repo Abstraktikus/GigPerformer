@@ -361,6 +361,7 @@ Var
    // --- Strip Control State ---
    Strip_ThemeIdx   : Integer = 8   // Index into MacroGroup_Names (8=Octaver, 9=Humanizer, 10=Quantizer, 11=Sustain)
    Strip_ChannelIdx : Integer = 0   // Current channel (0-15)
+   StripLiveDirty   : Boolean = false // True when STRIP made live changes not reflected in widgets
 
    // ========================================================================
    // SECTION 7: CHANNEL MEMORY
