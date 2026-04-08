@@ -13869,6 +13869,114 @@ On OSCMessageReceived(m : OSCMessage) Matching "/GP/ViewReady"
 End
 
 // ---------------------------------------------------------
+// ANCHORPLAYBACK: FORWARD-ONLY ROOT TRACKER
+// ---------------------------------------------------------
+
+Function ExecuteAnchorPartChange(newPartIdx : Integer)
+   var i, markerEventIdx : Integer
+   var sectionName : String = ""
+
+   if newPartIdx < Size(Arr_SectionNames) then sectionName = Arr_SectionNames[newPartIdx] end
+
+   // 1. ALWAYS: Update prompter display
+   PreviewPartIdx = newPartIdx
+   UpdatePrompter(false)
+
+   // 2. ALWAYS: HUD feedback
+   if sectionName != "" then
+       OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> ANCHOR: " + sectionName + " <<<", Local_IP, Local_PORT)
+       MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+   end
+
+   // 3. TIMEJUMP: Correct timeline position if enabled
+   if GetWidgetValue(BTN_TimeJump) > 0.5 and TimelinePlaybackActive then
+       // Find the Marker event for this part in the timeline
+       markerEventIdx = -1
+       i = 0
+       While i < Size(Snap_TL_Type) and markerEventIdx == -1 Do
+           if Snap_TL_Type[i] == "Marker" and Snap_TL_Val[i] == newPartIdx then
+               markerEventIdx = i
+           end
+           i = i + 1
+       End
+
+       if markerEventIdx >= 0 then
+           // Adjust PlaybackStartTimeMS so msSinceSongStart aligns with the marker's ms
+           PlaybackStartTimeMS = TimeSinceStartup() - Snap_TL_TimeMS[markerEventIdx]
+           Trace("ANCHOR: TimeJump -> Corrected timeline to " + Round(Snap_TL_TimeMS[markerEventIdx]) + "ms (Part: " + sectionName + ")")
+       end
+   end
+
+   Trace("ANCHOR: Part change -> " + sectionName + " (idx=" + newPartIdx + ")")
+End
+
+Function ProcessAnchorPlayback()
+   var currentRoot, nextPartIdx, expectedRoot, nextExpectedRoot : Integer
+   var srcChIdx : Integer = -1
+
+   // 1. GATE: Feature active? Channels configured? Root data available?
+   if GetWidgetValue(BTN_MIDIAnchorPlayback) < 0.5 then // Feature off
+   elsif Size(Arr_PartRootSeq) == 0 then // No chord data
+   elsif AnchorDetectedRootIdx == -1 then // Parameters not cached
+   else
+       // 2. READ ROOT from Lower (fallback: Upper)
+       if AnchorLowerChIdx >= 0 then
+           if GetParameter(BLK_NoteProcessor[AnchorLowerChIdx], AnchorHasNotesIdx) > 0.5 then
+               srcChIdx = AnchorLowerChIdx
+           end
+       end
+       if srcChIdx == -1 and AnchorUpperChIdx >= 0 then
+           if GetParameter(BLK_NoteProcessor[AnchorUpperChIdx], AnchorHasNotesIdx) > 0.5 then
+               srcChIdx = AnchorUpperChIdx
+           end
+       end
+
+       if srcChIdx >= 0 then
+           currentRoot = Round(GetParameter(BLK_NoteProcessor[srcChIdx], AnchorDetectedRootIdx) * 11.0)
+
+           // 3. DEDUPLICATE — same root as last time, no new info
+           if currentRoot != AnchorLastRoot then
+               AnchorLastRoot = currentRoot
+
+               // 4. TRACK against current part
+               if AnchorCurrentPartIdx < Size(Arr_PartRootStart) then
+                   if AnchorRootCursor < Arr_PartRootLen[AnchorCurrentPartIdx] then
+                       expectedRoot = Arr_PartRootSeq[Arr_PartRootStart[AnchorCurrentPartIdx] + AnchorRootCursor]
+                       if currentRoot == expectedRoot then
+                           AnchorRootCursor = AnchorRootCursor + 1
+                           if AnchorRootCursor >= Arr_PartRootLen[AnchorCurrentPartIdx] then
+                               AnchorRootCursor = 0  // Wrap — part is repeating
+                           end
+                       end
+                   end
+               end
+
+               // 5. CHECK against next part
+               nextPartIdx = AnchorCurrentPartIdx + 1
+               if nextPartIdx < Size(Arr_PartRootStart) then
+                   if AnchorMatchCount < Arr_PartRootLen[nextPartIdx] then
+                       nextExpectedRoot = Arr_PartRootSeq[Arr_PartRootStart[nextPartIdx] + AnchorMatchCount]
+                       if currentRoot == nextExpectedRoot then
+                           AnchorMatchCount = AnchorMatchCount + 1
+                       else
+                           AnchorMatchCount = 0  // Reset
+                       end
+                   end
+
+                   // 6. TRIGGER part change at threshold
+                   if AnchorMatchCount >= 2 then
+                       AnchorCurrentPartIdx = nextPartIdx
+                       AnchorRootCursor = AnchorMatchCount
+                       AnchorMatchCount = 0
+                       ExecuteAnchorPartChange(AnchorCurrentPartIdx)
+                   end
+               end
+           end
+       end
+   end
+End
+
+// ---------------------------------------------------------
 // TIMER EVENTS
 // ---------------------------------------------------------
 
@@ -14328,14 +14436,17 @@ On TimerTick(ms : Double)
                 end
             end
         end
-        
+
+        // --- ANCHORPLAYBACK (chord-based part tracking) ---
+        ProcessAnchorPlayback()
+
         if SnapshotPostLoadTimer > 0.0 then
           if TimeSinceStartup() > SnapshotPostLoadTimer then
               ScanGlobalInstruments()
               UpdateUsageLabelDisplay()
               IsLoadingSnapshot = false
               SnapshotPostLoadTimer = 0.0
-              
+
               // ========================================================
               // ---> NEW: INITIAL AUTO-SHOW AFTER SONG LOADING <---
               // ========================================================
