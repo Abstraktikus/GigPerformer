@@ -47,48 +47,30 @@ All three default to ON (1.0) at system reset.
 
 Identifies which keyboard manual (hand) plays on each MIDI channel. AnchorPlayback uses the Lower channel (left hand = chord hand) as the primary source for chord detection.
 
-### New Widgets
+### No New Widgets Needed
 
-```gpscript
-BTN_Manual_Prev, LBL_Manual, BTN_Manual_Next : Widget
-```
+The existing `ChannelUsage` property (line 73) already contains "Upper" and "Lower" as categories. These are set via the existing `BTN_ChannelUsage_Prev/Next` widget cycle and saved/loaded as part of the Controller Map.
 
-Placed directly below `LBL_ChannelUsage` in the Injection panel.
-
-### Enum Values
-
-| Value | Integer | Meaning |
-|-------|---------|---------|
-| None  | 0       | No manual assignment (default) |
-| Upper | 1       | Right hand — melody |
-| Lower | 2       | Left hand — chords/accompaniment |
-
-Mutually exclusive: a channel is exactly one of these.
-
-### Storage
-
-- New RAM array: `Mem_Manual : Integer Array` (16 elements, initialized to 0)
-- Saved/loaded as part of the Controller Map (Injection section), same pattern as Solo, Mute, etc.
-- Widget handlers cycle through 0 → 1 → 2 → 0
+AnchorPlayback simply scans `ChannelUsage[]` for these values to find the anchor channels.
 
 ### Cached Lookup
 
 ```gpscript
-AnchorLowerChIdx : Integer = -1   // First channel with Manual = Lower
-AnchorUpperChIdx : Integer = -1   // First channel with Manual = Upper
+AnchorLowerChIdx : Integer = -1   // First channel with ChannelUsage = "Lower"
+AnchorUpperChIdx : Integer = -1   // First channel with ChannelUsage = "Upper"
 ```
 
 Recalculated on:
 - Song load
 - Controller map load
-- Manual widget change
+- Channel usage change
 
 ```
 Function UpdateAnchorChannels()
     AnchorLowerChIdx = -1; AnchorUpperChIdx = -1
     For i = 0; i < 16; i = i + 1 Do
-        if Mem_Manual[i] == 2 and AnchorLowerChIdx == -1 then AnchorLowerChIdx = i end
-        if Mem_Manual[i] == 1 and AnchorUpperChIdx == -1 then AnchorUpperChIdx = i end
+        if ChannelUsage[i] == "Lower" and AnchorLowerChIdx == -1 then AnchorLowerChIdx = i end
+        if ChannelUsage[i] == "Upper" and AnchorUpperChIdx == -1 then AnchorUpperChIdx = i end
     End
 End
 ```
@@ -370,7 +352,7 @@ Function ExecuteAnchorPartChange(newPartIdx : Integer)
 | File | Changes |
 |------|---------|
 | `Note Prozessor 7.4.gpscript` → **V7.5** | Add `p_DetectedRoot`, `p_HasNotes`, always call `CalculateRootMath()`, update factory reset |
-| `Global Rackspace.gpscript` | New widgets (Manual), new arrays (Mem_Manual, PartRootSeq/Start/Len, Anchor state), root sequence parser in ParseSongData(), Forward-Only Tracker in timer callback, ExecuteAnchorPartChange(), Manual save/load in controller map |
+| `Global Rackspace.gpscript` | New arrays (PartRootSeq/Start/Len, Anchor state), UpdateAnchorChannels (scans ChannelUsage for Lower/Upper), root sequence parser in ParseSongData(), Forward-Only Tracker in timer callback, ExecuteAnchorPartChange() |
 
 ---
 
