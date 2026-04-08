@@ -4,7 +4,7 @@
 
 **Goal:** Implement passive chord-based part boundary detection that keeps the timeline anchored to the actual live performance.
 
-**Architecture:** NoteProcessor V7.5 exposes detected root via output parameters. Global Rackspace parses root sequences from .gpchord files, runs a forward-only tracker in the timer callback, and triggers part changes + timeline corrections when part boundaries are detected. The existing `ChannelUsage` property ("Upper"/"Lower") determines which channel to read — no new widgets needed.
+**Architecture:** NoteProcessor V7.5 exposes detected root via output parameters. Global Rackspace adds new Manual widgets (Upper/Lower/None per channel), parses root sequences from .gpchord files, runs a forward-only tracker in the timer callback, and triggers part changes + timeline corrections when part boundaries are detected. "Upper"/"Lower" are removed from UsageCategories to avoid conflict with the new Manual property.
 
 **Tech Stack:** GPScript (Gig Performer scripting language). No early return — use if/else. Initialize all Double vars with `= 0.0`.
 
@@ -163,21 +163,52 @@ ChordMode is off, so root tracking works in all modes."
 
 ---
 
-### Task 2: Global Rackspace — Anchor State Variables and UpdateAnchorChannels
+### Task 2: Global Rackspace — Manual Widgets, Anchor Variables, UpdateAnchorChannels
 
 **Files:**
 - Modify: `Global Rackspace.gpscript`
 
-**Context:** The `ChannelUsage[]` array (line 73) already has "Upper" and "Lower" categories. We don't need new Manual widgets — just scan `ChannelUsage[]` for "Lower"/"Upper" to find the anchor channels.
+**Context:** Manual (Upper/Lower/None) is a new per-channel property separate from ChannelUsage. A channel can be "Lower" (which hand) AND "Strings" (which sound). "Upper" and "Lower" must be removed from `UsageCategories` (line 73) to avoid confusion.
 
-- [ ] **Step 1: Add anchor state variables**
+- [ ] **Step 1: Remove Upper/Lower from UsageCategories**
+
+Line 73 currently reads:
+```gpscript
+   UsageCategories : String Array = ["Free", "Upper", "Lower", "Multi Pad 1", ...
+```
+
+Remove "Upper" and "Lower" from the array:
+```gpscript
+   UsageCategories : String Array = ["Free", "Multi Pad 1", "Multi Pad 2", "Multi Pad 3", "Multi Pad 4", "Drums 1", "Drums 2", "Bass", "Chord 1", "Chord 2", "Pad", "Phrase 1", "Phrase 2", "Strings 1", "Strings 2", "Piano", "Lead 1", "Lead 2", "PolySynth 1", "PolySynth 2", "Brass 1", "Brass 2", "Woodwind", "Choir 1", "Choir 2", "Bells 1", "Bells 2", "Accordion", "Organ 1", "Organ 2"]
+```
+
+- [ ] **Step 2: Add ManualNames array and Mem_Manual**
+
+After the `UsageCategories` line (line 73), add:
+```gpscript
+   ManualNames : String Array = ["None", "Upper", "Lower"]
+```
+
+After the existing `Mem_UserMute` array (line 381), add:
+```gpscript
+   Mem_Manual             : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+```
+
+- [ ] **Step 3: Add Manual widget declarations**
+
+After the existing `LBL_ChannelUsage, BTN_ChannelUsage_Prev, BTN_ChannelUsage_Next` line (line 206), add:
+```gpscript
+   BTN_Manual_Prev, LBL_Manual, BTN_Manual_Next                               : Widget
+```
+
+- [ ] **Step 4: Add anchor state variables**
 
 After the existing timeline state variables (line 314, after `TimelinePlaybackActive`), add:
 
 ```gpscript
     // --- ANCHORPLAYBACK STATE ---
-    AnchorLowerChIdx      : Integer = -1    // First channel with Usage = "Lower"
-    AnchorUpperChIdx      : Integer = -1    // First channel with Usage = "Upper"
+    AnchorLowerChIdx      : Integer = -1    // First channel with Manual = Lower
+    AnchorUpperChIdx      : Integer = -1    // First channel with Manual = Upper
     AnchorCurrentPartIdx  : Integer = 0     // Which part Anchor thinks is active
     AnchorRootCursor      : Integer = 0     // Position in current part's root sequence
     AnchorMatchCount      : Integer = 0     // Consecutive matches against NEXT part
@@ -186,7 +217,7 @@ After the existing timeline state variables (line 314, after `TimelinePlaybackAc
     AnchorHasNotesIdx     : Integer = -1    // Cached param index for p_HasNotes
 ```
 
-- [ ] **Step 2: Add root sequence arrays**
+- [ ] **Step 5: Add root sequence arrays**
 
 After the existing `Snap_TL_Fired` array declaration (line 557), add:
 
@@ -197,18 +228,40 @@ After the existing `Snap_TL_Fired` array declaration (line 557), add:
    Arr_PartRootLen   : Integer Array   // Number of roots per part
 ```
 
-- [ ] **Step 3: Add UpdateAnchorChannels function**
+- [ ] **Step 6: Add CycleManual function and UpdateAnchorChannels**
 
-Add this function near the existing `CycleChannelUsage()` function (after line 9185):
+Add near the existing `CycleChannelUsage()` function (after line 9185):
 
 ```gpscript
+Function CycleManual(direction : Integer)
+   var firstScopeIdx, currentVal, newVal, i : Integer
+
+   firstScopeIdx = GetFirstActiveScope()
+
+   if firstScopeIdx > -1 then
+       currentVal = Mem_Manual[firstScopeIdx]
+       newVal = currentVal + direction
+       if newVal < 0 then newVal = 2
+       elsif newVal > 2 then newVal = 0 end
+
+       For i = 0; i < 16; i = i + 1 Do
+           if OutputScope[i] then
+               Mem_Manual[i] = newVal
+           end
+       End
+
+       SetWidgetLabel(LBL_Manual, ManualNames[newVal])
+       UpdateAnchorChannels()
+   end
+End
+
 Function UpdateAnchorChannels()
    var i : Integer
    AnchorLowerChIdx = -1
    AnchorUpperChIdx = -1
    For i = 0; i < 16; i = i + 1 Do
-       if ChannelUsage[i] == "Lower" and AnchorLowerChIdx == -1 then AnchorLowerChIdx = i end
-       if ChannelUsage[i] == "Upper" and AnchorUpperChIdx == -1 then AnchorUpperChIdx = i end
+       if Mem_Manual[i] == 2 and AnchorLowerChIdx == -1 then AnchorLowerChIdx = i end
+       if Mem_Manual[i] == 1 and AnchorUpperChIdx == -1 then AnchorUpperChIdx = i end
    End
 
    // Cache parameter indices (only need to do this once, all NoteProcessors have same layout)
@@ -217,56 +270,105 @@ Function UpdateAnchorChannels()
        if AnchorLowerChIdx >= 0 then probeIdx = AnchorLowerChIdx
        elsif AnchorUpperChIdx >= 0 then probeIdx = AnchorUpperChIdx
        end
-       AnchorDetectedRootIdx = GetParamIdxByName(BLK_NoteProcessor[probeIdx], "p_DetectedRoot")
-       AnchorHasNotesIdx = GetParamIdxByName(BLK_NoteProcessor[probeIdx], "p_HasNotes")
+       if probeIdx >= 0 then
+           AnchorDetectedRootIdx = GetParamIdxByName(BLK_NoteProcessor[probeIdx], "p_DetectedRoot")
+           AnchorHasNotesIdx = GetParamIdxByName(BLK_NoteProcessor[probeIdx], "p_HasNotes")
+       end
    end
 
    Trace("ANCHOR: Lower=Ch" + IntToString(AnchorLowerChIdx + 1) + " Upper=Ch" + IntToString(AnchorUpperChIdx + 1))
 End
 ```
 
-- [ ] **Step 4: Call UpdateAnchorChannels from CycleChannelUsage**
+- [ ] **Step 7: Add Manual widget handlers**
 
-In `CycleChannelUsage()` (line 9136), add `UpdateAnchorChannels()` after the existing `UpdateMetaColors()` call at line 9182:
+Add near the existing `BTN_ChannelUsage_Prev/Next` handlers (after line 11974):
 
 ```gpscript
-       // 5. UI Updates
-       RefreshAllInjectionDisplays()
-       UpdateMetaColors()
-       UpdateAnchorChannels()
-       
-   end // Ende vom Zaun
+On WidgetValueChanged(val : Double) from BTN_Manual_Next
+   if val > 0.5 then
+       CycleManual(1)
+       SetWidgetValue(BTN_Manual_Next, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_Manual_Prev
+   if val > 0.5 then
+       CycleManual(-1)
+       SetWidgetValue(BTN_Manual_Prev, 0.0)
+   end
+End
 ```
 
-- [ ] **Step 5: Call UpdateAnchorChannels from controller map load**
+- [ ] **Step 8: Add Manual to UpdateUsageLabelDisplay**
 
-In the controller map load/restore section (around line 11234, after `ChannelUsage[i] = targetUsage[i]` loop), add after the loop's `End` (after line 11235):
+In `UpdateUsageLabelDisplay()` (line 2224), after the existing `SetWidgetLabel(LBL_ChannelUsage, ChannelUsage[firstScopeIdx])` (line 2237), add:
+
+```gpscript
+      SetWidgetLabel(LBL_Manual, ManualNames[Mem_Manual[firstScopeIdx]])
+```
+
+And in the no-scope branch (after line 2232), add:
+```gpscript
+      SetWidgetLabel(LBL_Manual, "None")
+```
+
+- [ ] **Step 9: Save Manual to controller map**
+
+In the controller map save section (around line 10692-10694, where SoloStrict/SoloSmart/UserMute are written), add after the UserMute line:
+
+```gpscript
+             if Mem_Manual[i] > 0 then content = content + "Ch" + (i+1) + "_Manual=" + IntToString(Mem_Manual[i]) + NEW_LINE end
+```
+
+- [ ] **Step 10: Load Manual from controller map**
+
+In the controller map load parser (around line 11033-11038, where _SoloStrict/_SoloSmart/_UserMute are parsed), add after the UserMute branch:
+
+```gpscript
+                           elsif IndexOfSubstring(key, "_Manual", false) > -1 then
+                               targetManual[chIdx] = StringToInt(valStr)
+```
+
+Add `targetManual` declaration near the other target arrays (around line 10885-10887):
+```gpscript
+   var targetManual     : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+```
+
+In the restore section (around line 11225-11234), after `Mem_UserMute[i] = 0`, add:
+```gpscript
+                   Mem_Manual[i] = targetManual[i]
+```
+
+- [ ] **Step 11: Call UpdateAnchorChannels from controller map load**
+
+In the controller map load/restore section (around line 11235, after the channel loop's `End`), add:
 
 ```gpscript
             UpdateAnchorChannels()
 ```
 
-- [ ] **Step 6: Reset anchor state in On Song callback**
+- [ ] **Step 12: Reset anchor state in On Song callback**
 
 In the `On Song` handler (line 13181), after the existing `StripLiveDirty = false` (line 13205), add:
 
 ```gpscript
-   StripLiveDirty = false
    AnchorCurrentPartIdx = 0
    AnchorRootCursor = 0
    AnchorMatchCount = 0
    AnchorLastRoot = -1
 ```
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
 git add "Global Rackspace.gpscript"
-git commit -m "feat(anchor): add state variables, root sequence arrays, and UpdateAnchorChannels
+git commit -m "feat(anchor): add Manual property (Upper/Lower/None) and anchor state variables
 
-Scans ChannelUsage for Lower/Upper to determine anchor source channels.
-Caches NoteProcessor parameter indices for p_DetectedRoot and p_HasNotes.
-Resets anchor state on song change."
+New per-channel Manual widget separate from ChannelUsage. Removed Upper/Lower
+from UsageCategories to avoid conflict. Mem_Manual saved/loaded in controller
+map. UpdateAnchorChannels scans for Lower/Upper channels and caches NoteProcessor
+parameter indices."
 ```
 
 ---
