@@ -7746,6 +7746,21 @@ Function StartTimelinePlayback()
     Trace("TIMELINE: Playback started at " + Round(PlaybackStartTimeMS) + "ms, " + Size(Snap_TL_TimeMS) + " events.")
 End
 
+Function CalculateBarFromMS(timeMS : Double) Returns Integer
+    var msPerBar : Double
+    var bpm : Double = GetBPM()
+    var timeSig : Integer = GetTimeSigNumerator()
+
+    if bpm < 1.0 then bpm = 120.0 end
+    if timeSig <= 0 then timeSig = 4 end
+
+    msPerBar = (60000.0 / bpm) * IntToFloat(timeSig)
+
+    if msPerBar <= 0.0 then result = 1
+    else result = Round(timeMS / msPerBar) + 1
+    end
+End
+
 // ---------------------------------------------------------
 // REALTIME SMART BYPASS
 // Monitors the matrix live and puts unused VSTs & channels to sleep
@@ -10703,8 +10718,15 @@ Function SaveSongSnapshot()
        
        // 6. APPEND TIMELINE
        content = content + NEW_LINE + "[Timeline]" + NEW_LINE
-       for i = 0; i < Size(Arr_TL_Bar); i = i + 1 do
-           content = content + "Event_" + (i+1) + "=" + Arr_TL_Bar[i] + ", " + Arr_TL_Type[i] + ", " + Arr_TL_Val[i] + ", " + Arr_TL_Offset[i] + NEW_LINE
+       if GetBPM() > 0.0 then
+           content = content + "StartBPM=" + GetBPM() + NEW_LINE
+       end
+       content = content + "TimeSignature=" + GetTimeSigNumerator() + NEW_LINE
+       if RecordEndTimeMS > 0.0 then
+           content = content + "TotalDurationMS=" + Round(RecordEndTimeMS) + NEW_LINE
+       end
+       for i = 0; i < Size(Snap_TL_TimeMS); i = i + 1 do
+           content = content + "Event_" + (i+1) + "=" + Round(Snap_TL_TimeMS[i]) + ", " + Snap_TL_Type[i] + ", " + Snap_TL_Val[i] + NEW_LINE
        end
        
        saved = SaveStringToTextFile(filePath, content)
@@ -10733,74 +10755,72 @@ End
 Function LoadSongTimeline(songFilePath : String)
     var iniPath : String
     var lines, parts, kvParts : String Array
-    var line, valStr, eType : String
-    var i, eBar, eVal, eOffset : Integer
+    var line, valStr, eType, key : String
+    var i, eVal : Integer
+    var eTimeMS : Double
     var inSection : Boolean = false
-    var targetOptAuto, targetOptJump,targetOptPlay : Double = 1.0
-    
+
     // Clean out arrays
-    Arr_TL_Bar = []; Arr_TL_Type = []; Arr_TL_Val = []; Arr_TL_Offset = []
-	Arr_TL_Fired <-- false
-    
-    // We simply convert ".gpchord" to ".ini"
+    Snap_TL_TimeMS = []; Snap_TL_Type = []; Snap_TL_Val = []; Snap_TL_Fired = []
+    Arr_Rec_TimeMS = []; Arr_Rec_Type = []; Arr_Rec_Val = []
+    RecordEndTimeMS = 0.0
+    TimelinePlaybackActive = false
+    TimelineRecActive = false
+    PreviewPartIdx = 0
+    TimelineCurrentPartIdx = 1
+
     iniPath = ReplaceString(songFilePath, ".gpchord", ".ini", false)
-    
+
     if FileExists(iniPath) then
         lines = SplitString(LoadStringFromTextFile(iniPath), NEW_LINE)
-        
+
         for i = 0; i < Size(lines); i = i + 1 do
             line = TrimString(lines[i])
-            
-            // Are we in the correct [Timeline] block?
+
             if IndexOfSubstring(line, "[Timeline]", false) == 0 then
                 inSection = true
-            // A new block begins -> we are done searching
             elsif IndexOfSubstring(line, "[", false) == 0 and line != "[Timeline]" then
                 inSection = false
-            // We are in the block and the line has an "="
             elsif inSection and IndexOfSubstring(line, "=", false) > 0 then
-                
+
                 kvParts = SplitString(line, "=")
-                valStr = TrimString(kvParts[1]) // "9, RegMem, 2, 0"
-                parts = SplitString(valStr, ",")
-                
-                if Size(parts) >= 3 then
-                    eBar = StringToInt(TrimString(parts[0]))
-                    eType = TrimString(parts[1])
-                    eVal = StringToInt(TrimString(parts[2]))
-                    
-                    if Size(parts) >= 4 then 
-                        eOffset = StringToInt(TrimString(parts[3])) 
-                    else 
-                        eOffset = 0 
-                    end
-                    
-                    // Store in memory for fast access
-                    Arr_TL_Bar <-- eBar
-                    Arr_TL_Type <-- eType
-                    Arr_TL_Val <-- eVal
-                    Arr_TL_Offset <-- eOffset
-                    
-                    // ZEBRA SYNC FOR SONGPARTS (MARKERS)
-                    if eType == "Marker" then
-                        // eVal contains the part number (0 = Intro, 1 = Verse, etc.)
-                        if eVal >= 0 and eVal < Size(Arr_BarTriggers) then
-                            Arr_BarTriggers[eVal] = eBar
-                            
-                            // ---> Adjust song length to last marker <---
-                            if eBar > SongDurationBars then SongDurationBars = eBar end
+                key = TrimString(kvParts[0])
+                valStr = TrimString(kvParts[1])
+
+                // Parse metadata keys
+                if key == "TotalDurationMS" then
+                    RecordEndTimeMS = StringToDouble(valStr)
+
+                // Parse event lines: Event_N=<ms>, <Type>, <Value>
+                elsif IndexOfSubstring(key, "Event_", false) == 0 then
+                    parts = SplitString(valStr, ",")
+
+                    if Size(parts) >= 3 then
+                        eTimeMS = StringToDouble(TrimString(parts[0]))
+                        eType = TrimString(parts[1])
+                        eVal = StringToInt(TrimString(parts[2]))
+
+                        Snap_TL_TimeMS <-- eTimeMS
+                        Snap_TL_Type <-- eType
+                        Snap_TL_Val <-- eVal
+                        Snap_TL_Fired <-- false
+
+                        // Sync bar triggers for Marker events (if bars are calculable)
+                        if eType == "Marker" and RecordEndTimeMS > 0.0 then
+                            if eVal >= 0 and eVal < Size(Arr_BarTriggers) then
+                                Arr_BarTriggers[eVal] = CalculateBarFromMS(eTimeMS)
+                            end
                         end
                     end
                 end
             end
         end
-        Trace("PROMPTER: Timeline loaded. " + Size(Arr_TL_Bar) + " events found.")
+        Trace("PROMPTER: Timeline loaded. " + Size(Snap_TL_TimeMS) + " events found.")
     else
         Trace("PROMPTER: No INI file found. Timeline is empty.")
     end
     BuildRecDisplayLines()
     RefreshRecDisplay(1.0)
-
 End
 
 // ---------------------------------------------------------
