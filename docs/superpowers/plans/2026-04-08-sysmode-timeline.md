@@ -4,7 +4,7 @@
 
 **Goal:** Add SYS-MODE 4 "TIMELINE" with ms-based recording/playback, sticky state for all modes, and SYSMODE macros for MiniLab access.
 
-**Architecture:** All changes are in `Global Rackspace V26.gpscript` (single-file GPScript codebase). New Timeline state/arrays go into Section 2 (variables). New functions go near existing SYS-MODE functions. Existing functions (sustain handler, ProcessSystemNavigation, RecordTimelineEvent, playback loop, persistence) are modified in-place. Since GPScript has no unit test framework, verification uses `Trace()` output and manual inspection.
+**Architecture:** All changes are in `Global Rackspace.gpscript` (single-file GPScript codebase). New Timeline state/arrays go into Section 2 (variables). New functions go near existing SYS-MODE functions. Existing functions (sustain handler, ProcessSystemNavigation, RecordTimelineEvent, playback loop, persistence) are modified in-place. Since GPScript has no unit test framework, verification uses `Trace()` output and manual inspection.
 
 **Tech Stack:** GPScript 5.x (Pascal-like, runs inside Gig Performer)
 
@@ -15,10 +15,10 @@
 ### Task 1: State Variables & SysModeNames
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript:81` (SysModeNames)
-- Modify: `Global Rackspace V26.gpscript:278` (near GlobalSystemMode)
-- Modify: `Global Rackspace V26.gpscript:292` (near SystemModeActive)
-- Modify: `Global Rackspace V26.gpscript:518-521` (timeline arrays)
+- Modify: `Global Rackspace.gpscript:81` (SysModeNames)
+- Modify: `Global Rackspace.gpscript:278` (near GlobalSystemMode)
+- Modify: `Global Rackspace.gpscript:292` (near SystemModeActive)
+- Modify: `Global Rackspace.gpscript:518-521` (timeline arrays)
 
 - [ ] **Step 1: Expand SysModeNames array**
 
@@ -105,7 +105,7 @@ Near line 415 (where `VST_SCOPE_MacroIdx` is declared), add:
 - [ ] **Step 7: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(timeline): add state variables, ms-based arrays, and widget declarations"
 ```
 
@@ -114,8 +114,8 @@ git commit -m "feat(timeline): add state variables, ms-based arrays, and widget 
 ### Task 2: Sticky SYS-MODE State
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript:9457-9468` (sustain handler in ProcessHardwareCC)
-- Modify: `Global Rackspace V26.gpscript:7540-7554` (CycleGlobalSystemMode)
+- Modify: `Global Rackspace.gpscript:9457-9468` (sustain handler in ProcessHardwareCC)
+- Modify: `Global Rackspace.gpscript:7540-7554` (CycleGlobalSystemMode)
 
 - [ ] **Step 1: Modify sustain handler for sticky state**
 
@@ -187,7 +187,7 @@ End
 - [ ] **Step 3: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(timeline): implement sticky SYS-MODE state for all modes"
 ```
 
@@ -196,8 +196,8 @@ git commit -m "feat(timeline): implement sticky SYS-MODE state for all modes"
 ### Task 3: SYSMODE_CYCLE and SYSMODE_SELECT Macros
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript:9453-9454` (ProcessHardwareCC macro dispatch area)
-- Modify: `Global Rackspace V26.gpscript:2879-2881` (CtrlInfo display area for macro labels)
+- Modify: `Global Rackspace.gpscript:9453-9454` (ProcessHardwareCC macro dispatch area)
+- Modify: `Global Rackspace.gpscript:2879-2881` (CtrlInfo display area for macro labels)
 
 - [ ] **Step 1: Add SelectGlobalSystemMode function**
 
@@ -258,7 +258,7 @@ Find where `VST_SCOPE` is parsed from the controller map (search for `"VST_SCOPE
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(timeline): add SYSMODE_CYCLE and SYSMODE_SELECT macros"
 ```
 
@@ -267,7 +267,7 @@ git commit -m "feat(timeline): add SYSMODE_CYCLE and SYSMODE_SELECT macros"
 ### Task 4: ms-Based RecordTimelineEvent
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript:5299-5333` (RecordTimelineEvent)
+- Modify: `Global Rackspace.gpscript:5299-5333` (RecordTimelineEvent)
 
 - [ ] **Step 1: Rewrite RecordTimelineEvent for ms-based recording**
 
@@ -299,7 +299,7 @@ End
 - [ ] **Step 2: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(timeline): rewrite RecordTimelineEvent for ms-based recording"
 ```
 
@@ -308,7 +308,7 @@ git commit -m "feat(timeline): rewrite RecordTimelineEvent for ms-based recordin
 ### Task 5: Timeline Count-In & Recording Start
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript:13578-13627` (count-in expiry monitor in TimerTick)
+- Modify: `Global Rackspace.gpscript:13578-13627` (count-in expiry monitor in TimerTick)
 
 - [ ] **Step 1: Add StartTimelineRecording function**
 
@@ -365,7 +365,7 @@ In the global blink engine (around lines 13518-13549), where `maxCountInBeats` i
 - [ ] **Step 4: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(timeline): add count-in mechanism and recording start"
 ```
 
@@ -374,7 +374,7 @@ git commit -m "feat(timeline): add count-in mechanism and recording start"
 ### Task 6: ProcessSystemNavigation Mode 4
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript:9666-9681` (after Mode 3 block)
+- Modify: `Global Rackspace.gpscript:9666-9681` (after Mode 3 block)
 
 - [ ] **Step 1: Add CommitTimelineRecording helper**
 
@@ -536,7 +536,7 @@ After line 9679 (`end` closing Mode 3 block), before the final `end` at line 968
 - [ ] **Step 6: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(timeline): add Mode 4 to ProcessSystemNavigation with PLAY/REC sub-modes"
 ```
 
@@ -545,8 +545,8 @@ git commit -m "feat(timeline): add Mode 4 to ProcessSystemNavigation with PLAY/R
 ### Task 7: ms-Based Playback
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript:13784-13808` (timeline playback in TimerTick)
-- Modify: `Global Rackspace V26.gpscript:13207-13209` (BeatChanged Arr_TL_Fired reset)
+- Modify: `Global Rackspace.gpscript:13784-13808` (timeline playback in TimerTick)
+- Modify: `Global Rackspace.gpscript:13207-13209` (BeatChanged Arr_TL_Fired reset)
 
 - [ ] **Step 1: Add FireTimelineEvent helper**
 
@@ -659,7 +659,7 @@ In the transport start handler (where `IsPerformanceActive` becomes true), add:
 - [ ] **Step 6: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(timeline): replace bar-based playback with ms-based system"
 ```
 
@@ -668,8 +668,8 @@ git commit -m "feat(timeline): replace bar-based playback with ms-based system"
 ### Task 8: Song.ini Persistence (Load & Save)
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript:10474-10545` (LoadSongTimeline)
-- Modify: `Global Rackspace V26.gpscript:10446-10449` (SaveConfig timeline writer)
+- Modify: `Global Rackspace.gpscript:10474-10545` (LoadSongTimeline)
+- Modify: `Global Rackspace.gpscript:10446-10449` (SaveConfig timeline writer)
 
 - [ ] **Step 1: Rewrite LoadSongTimeline for ms-based format**
 
@@ -787,7 +787,7 @@ Replace lines 10446-10449 with:
 - [ ] **Step 4: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(timeline): rewrite Song.ini persistence for ms-based format"
 ```
 
@@ -796,7 +796,7 @@ git commit -m "feat(timeline): rewrite Song.ini persistence for ms-based format"
 ### Task 9: Verification & Cleanup
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript` (various cleanup)
+- Modify: `Global Rackspace.gpscript` (various cleanup)
 
 - [ ] **Step 1: Search for remaining references to old bar-based arrays**
 
@@ -825,7 +825,7 @@ Grep for `">>> TIMELINE"` and `">>> REC"` and `">>> PLAY"` to ensure consistent 
 - [ ] **Step 5: Commit final cleanup**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "fix(timeline): update display functions and clean up old bar-based references"
 ```
 

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Refactor `Global Rackspace V25.gpscript` into a thematically organized, hardware-neutral `Global Rackspace V26.gpscript` with a capability-based HAL and external device configuration.
+**Goal:** Refactor `Global Rackspace V25.gpscript` into a thematically organized, hardware-neutral `Global Rackspace.gpscript` with a capability-based HAL and external device configuration.
 
 **Architecture:** Single-file GPScript refactoring with 26 sections (12 Var, 11 Function, 3 Lifecycle). New HAL layer using parallel arrays and INI-style config file. All ~180 functions reordered by theme while respecting declare-before-use. Hardware-specific code (174 Genos + 34 MiniLab refs) replaced with capability-based dispatch.
 
@@ -163,7 +163,7 @@ Place these files in your Snapshots folder (same folder as HardwareMap.txt):
 
 ## Step 3: Script Replacement
 
-Replace `Global Rackspace V25.gpscript` with `Global Rackspace V26.gpscript` in the Global Rackspace script editor.
+Replace `Global Rackspace V25.gpscript` with `Global Rackspace.gpscript` in the Global Rackspace script editor.
 
 ## Step 4: Verification
 
@@ -185,14 +185,14 @@ git commit -m "docs: add V25 to V26 migration guide"
 ## Task 3: Scaffold V26 — Var Block (Sections 1–12)
 
 **Files:**
-- Create: `Global Rackspace V26.gpscript` (copy from V25, then restructure Var block)
+- Create: `Global Rackspace.gpscript` (copy from V25, then restructure Var block)
 
 This task reorganizes only the `Var` block (lines 1–496 of V25). Functions and callbacks are copied as-is for now and restructured in later tasks.
 
 - [ ] **Step 1: Copy V25 to V26**
 
 ```bash
-cp "Global Rackspace V25.gpscript" "Global Rackspace V26.gpscript"
+cp "Global Rackspace V25.gpscript" "Global Rackspace.gpscript"
 ```
 
 - [ ] **Step 2: Rewrite the file header and Var block structure**
@@ -253,16 +253,16 @@ Rename in the Var block:
 - [ ] **Step 4: Verify Var block structure**
 
 ```bash
-grep -c "SECTION [0-9]" "Global Rackspace V26.gpscript"
+grep -c "SECTION [0-9]" "Global Rackspace.gpscript"
 # Expected: 12 section headers
-grep "Genos2_Control\|BLK_GenosStyle\|MiniLab3.*MidiInBlock\|MainMidiIn.*MidiInBlock" "Global Rackspace V26.gpscript"
+grep "Genos2_Control\|BLK_GenosStyle\|MiniLab3.*MidiInBlock\|MainMidiIn.*MidiInBlock" "Global Rackspace.gpscript"
 # Expected: no matches (all renamed)
 ```
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(V26): scaffold with reorganized Var block and renamed blocks"
 ```
 
@@ -271,7 +271,7 @@ git commit -m "feat(V26): scaffold with reorganized Var block and renamed blocks
 ## Task 4: Add HAL Variables (Var Block Section 3)
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript` (Var block, Section 3)
+- Modify: `Global Rackspace.gpscript` (Var block, Section 3)
 
 - [ ] **Step 1: Insert HAL constants and registry arrays into Section 3**
 
@@ -351,16 +351,16 @@ Note: `MidiOutDeviceName` is used in many places. Replace references with `GetDe
 - [ ] **Step 3: Verify**
 
 ```bash
-grep -c "CAP_\|CTYPE_\|FB_\|DEV_\|CTRL_\|SYSEX_" "Global Rackspace V26.gpscript"
+grep -c "CAP_\|CTYPE_\|FB_\|DEV_\|CTRL_\|SYSEX_" "Global Rackspace.gpscript"
 # Expected: ~40+ matches (the new HAL variables)
-grep "GENOS_JOY\|ML3_SYSEX_PROFIL\|ML3_ENC_CC\|ML3_BTN_CC\|TargetSuffix" "Global Rackspace V26.gpscript"
+grep "GENOS_JOY\|ML3_SYSEX_PROFIL\|ML3_ENC_CC\|ML3_BTN_CC\|TargetSuffix" "Global Rackspace.gpscript"
 # Expected: 0 matches in Var block (may still exist in function bodies — those migrate in Task 10)
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(HAL): add device/control/sysex registry variables, remove hardcoded HW constants"
 ```
 
@@ -369,7 +369,7 @@ git commit -m "feat(HAL): add device/control/sysex registry variables, remove ha
 ## Task 5: Write HAL Runtime Functions (Section 14)
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript` (insert new section after Section 13)
+- Modify: `Global Rackspace.gpscript` (insert new section after Section 13)
 
 - [ ] **Step 1: Insert Section 14 header and all HAL functions**
 
@@ -629,16 +629,16 @@ End
 - [ ] **Step 2: Verify HAL function count**
 
 ```bash
-grep -c "^Function " "Global Rackspace V26.gpscript" | head -1
+grep -c "^Function " "Global Rackspace.gpscript" | head -1
 # Expected: original count (~180) + 16 new HAL functions = ~196
-grep "^Function Parse\|^Function Device\|^Function Get\(Device\|Control\)\|^Function IsDevice\|^Function Find\|^Function Send\|^Function Map" "Global Rackspace V26.gpscript"
+grep "^Function Parse\|^Function Device\|^Function Get\(Device\|Control\)\|^Function IsDevice\|^Function Find\|^Function Send\|^Function Map" "Global Rackspace.gpscript"
 # Should show all 16 new HAL functions
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(HAL): implement config parser and device/control/sysex lookup functions"
 ```
 
@@ -647,7 +647,7 @@ git commit -m "feat(HAL): implement config parser and device/control/sysex looku
 ## Task 6: Reorganize Functions into Thematic Sections (13–23)
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript` (function body, lines ~500–10789)
+- Modify: `Global Rackspace.gpscript` (function body, lines ~500–10789)
 
 This is the largest task. Each function must be moved to its assigned section while maintaining declare-before-use order. Within each section, leaf functions come first.
 
@@ -771,19 +771,19 @@ Move these functions (in this order) to Section 13:
 
 ```bash
 # Count all Function declarations — should match original + 16 new HAL functions
-grep -c "^Function " "Global Rackspace V26.gpscript"
+grep -c "^Function " "Global Rackspace.gpscript"
 
 # Verify section ordering: each section header should appear in ascending order
-grep -n "SECTION [0-9]" "Global Rackspace V26.gpscript"
+grep -n "SECTION [0-9]" "Global Rackspace.gpscript"
 
 # Spot-check: Section 22 functions should appear AFTER Section 21 functions
-grep -n "^Function ExecuteHardwareMacro\|^Function ProcessHardwareCC\|^Function ChangeVstScope\|^Function UpdateSoloMuteState" "Global Rackspace V26.gpscript"
+grep -n "^Function ExecuteHardwareMacro\|^Function ProcessHardwareCC\|^Function ChangeVstScope\|^Function UpdateSoloMuteState" "Global Rackspace.gpscript"
 ```
 
 - [ ] **Step 13: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "refactor: reorganize all functions into thematic sections 13-23"
 ```
 
@@ -792,7 +792,7 @@ git commit -m "refactor: reorganize all functions into thematic sections 13-23"
 ## Task 7: Rename Functions and Variables (Hardware Neutralization)
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript`
+- Modify: `Global Rackspace.gpscript`
 
 - [ ] **Step 1: Rename functions (global search-and-replace)**
 
@@ -836,18 +836,18 @@ Replace all occurrences of `IsGenos` condition checks with `arrangerDevIdx >= 0`
 - [ ] **Step 5: Verify no old names remain**
 
 ```bash
-grep -c "SyncGenosToCurrentMap\|FireGenosTransportEcho\|FireDirectGenosTransport\|DecodeSysExName[^V]" "Global Rackspace V26.gpscript"
+grep -c "SyncGenosToCurrentMap\|FireGenosTransportEcho\|FireDirectGenosTransport\|DecodeSysExName[^V]" "Global Rackspace.gpscript"
 # Expected: 0
-grep -c "IncomingFromGenos\|W_CF_Genos\|DEF_CF_Genos\|IsGenos[^L]" "Global Rackspace V26.gpscript"
+grep -c "IncomingFromGenos\|W_CF_Genos\|DEF_CF_Genos\|IsGenos[^L]" "Global Rackspace.gpscript"
 # Expected: 0
-grep -c "From MainMidiIn\|From MiniLab3" "Global Rackspace V26.gpscript"
+grep -c "From MainMidiIn\|From MiniLab3" "Global Rackspace.gpscript"
 # Expected: 0
 ```
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "refactor: rename all Genos/MiniLab references to hardware-neutral names"
 ```
 
@@ -856,7 +856,7 @@ git commit -m "refactor: rename all Genos/MiniLab references to hardware-neutral
 ## Task 8: Replace Hardware-Specific Logic with HAL Calls
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript`
+- Modify: `Global Rackspace.gpscript`
 
 This task replaces hardcoded device checks and SysEx sends with HAL function calls.
 
@@ -961,16 +961,16 @@ End
 - [ ] **Step 8: Verify no hardcoded hardware constants remain in function bodies**
 
 ```bash
-grep -n "ML3_\|GENOS_JOY\|ML3_OutDeviceName\|MidiOutDeviceName" "Global Rackspace V26.gpscript"
+grep -n "ML3_\|GENOS_JOY\|ML3_OutDeviceName\|MidiOutDeviceName" "Global Rackspace.gpscript"
 # Expected: 0 matches
-grep -c "DeviceHasCap\|IsDeviceConnected\|GetDeviceMidiOut\|SendDeviceSysEx\|FindControl" "Global Rackspace V26.gpscript"
+grep -c "DeviceHasCap\|IsDeviceConnected\|GetDeviceMidiOut\|SendDeviceSysEx\|FindControl" "Global Rackspace.gpscript"
 # Expected: 20+ matches (HAL calls throughout)
 ```
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(HAL): replace all hardcoded hardware logic with capability-based HAL calls"
 ```
 
@@ -979,7 +979,7 @@ git commit -m "feat(HAL): replace all hardcoded hardware logic with capability-b
 ## Task 9: Rewrite Initialization (Section 24)
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript` (Initialization block)
+- Modify: `Global Rackspace.gpscript` (Initialization block)
 
 - [ ] **Step 1: Rewrite the Initialization block with 7-phase structure**
 
@@ -1022,16 +1022,16 @@ End
 - [ ] **Step 2: Verify Initialization compiles structurally**
 
 ```bash
-grep -c "^Initialization" "Global Rackspace V26.gpscript"
+grep -c "^Initialization" "Global Rackspace.gpscript"
 # Expected: 1
-grep -c "ParseDeviceConfig\|MapDevicesToBlocks\|arrangerDevIdx" "Global Rackspace V26.gpscript"
+grep -c "ParseDeviceConfig\|MapDevicesToBlocks\|arrangerDevIdx" "Global Rackspace.gpscript"
 # Expected: multiple matches (in Init and in function bodies)
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "feat(HAL): rewrite Initialization with 7-phase boot and HAL bootstrap"
 ```
 
@@ -1040,7 +1040,7 @@ git commit -m "feat(HAL): rewrite Initialization with 7-phase boot and HAL boots
 ## Task 10: Migrate Callbacks to Generic Device Slots (Sections 25–26)
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript` (callback section)
+- Modify: `Global Rackspace.gpscript` (callback section)
 
 - [ ] **Step 1: Update MIDI callbacks to use DeviceIn slots**
 
@@ -1102,7 +1102,7 @@ Add subsection headers matching the spec:
 - [ ] **Step 4: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "refactor: migrate all MIDI callbacks to generic DeviceIn slots"
 ```
 
@@ -1111,7 +1111,7 @@ git commit -m "refactor: migrate all MIDI callbacks to generic DeviceIn slots"
 ## Task 11: Absorb Genos2_Control Scriptlet Logic
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript`
+- Modify: `Global Rackspace.gpscript`
 - Modify: `Genos2_Control V2.gpscript` (empty out)
 
 The Genos2_Control scriptlet handles:
@@ -1226,7 +1226,7 @@ Replace `Genos2_Control V2.gpscript` content with:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript" "Genos2_Control V2.gpscript"
+git add "Global Rackspace.gpscript" "Genos2_Control V2.gpscript"
 git commit -m "feat(HAL): absorb Genos2_Control scriptlet into Global Rackspace"
 ```
 
@@ -1235,7 +1235,7 @@ git commit -m "feat(HAL): absorb Genos2_Control scriptlet into Global Rackspace"
 ## Task 12: Translate All Comments to English
 
 **Files:**
-- Modify: `Global Rackspace V26.gpscript`
+- Modify: `Global Rackspace.gpscript`
 
 - [ ] **Step 1: Translate all German section headers, function comments, and inline comments**
 
@@ -1243,7 +1243,7 @@ Systematic pass through the entire file. Key patterns to find and translate:
 
 ```bash
 # Find German comments to translate
-grep -n "// .*[äöüÄÖÜß]\|Anpassbar\|Erkennung\|Wert\|Bereich\|Setzt\|Aktuell\|Sicher\|Schalter\|Speicher" "Global Rackspace V26.gpscript"
+grep -n "// .*[äöüÄÖÜß]\|Anpassbar\|Erkennung\|Wert\|Bereich\|Setzt\|Aktuell\|Sicher\|Schalter\|Speicher" "Global Rackspace.gpscript"
 ```
 
 Common translations:
@@ -1271,13 +1271,13 @@ Common translations:
 
 Search for commented-out code blocks and remove them (they exist in git history):
 ```bash
-grep -n "^   //" "Global Rackspace V26.gpscript" | grep -i "legacy\|unused\|old\|hack\|todo\|fixme"
+grep -n "^   //" "Global Rackspace.gpscript" | grep -i "legacy\|unused\|old\|hack\|todo\|fixme"
 ```
 
 - [ ] **Step 4: Verify no German comments remain**
 
 ```bash
-grep -c "[äöüÄÖÜß]" "Global Rackspace V26.gpscript"
+grep -c "[äöüÄÖÜß]" "Global Rackspace.gpscript"
 # Expected: 0 (no German special characters in comments)
 # Note: String constants with German text in user-facing labels are OK to keep
 ```
@@ -1285,7 +1285,7 @@ grep -c "[äöüÄÖÜß]" "Global Rackspace V26.gpscript"
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "Global Rackspace V26.gpscript"
+git add "Global Rackspace.gpscript"
 git commit -m "docs: translate all comments to English, remove dead code"
 ```
 
@@ -1294,29 +1294,29 @@ git commit -m "docs: translate all comments to English, remove dead code"
 ## Task 13: Final Verification
 
 **Files:**
-- Read: `Global Rackspace V26.gpscript`
+- Read: `Global Rackspace.gpscript`
 
 - [ ] **Step 1: Structural verification**
 
 ```bash
 # Total function count (original ~180 + 16 HAL = ~196)
-grep -c "^Function " "Global Rackspace V26.gpscript"
+grep -c "^Function " "Global Rackspace.gpscript"
 
 # Section headers present and ordered
-grep -n "^// SECTION [0-9]" "Global Rackspace V26.gpscript"
+grep -n "^// SECTION [0-9]" "Global Rackspace.gpscript"
 
 # No remaining Genos/MiniLab hardcoded references
-grep -c "Genos\|GENOS\|genos\|MiniLab\|MINILAB\|Minilab\|ML3_" "Global Rackspace V26.gpscript"
+grep -c "Genos\|GENOS\|genos\|MiniLab\|MINILAB\|Minilab\|ML3_" "Global Rackspace.gpscript"
 # Expected: 0 in code. Some may remain in DeviceConfig.txt references or Trace messages — that is acceptable.
 
 # HAL functions present
-grep "^Function.*Device\|^Function.*Control\|^Function.*SysEx\|^Function Parse" "Global Rackspace V26.gpscript"
+grep "^Function.*Device\|^Function.*Control\|^Function.*SysEx\|^Function Parse" "Global Rackspace.gpscript"
 
 # Initialization has 7 phases
-grep "PHASE [0-7]" "Global Rackspace V26.gpscript"
+grep "PHASE [0-7]" "Global Rackspace.gpscript"
 
 # All 4 DeviceIn callbacks exist
-grep "From DeviceIn_" "Global Rackspace V26.gpscript"
+grep "From DeviceIn_" "Global Rackspace.gpscript"
 ```
 
 - [ ] **Step 2: Dependency order spot-check**
@@ -1325,18 +1325,18 @@ Verify that no function calls a function declared later in the file:
 
 ```bash
 # Section 14 functions should appear BEFORE Section 15 functions
-grep -n "^Function DeviceHasCap\|^Function GetParamIdxByName" "Global Rackspace V26.gpscript"
+grep -n "^Function DeviceHasCap\|^Function GetParamIdxByName" "Global Rackspace.gpscript"
 # DeviceHasCap line number must be < GetParamIdxByName line number
 
 # Section 22 functions should appear AFTER Section 21 functions
-grep -n "^Function ProcessHardwareCC\|^Function UpdateSoloMuteState" "Global Rackspace V26.gpscript"
+grep -n "^Function ProcessHardwareCC\|^Function UpdateSoloMuteState" "Global Rackspace.gpscript"
 # UpdateSoloMuteState line number must be < ProcessHardwareCC line number
 ```
 
 - [ ] **Step 3: Line count comparison**
 
 ```bash
-wc -l "Global Rackspace V25.gpscript" "Global Rackspace V26.gpscript"
+wc -l "Global Rackspace V25.gpscript" "Global Rackspace.gpscript"
 # V26 should be similar to V25 (~13190) + ~200 (HAL functions) + ~50 (new headers) - ~100 (removed dead code)
 # Expected: ~13300-13500 lines
 ```
@@ -1350,4 +1350,4 @@ git commit -m "feat: complete Global Rackspace V26 — HAL, thematic ordering, h
 
 - [ ] **Step 5: User manual compile test**
 
-**Action for the user:** Open `Global Rackspace V26.gpscript` in the Gig Performer script editor and verify it compiles without errors. Check the log window for HAL boot messages.
+**Action for the user:** Open `Global Rackspace.gpscript` in the Gig Performer script editor and verify it compiles without errors. Check the log window for HAL boot messages.

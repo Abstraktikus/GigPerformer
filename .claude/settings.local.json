@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /tmp)",
+      "Bash(python3)",
+      "Bash(ls -la *.gpscript)",
+      "Bash(bash build_deps.sh)",
+      "Bash(grep -n \"^Function \\\\|^Initialization$\\\\|^On \" \"Global Rackspace V26.gpscript\")",
+      "Bash(python tools/reorder_functions.py)",
+      "Bash(grep -v \"^.*:.*//.*[Gg]enos\")",
+      "Bash(winget upgrade:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(sed:*)"
+    ]
+  }
+}

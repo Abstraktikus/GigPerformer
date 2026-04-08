@@ -96,7 +96,7 @@ Planned features, roughly in order of implementation:
    - `ControllerMaps.txt` — define controller assignments
    - `GenosMapping.txt` — Genos voice mappings (if applicable)
 3. **Open** `examples/Test.gig` in Gig Performer
-4. **Paste** the Global Rackspace script (`Global Rackspace V26.gpscript`) into the Global Rackspace script editor
+4. **Paste** the Global Rackspace script (`Global Rackspace.gpscript`) into the Global Rackspace script editor
 5. **Paste** the Note Prozessor script (`Note Prozessor 7.4.gpscript`) into the corresponding rackspace
 6. **Adjust** `UserSnapshotPath` and `UserChordProPath` in Section 1 of the script to match your file locations
 7. **Add songs** as `.ini` + `.gpchord` files (see examples: `SlowHip80erDream`, `VSTPlayMode`)
@@ -104,7 +104,7 @@ Planned features, roughly in order of implementation:
 ## File Structure
 
 ```
-├── Global Rackspace V26.gpscript   # Main script (current version)
+├── Global Rackspace.gpscript   # Main script (current version)
 ├── Note Prozessor 7.4.gpscript     # Per-rackspace note processing
 ├── Genos2_Control V2.gpscript      # Genos2 integration script
 ├── examples/                       # Ready-to-use test data

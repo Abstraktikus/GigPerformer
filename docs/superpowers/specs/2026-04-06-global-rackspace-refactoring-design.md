@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-06
 **Status:** Draft
-**Scope:** `Global Rackspace V25.gpscript` → `Global Rackspace V26.gpscript`
+**Scope:** `Global Rackspace V25.gpscript` → `Global Rackspace.gpscript`
 
 ---
 
@@ -324,7 +324,7 @@ Within each section, functions are ordered by internal dependency layer (leaf fu
 
 ## 9. Deliverables
 
-1. **`Global Rackspace V26.gpscript`** — fully refactored script
+1. **`Global Rackspace.gpscript`** — fully refactored script
 2. **`DeviceConfig.txt`** — example config for Genos2 + MiniLab3 setup
 3. **Migration guide** — wiring changes checklist for the user
 
