@@ -29,7 +29,7 @@ Place these files in your Snapshots folder (same folder as HardwareMap.txt):
 
 ## Step 3: Script Replacement
 
-Replace `Global Rackspace V25.gpscript` with `Global Rackspace V26.gpscript` in the Global Rackspace script editor.
+Replace `Global Rackspace V25.gpscript` with `Global Rackspace.gpscript` in the Global Rackspace script editor.
 
 ## Step 4: Verification
 

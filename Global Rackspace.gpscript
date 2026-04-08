@@ -78,7 +78,7 @@ Var
    // ========================================================================
    // SECTION 3: HARDWARE ABSTRACTION LAYER — DEVICE & CONTROL REGISTRY
    // ========================================================================
-   SysModeNames : String Array = ["VOICE SELECTOR", "LOOPER CONTROL", "CONTROLLER MAP", "STRIP-CONTROL"]
+   SysModeNames : String Array = ["VOICE SELECTOR", "LOOPER CONTROL", "CONTROLLER MAP", "STRIP-CONTROL", "TIMELINE"]
 
    // --- Capability Flags (bitfield, combinable) ---
    CAP_NONE              : Integer = 0
@@ -245,6 +245,7 @@ Var
    BTN_LoopOut_Prev, LBL_LoopOut, BTN_LoopOut_Next                : Widget
    BTN_LoopStop_Prev, LBL_LoopStop, BTN_LoopStop_Next             : Widget
    BTN_Loop_HostSync, BTN_Loop_CountIn                            : Widget
+   BTN_TL_HostSync : Widget
    BTN_Loop_Play, BTN_Loop_Rec, BTN_Loop_Clear                    : Widget 
    LBL_Subbar_1, LBL_Subbar_2, LBL_Subbar_3, LBL_Subbar_4         : Widget
    
@@ -290,6 +291,28 @@ Var
    DeferredBootRecovery, DeferredManualReboot, IgnoreMorphEcho : Boolean = false
    EmergencyKillSwitch : Boolean = false
    SystemModeActive : Boolean = false
+
+    // --- TIMELINE SUB-MODE STATE ---
+    TimelineSubMode : Integer = 0        // 0 = PLAY, 1 = REC
+    TimelineRecState : Integer = 0       // 0 = Replace, 1 = Overdub, 2 = Discard
+    TimelineRecActive : Boolean = false  // True while ms timer is running
+    TimelineCurrentPartIdx : Integer = 1 // Next part to record (0 = Intro implicit)
+    PreviewPartIdx : Integer = 0         // Part Jump preview index
+
+    // --- STICKY SYS-MODE STATE (all modes) ---
+    StickySystemMode : Integer = -1          // -1 = no sticky, 0-4 = remembered mode
+    StickyTimelineSubMode : Integer = 0
+    StickyTimelineRecState : Integer = 0
+
+    // --- TIMELINE TIMING ---
+    TimelineCountInTimer : Double = 0.0      // Absolute expiry time for count-in
+    RecordStartTimeMS : Double = 0.0         // Set when count-in expires (t=0)
+    RecordEndTimeMS : Double = 0.0           // Set at END OF SONG
+    RecordedBPM : Double = 120.0           // BPM at recording time (from Song.ini)
+    RecordedTimeSig : Integer = 4          // Time signature at recording time
+    PlaybackStartTimeMS : Double = 0.0       // Set when playback begins
+    TimelinePlaybackActive : Boolean = false // True during ms-based playback
+
    FirstRunDone, FactoryLearnDone : Boolean = false
 
    InputSyncTimer, OutputSyncTimer, SnapshotPostLoadTimer : Double = 0.0
@@ -413,6 +436,8 @@ Var
    CF_MacroIdx : Integer = 6; CF_CCIdx : Integer = -1  
    SCRUB_MacroIdx : Integer = -1; SCRUB_CCIdx : Integer = -1
    VST_SCOPE_MacroIdx : Integer = -1; VST_SCOPE_CCIdx : Integer = -1
+   SYSMODE_CYCLE_MacroIdx : Integer = -1; SYSMODE_CYCLE_CCIdx : Integer = -1
+   SYSMODE_SELECT_MacroIdx : Integer = -1; SYSMODE_SELECT_CCIdx : Integer = -1
    VST_BROWSE_MacroIdx : Integer = -1; VST_BROWSE_CCIdx : Integer = -1
    VST_SCOPE_PREV_MacroIdx : Integer = -1; VST_SCOPE_PREV_CCIdx : Integer = -1
    VST_SCOPE_NEXT_MacroIdx : Integer = -1; VST_SCOPE_NEXT_CCIdx : Integer = -1
@@ -517,8 +542,18 @@ Var
    
    Arr_FileLines, Arr_SectionNames, Arr_Cues, Arr_PartText_Raw, Arr_Text_Chords, Arr_Text_Lyrics : String Array
    Arr_TL_Type, Arr_Rec_Type : String Array
-   Arr_SectionLineIndices, Arr_BarTriggers, Arr_PartAnchors, Arr_TL_Bar, Arr_Rec_Bar, Arr_TL_Val, Arr_Rec_Val, Arr_TL_Offset, Arr_Rec_Offset : Integer Array 
-   Arr_TL_Fired : Boolean Array
+   Arr_SectionLineIndices, Arr_BarTriggers, Arr_PartAnchors, Arr_TL_Val, Arr_Rec_Val : Integer Array
+   Arr_TL_Bar, Arr_TL_Offset, Arr_Rec_Bar, Arr_Rec_Offset : Integer Array  // Legacy bar arrays (used by FinishRecording/JumpToRegMemAnchor/CheckRegMemAutopilot)
+   Arr_TL_Fired : Boolean Array  // Legacy fired flag (replaced by Snap_TL_Fired in new ms-based system)
+
+   // --- MS-BASED TIMELINE ARRAYS ---
+   // Working (current recording session)
+   Arr_Rec_TimeMS : Double Array        // Absolute ms since RecordStartTimeMS
+   // Committed (last good state = playback source)
+   Snap_TL_TimeMS : Double Array
+   Snap_TL_Type : String Array
+   Snap_TL_Val : Integer Array
+   Snap_TL_Fired : Boolean Array
    
    // --- Animation & Style ---
    Anim_Active    : Boolean Array = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
@@ -2878,7 +2913,11 @@ Function UpdateControllerInfoDisplay()
            // --- VST SCOPE & BROWSE DISPLAY ---
            elsif (not isCC and s == VST_SCOPE_MacroIdx) or (isCC and s == VST_SCOPE_CCIdx) then
                CtrlInfo_Lines <-- hwStr + ": >> VST Scope Select (Encoder)"
-               
+           elsif (not isCC and s == SYSMODE_CYCLE_MacroIdx) or (isCC and s == SYSMODE_CYCLE_CCIdx) then
+               CtrlInfo_Lines <-- hwStr + ": >> SYS-MODE Cycle"
+           elsif (not isCC and s == SYSMODE_SELECT_MacroIdx) or (isCC and s == SYSMODE_SELECT_CCIdx) then
+               CtrlInfo_Lines <-- hwStr + ": >> SYS-MODE Select (0-4)"
+
            elsif (not isCC and s == VST_BROWSE_MacroIdx) or (isCC and s == VST_BROWSE_CCIdx) then
                CtrlInfo_Lines <-- hwStr + ": >> VST Preset Browse (Encoder)"
                
@@ -4807,51 +4846,51 @@ End
 // =========================================================
 
 Function BuildRecDisplayLines()
-    var i, partIdx : Integer
-    var line, eType, valStr, pad : String
-    
+    var i, partIdx, tms : Integer
+    var line, eType, valStr : String
+
     RecDisplayLines = []
 
-    // 1. SHOW EXISTING TIMELINE (always visible!)
-    if Size(Arr_TL_Bar) == 0 and Size(Arr_Rec_Bar) == 0 then
+    // 1. SHOW COMMITTED TIMELINE (Snap_TL_* = last saved/committed state)
+    if Size(Snap_TL_TimeMS) == 0 and Size(Arr_Rec_TimeMS) == 0 then
         RecDisplayLines <-- "(Timeline is empty)"
     else
-        for i = 0; i < Size(Arr_TL_Bar); i = i + 1 do
-            eType = Arr_TL_Type[i]
+        for i = 0; i < Size(Snap_TL_TimeMS); i = i + 1 do
+            eType = Snap_TL_Type[i]
+            tms = Round(Snap_TL_TimeMS[i])
 
-            if eType == "RegMem" then valStr = "Registration " + Arr_Rec_Val[i]
-                elsif eType == "Macro" then valStr = "Fader/Btn " + (Arr_Rec_Val[i] + 1) 
-                elsif eType == "Style" then valStr = "Style Action " + Arr_Rec_Val[i]
-                elsif eType == "Map" then 
-                    if Arr_Rec_Val[i] >= 0 and Arr_Rec_Val[i] < Size(CtrlMapList) then
-                        valStr = "Map: " + CtrlMapList[Arr_Rec_Val[i]]
+            if eType == "RegMem" then valStr = "Registration " + Snap_TL_Val[i]
+                elsif eType == "Macro" then valStr = "Fader/Btn " + (Snap_TL_Val[i] + 1)
+                elsif eType == "Style" then valStr = "Style Action " + Snap_TL_Val[i]
+                elsif eType == "Map" then
+                    if Snap_TL_Val[i] >= 0 and Snap_TL_Val[i] < Size(CtrlMapList) then
+                        valStr = "Map: " + CtrlMapList[Snap_TL_Val[i]]
                     else
                         valStr = "Map: Unknown"
                     end
                 // -------------
                 elsif eType == "Marker" then
-                partIdx = Arr_TL_Val[i]
+                partIdx = Snap_TL_Val[i]
                 if partIdx >= 0 and partIdx < Size(Arr_SectionNames) then valStr = "Set: " + Arr_SectionNames[partIdx]
                 else valStr = "Set: Unknown Part" end
-            else valStr = "Value: " + Arr_TL_Val[i] end
+            else valStr = "Value: " + Snap_TL_Val[i] end
 
-            if Arr_TL_Bar[i] < 10 then pad = "  " elsif Arr_TL_Bar[i] < 100 then pad = " " else pad = "" end
-            line = "Bar " + pad + Arr_TL_Bar[i] + " | " + valStr
-            if Arr_TL_Offset[i] > 0 then line = line + " (+" + Arr_TL_Offset[i] + "ms)" end
+            line = IntToString(tms) + "ms | " + valStr
 
             RecDisplayLines <-- line
         end
-        
-        // 2. APPEND NEW RECORDINGS AT BOTTOM (live feedback)
-        if Size(Arr_Rec_Bar) > 0 then
+
+        // 2. APPEND NEW RECORDINGS AT BOTTOM (live feedback during active recording)
+        if Size(Arr_Rec_TimeMS) > 0 then
             RecDisplayLines <-- "--- NEW EVENTS ---"
-            for i = 0; i < Size(Arr_Rec_Bar); i = i + 1 do
+            for i = 0; i < Size(Arr_Rec_TimeMS); i = i + 1 do
                 eType = Arr_Rec_Type[i]
+                tms = Round(Arr_Rec_TimeMS[i])
 
                 if eType == "RegMem" then valStr = "Registration " + Arr_Rec_Val[i]
-                elsif eType == "Macro" then valStr = "Fader/Btn " + (Arr_Rec_Val[i] + 1) 
+                elsif eType == "Macro" then valStr = "Fader/Btn " + (Arr_Rec_Val[i] + 1)
                 elsif eType == "Style" then valStr = "Style Action " + Arr_Rec_Val[i]
-                elsif eType == "Map" then 
+                elsif eType == "Map" then
                     if Arr_Rec_Val[i] >= 0 and Arr_Rec_Val[i] < Size(CtrlMapList) then
                         valStr = "Map: " + CtrlMapList[Arr_Rec_Val[i]]
                     else
@@ -4864,8 +4903,7 @@ Function BuildRecDisplayLines()
                     else valStr = "Set: Unknown Part" end
                 else valStr = "Value: " + Arr_Rec_Val[i] end
 
-                if Arr_Rec_Bar[i] < 10 then pad = "  " elsif Arr_Rec_Bar[i] < 100 then pad = " " else pad = "" end
-                line = "Bar " + pad + Arr_Rec_Bar[i] + " | " + valStr + " [NEW]"
+                line = IntToString(tms) + "ms | " + valStr + " [NEW]"
 
                 RecDisplayLines <-- line
             end
@@ -4888,7 +4926,9 @@ Function RefreshRecDisplay(scrollVal : Double)
         SetWidgetLabel(LBL_CurrentState, finalText)
     else
         // 2. NORMAL MODE (list view)
-        if RecordMode == 0 then
+        if TimelineRecActive then
+            stateHeader = "--- TIMELINE (MS-REC ACTIVE) ---"
+        elsif RecordMode == 0 then
             stateHeader = "--- TIMELINE (PLAY MODE) ---"
         elsif RecordMode == 1 then
             if IsPerformanceActive or IsPlayheadEnabled() then stateHeader = "--- TIMELINE (OVERDUB REC) ---"
@@ -4931,27 +4971,19 @@ End
 // ============================================================================
 
 Function ScrollToCurrentTimelineEvent()
-    var i : Integer = 0
     var targetLine : Integer = -1
     var totalLines : Integer = Size(RecDisplayLines)
-    var displayLines : Integer = 15 
+    var displayLines : Integer = 15
     var maxStart : Integer = totalLines - displayLines
     var scrollVal : Double = 0.0
 
-    While i < Size(Arr_TL_Bar) and targetLine == -1 Do
-        if Arr_TL_Bar[i] >= CurrentBar then
-            targetLine = i
-        end
-        i = i + 1
-    End
-    
-    // Fallback: If at end of song and recording, scroll to new events
-    if targetLine == -1 then
-        if Size(Arr_Rec_Bar) > 0 then
-            targetLine = Size(Arr_TL_Bar) + 1 // +1 for the "--- NEW EVENTS ---" separator line
-        else
-            targetLine = totalLines // All the way down
-        end
+    // Scroll to the last committed event (no bar-based position — just scroll to end)
+    targetLine = Size(Snap_TL_TimeMS) - 1
+    if targetLine < 0 then targetLine = 0 end
+
+    // Fallback: If actively recording, scroll to new events section
+    if Size(Arr_Rec_TimeMS) > 0 then
+        targetLine = Size(Snap_TL_TimeMS) + 1 // +1 for the "--- NEW EVENTS ---" separator line
     end
 
     if maxStart <= 0 then 
@@ -5011,7 +5043,7 @@ Function UpdatePrompter(moveSlider : Boolean)
    var isWrite : Boolean
    var timeStr, barStr, finalCountStr, headerStr, footerStr, nextSection, cueText, curTimeStr : String
      
-   isWrite = (RecordMode > 0)
+   isWrite = (RecordMode > 0) or TimelineRecActive
    
    If IsEmptyMode Then
        currentIndex = 0
@@ -5297,36 +5329,21 @@ Function BuildZebraBlocks()
 End
 
 Function RecordTimelineEvent(eventType : String, eventVal : Integer)
-    var currentOffsetMS : Integer
-    var currentBPM : Double = GetBPM()
-    var recBar : Integer
+    var eventTimeMS : Double = 0.0
 
-    // ========================================================
-    // GUARD: Only record when RecordMode is armed
-    // AND the transport (IsPerformanceActive) is actually running!
-    // ========================================================
-    if RecordMode > 0 and IsPerformanceActive then 
-        recBar = CurrentBar
+    // GUARD: Only record when Timeline REC is active
+    if not TimelineRecActive then
+        Trace("TIMELINE-REC: Ignored (not active)")
+    else
+        eventTimeMS = TimeSinceStartup() - RecordStartTimeMS
 
-        // Calculate offset
-        if LastBarStartTime > 0.0 then 
-            currentOffsetMS = Round(TimeSinceStartup() - LastBarStartTime)
-        else 
-            currentOffsetMS = 0 
-        end
-
-        // Push early events to the next bar
-        if currentBPM > 0.0 and currentOffsetMS > (60000.0 / currentBPM * 3.5) then
-            currentOffsetMS = currentOffsetMS - Round(60000.0 / currentBPM * 4.0)
-            recBar = recBar + 1
-        end
-
-        // Write to the RAM buffer
-        Arr_Rec_Bar <-- recBar
+        // Write to working arrays
+        Arr_Rec_TimeMS <-- eventTimeMS
         Arr_Rec_Type <-- eventType
         Arr_Rec_Val <-- eventVal
-        Arr_Rec_Offset <-- currentOffsetMS
-        
+
+        Trace("TIMELINE-REC: " + eventType + " val=" + eventVal + " at " + Round(eventTimeMS) + "ms")
+
         BuildRecDisplayLines()
         RefreshRecDisplay(GetWidgetValue(SLD_CurrentState))
     end
@@ -5748,6 +5765,10 @@ Function LoadControllerMap(mapName : String)
                                    if isSrcCC then VST_BROWSE_CCIdx = sliderIdx else VST_BROWSE_MacroIdx = sliderIdx end
                                elsif valuePart == "VST_SCOPE" then
                                    if isSrcCC then VST_SCOPE_CCIdx = sliderIdx else VST_SCOPE_MacroIdx = sliderIdx end
+                               elsif valuePart == "SYSMODE_CYCLE" then
+                                   if isSrcCC then SYSMODE_CYCLE_CCIdx = sliderIdx else SYSMODE_CYCLE_MacroIdx = sliderIdx end
+                               elsif valuePart == "SYSMODE_SELECT" then
+                                   if isSrcCC then SYSMODE_SELECT_CCIdx = sliderIdx else SYSMODE_SELECT_MacroIdx = sliderIdx end
                                elsif valuePart == "VST_SCOPE_PREV" then
                                    if isSrcCC then VST_SCOPE_PREV_CCIdx = sliderIdx else VST_SCOPE_PREV_MacroIdx = sliderIdx end
                                elsif valuePart == "VST_SCOPE_NEXT" then
@@ -7539,18 +7560,216 @@ End
 
 Function CycleGlobalSystemMode()
    var modeName : String
-   
-   // 4 modes: 0 (Voice), 1 (Looper), 2 (Controller Map), 3 (Strip Control)
+
+   StickySystemMode = -1  // Reset sticky on explicit mode change
+   SystemModeActive = true
+
    GlobalSystemMode = GlobalSystemMode + 1
-   if GlobalSystemMode > 3 then GlobalSystemMode = 0 end
+   if GlobalSystemMode > 4 then GlobalSystemMode = 0 end
 
    modeName = SysModeNames[GlobalSystemMode]
 
    Trace("SYS-MODE: Switched to " + modeName)
    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-   // Lock prevents hardware sync fader echoes from overwriting the mode display
    MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+End
+
+Function SelectGlobalSystemMode(targetMode : Integer)
+    var modeName : String
+
+    if targetMode < 0 or targetMode > 4 then
+        Trace("SYSMODE_SELECT: Invalid mode " + targetMode)
+    else
+        StickySystemMode = -1  // Reset sticky on explicit mode change
+        GlobalSystemMode = targetMode
+        SystemModeActive = true
+
+        modeName = SysModeNames[GlobalSystemMode]
+        Trace("SYS-MODE: Selected " + modeName)
+        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
+        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+    end
+End
+
+Function StartTimelineRecording()
+    // Start count-in
+    TimelineCountInTimer = TimeSinceStartup() + GetCountInDurationMS()
+    TimelineRecActive = false  // Not yet — wait for count-in to expire
+    TimelineCurrentPartIdx = 1 // First manual marker = part 1 (Intro is implicit at t=0)
+    PreviewPartIdx = 0
+
+    // In Overdub mode, keep existing working arrays (append to them)
+    // In Replace mode, clear them
+    if TimelineRecState != 1 then
+        Arr_Rec_TimeMS = []; Arr_Rec_Type = []; Arr_Rec_Val = []
+    end
+
+    Trace("TIMELINE: Count-in started, expires in " + Round(GetCountInDurationMS()) + "ms")
+    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: Count-In... <<<", Local_IP, Local_PORT)
+    MacroFeedbackTimer = TimeSinceStartup() + GetCountInDurationMS() + 500.0
+End
+
+Function CommitTimelineRecording()
+    var i : Integer
+
+    if TimelineRecState == 1 then
+        // Overdub: Append new events to existing committed events
+        for i = 0; i < Size(Arr_Rec_TimeMS); i = i + 1 do
+            Snap_TL_TimeMS <-- Arr_Rec_TimeMS[i]
+            Snap_TL_Type <-- Arr_Rec_Type[i]
+            Snap_TL_Val <-- Arr_Rec_Val[i]
+        end
+    else
+        // Replace: Overwrite committed with working
+        Snap_TL_TimeMS = []; Snap_TL_Type = []; Snap_TL_Val = []
+        for i = 0; i < Size(Arr_Rec_TimeMS); i = i + 1 do
+            Snap_TL_TimeMS <-- Arr_Rec_TimeMS[i]
+            Snap_TL_Type <-- Arr_Rec_Type[i]
+            Snap_TL_Val <-- Arr_Rec_Val[i]
+        end
+    end
+    Snap_TL_Fired = []
+
+    TimelineRecActive = false
+    TimelineCountInTimer = 0.0
+    Trace("TIMELINE: Recording committed. " + Size(Snap_TL_TimeMS) + " events.")
+End
+
+Function DiscardTimelineRecording()
+    Arr_Rec_TimeMS = []; Arr_Rec_Type = []; Arr_Rec_Val = []
+    TimelineRecActive = false
+    TimelineCountInTimer = 0.0
+
+    Trace("TIMELINE: Recording discarded.")
+    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> RECORDING DISCARDED <<<", Local_IP, Local_PORT)
+    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+
+    // Restart recording immediately so user can re-record
+    TimelineRecState = 0  // Reset to Replace
+    StartTimelineRecording()
+End
+
+Function ExecuteRecSongpart()
+    var partName : String
+
+    if not TimelineRecActive then
+        Trace("TIMELINE: REC_SONGPART ignored (not recording)")
+
+    // No parts loaded — single-marker recording (marks song end)
+    elsif Size(Arr_SectionNames) == 0 then
+        RecordEndTimeMS = TimeSinceStartup() - RecordStartTimeMS
+        RecordTimelineEvent("Marker", 0)
+        CommitTimelineRecording()
+        TimelineSubMode = 0
+        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SONG RECORDED <<<", Local_IP, Local_PORT)
+        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+
+    // Last part already recorded — this press = END OF SONG
+    elsif TimelineCurrentPartIdx >= Size(Arr_SectionNames) then
+        RecordEndTimeMS = TimeSinceStartup() - RecordStartTimeMS
+        RecordTimelineEvent("Marker", TimelineCurrentPartIdx)
+        CommitTimelineRecording()
+        TimelineSubMode = 0
+        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SONG RECORDED <<<", Local_IP, Local_PORT)
+        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        Trace("TIMELINE: END OF SONG at " + Round(RecordEndTimeMS) + "ms")
+
+    else
+        // Normal part marker
+        partName = Arr_SectionNames[TimelineCurrentPartIdx]
+        RecordTimelineEvent("Marker", TimelineCurrentPartIdx)
+
+        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> PART: " + partName + " <<<", Local_IP, Local_PORT)
+        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+
+        TimelineCurrentPartIdx = TimelineCurrentPartIdx + 1
+        Trace("TIMELINE: Recorded part " + partName + ", next idx=" + TimelineCurrentPartIdx)
+    end
+End
+
+Function PartJumpPreview(dir : Integer)
+    var partName : String
+
+    if Size(Arr_SectionNames) == 0 then
+        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> NO PARTS LOADED <<<", Local_IP, Local_PORT)
+        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+    else
+        PreviewPartIdx = PreviewPartIdx + dir
+        if PreviewPartIdx < 0 then PreviewPartIdx = 0 end
+        if PreviewPartIdx >= Size(Arr_SectionNames) then PreviewPartIdx = Size(Arr_SectionNames) - 1 end
+
+        partName = Arr_SectionNames[PreviewPartIdx]
+
+        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + partName + " <<<", Local_IP, Local_PORT)
+        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+
+        Trace("TIMELINE: Preview part " + PreviewPartIdx + " = " + partName)
+    end
+End
+
+Function FireTimelineEvent(eventType : String, eventVal : Integer)
+    if eventType == "Macro" then
+        SetParameter(ExternalArranger, eventVal, 1.0)
+    elsif eventType == "Map" then
+        if eventVal >= 0 and eventVal < Size(CtrlMapList) then
+            Trace("TIMELINE: Auto-Switching Map to -> " + CtrlMapList[eventVal])
+            LoadControllerMap(CtrlMapList[eventVal])
+            HardwareSyncTimer = TimeSinceStartup() + 400.0
+            OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TL-MAP: " + CtrlMapList[eventVal] + " <<<", Local_IP, Local_PORT)
+            MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        end
+    elsif eventType == "Style" then
+        TriggerStyleAction(eventVal)
+    elsif eventType == "RegMem" then
+        if eventVal >= 0 then
+            Trace("TIMELINE: RegMem -> " + eventVal)
+            SetParameter(ExternalArranger, eventVal, 1.0)
+        end
+    elsif eventType == "Marker" then
+        if eventVal >= 0 and eventVal < Size(Arr_SectionNames) then
+            PreviewPartIdx = eventVal
+            OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + Arr_SectionNames[eventVal] + " <<<", Local_IP, Local_PORT)
+            MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+            Trace("TIMELINE: Part -> " + Arr_SectionNames[eventVal])
+        end
+    end
+End
+
+Function StartTimelinePlayback()
+    var i : Integer
+
+    if Size(Snap_TL_TimeMS) == 0 then
+        Trace("TIMELINE: No events to play back.")
+    else
+        PlaybackStartTimeMS = TimeSinceStartup()
+        TimelinePlaybackActive = true
+        PreviewPartIdx = 0
+
+        // Reset fired flags
+        Snap_TL_Fired = []
+        for i = 0; i < Size(Snap_TL_TimeMS); i = i + 1 do
+            Snap_TL_Fired <-- false
+        end
+
+        Trace("TIMELINE: Playback started at " + Round(PlaybackStartTimeMS) + "ms, " + Size(Snap_TL_TimeMS) + " events.")
+    end
+End
+
+Function CalculateBarFromMS(timeMS : Double) Returns Integer
+    var msPerBar : Double = 0.0
+    var bpm : Double = RecordedBPM
+    var timeSig : Integer = RecordedTimeSig
+
+    if bpm < 1.0 then bpm = 120.0 end
+    if timeSig <= 0 then timeSig = 4 end
+
+    msPerBar = (60000.0 / bpm) * IntToFloat(timeSig)
+
+    if msPerBar <= 0.0 then result = 1
+    else result = Round(timeMS / msPerBar) + 1
+    end
 End
 
 // ---------------------------------------------------------
@@ -9381,6 +9600,13 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
                if OutputScope[susCh] then UpdateInjectionNPDisplay() end
            end
 
+       // --- SYSMODE CYCLE / SELECT ---
+       elsif matchedMacro == SYSMODE_CYCLE_MacroIdx and val > 0.5 then
+           CycleGlobalSystemMode()
+           SystemModeActive = true
+       elsif matchedMacro == SYSMODE_SELECT_MacroIdx then
+           SelectGlobalSystemMode(Round(val * 4.0))
+
        // --- EXTERNE MORPHS (ApplyEditorTest) ---
        else
            ApplyEditorTest(val)
@@ -9450,22 +9676,44 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
                Last_RecPart_Val = val
            end
            
-       elsif VST_SCOPE_CCIdx == cc and val > 0.5 then 
+       elsif VST_SCOPE_CCIdx == cc and val > 0.5 then
            ChangeVstScope(-1, Round(val * (MAX_VSTS - 1)))
-           
+
+       // --- SYSMODE MACROS ---
+       elsif SYSMODE_CYCLE_CCIdx == cc and val > 0.5 then
+           CycleGlobalSystemMode()
+           SystemModeActive = true
+       elsif SYSMODE_SELECT_CCIdx == cc then
+           SelectGlobalSystemMode(Round(val * 4.0))  // val 0.0-1.0 maps to mode 0-4
+
        // SYSTEM TOGGLE FOR DIRECT CCs
        elsif SYSTEM_TOGGLE_CCIdx == cc then
-           SystemModeActive = (val > 0.5)
-           if SystemModeActive then
+           if val > 0.5 then
+               // SUSTAIN PRESS: Restore sticky state or enter fresh
+               SystemModeActive = true
+               if StickySystemMode >= 0 then
+                   GlobalSystemMode = StickySystemMode
+                   if StickySystemMode == 4 then
+                       TimelineSubMode = StickyTimelineSubMode
+                       TimelineRecState = StickyTimelineRecState
+                   end
+                   Trace("SYS-MODE: RESTORED -> " + SysModeNames[GlobalSystemMode])
+               end
                mName = SysModeNames[GlobalSystemMode]
-               Trace("SYS-MODE: ON -> " + mName + " (via CC" + cc + ")")
                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + mName + " <<<", Local_IP, Local_PORT)
                MacroFeedbackTimer = TimeSinceStartup() + 2000.0
                MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
            else
-               Trace("SYS-MODE: OFF") 
+               // SUSTAIN RELEASE: Save sticky state, do NOT stop Timeline recording
+               StickySystemMode = GlobalSystemMode
+               if GlobalSystemMode == 4 then
+                   StickyTimelineSubMode = TimelineSubMode
+                   StickyTimelineRecState = TimelineRecState
+               end
+               SystemModeActive = false
+               Trace("SYS-MODE: OFF (sticky=" + StickySystemMode + ")")
            end
-       end 
+       end
        
        // --- B: ARE THERE PARAMETER LINKS FOR THIS CC? ---
        For i = 0; i < Link_Count; i = i + 1 Do
@@ -9676,6 +9924,50 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
             CycleStripChannel(dir)           // Wheel = switch channels (like Looper)
         elsif actionType == "BUTTON" then
             ToggleStripMacro()               // Button = toggle macro at grid position
+        end
+
+    // --- 4: TIMELINE (PLAY/REC with sub-mode) ---
+    elsif GlobalSystemMode == 4 then
+        if actionType == "Y_AXIS" or actionType == "BUTTON" then
+            // Toggle PLAY <-> REC
+            if TimelineSubMode == 0 then
+                // PLAY -> REC
+                TimelineSubMode = 1
+                TimelineRecState = 0  // Default to Replace
+                StartTimelineRecording()
+                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: REC (Replace) <<<", Local_IP, Local_PORT)
+            else
+                // REC -> PLAY (commit recording)
+                if TimelineRecActive then CommitTimelineRecording() end
+                TimelineSubMode = 0
+                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: PLAY <<<", Local_IP, Local_PORT)
+            end
+            MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+
+        elsif actionType == "X_AXIS" or actionType == "ENCODER" then
+            if TimelineSubMode == 0 then
+                // PLAY: Part Jump Preview
+                PartJumpPreview(dir)
+            else
+                // REC mode
+                if dir == 1 then
+                    // Right: Execute REC_SONGPART
+                    ExecuteRecSongpart()
+                elsif dir == -1 then
+                    // Left: Cycle Replace -> Overdub -> Discard
+                    TimelineRecState = TimelineRecState + 1
+                    if TimelineRecState > 2 then TimelineRecState = 0 end
+
+                    if TimelineRecState == 0 then
+                        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> REC: Replace <<<", Local_IP, Local_PORT)
+                    elsif TimelineRecState == 1 then
+                        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> REC: Overdub <<<", Local_IP, Local_PORT)
+                    elsif TimelineRecState == 2 then
+                        DiscardTimelineRecording()
+                    end
+                    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+                end
+            end
         end
     end
 End
@@ -10444,8 +10736,15 @@ Function SaveSongSnapshot()
        
        // 6. APPEND TIMELINE
        content = content + NEW_LINE + "[Timeline]" + NEW_LINE
-       for i = 0; i < Size(Arr_TL_Bar); i = i + 1 do
-           content = content + "Event_" + (i+1) + "=" + Arr_TL_Bar[i] + ", " + Arr_TL_Type[i] + ", " + Arr_TL_Val[i] + ", " + Arr_TL_Offset[i] + NEW_LINE
+       if GetBPM() > 0.0 then
+           content = content + "StartBPM=" + GetBPM() + NEW_LINE
+       end
+       content = content + "TimeSignature=" + GetTimeSigNumerator() + NEW_LINE
+       if RecordEndTimeMS > 0.0 then
+           content = content + "TotalDurationMS=" + Round(RecordEndTimeMS) + NEW_LINE
+       end
+       for i = 0; i < Size(Snap_TL_TimeMS); i = i + 1 do
+           content = content + "Event_" + (i+1) + "=" + Round(Snap_TL_TimeMS[i]) + ", " + Snap_TL_Type[i] + ", " + Snap_TL_Val[i] + NEW_LINE
        end
        
        saved = SaveStringToTextFile(filePath, content)
@@ -10474,74 +10773,76 @@ End
 Function LoadSongTimeline(songFilePath : String)
     var iniPath : String
     var lines, parts, kvParts : String Array
-    var line, valStr, eType : String
-    var i, eBar, eVal, eOffset : Integer
+    var line, valStr, eType, key : String
+    var i, eVal : Integer
+    var eTimeMS : Double = 0.0
     var inSection : Boolean = false
-    var targetOptAuto, targetOptJump,targetOptPlay : Double = 1.0
-    
+
     // Clean out arrays
-    Arr_TL_Bar = []; Arr_TL_Type = []; Arr_TL_Val = []; Arr_TL_Offset = []
-	Arr_TL_Fired <-- false
-    
-    // We simply convert ".gpchord" to ".ini"
+    Snap_TL_TimeMS = []; Snap_TL_Type = []; Snap_TL_Val = []; Snap_TL_Fired = []
+    Arr_Rec_TimeMS = []; Arr_Rec_Type = []; Arr_Rec_Val = []
+    RecordEndTimeMS = 0.0
+    TimelinePlaybackActive = false
+    TimelineRecActive = false
+    PreviewPartIdx = 0
+    TimelineCurrentPartIdx = 1
+
     iniPath = ReplaceString(songFilePath, ".gpchord", ".ini", false)
-    
+
     if FileExists(iniPath) then
         lines = SplitString(LoadStringFromTextFile(iniPath), NEW_LINE)
-        
+
         for i = 0; i < Size(lines); i = i + 1 do
             line = TrimString(lines[i])
-            
-            // Are we in the correct [Timeline] block?
+
             if IndexOfSubstring(line, "[Timeline]", false) == 0 then
                 inSection = true
-            // A new block begins -> we are done searching
             elsif IndexOfSubstring(line, "[", false) == 0 and line != "[Timeline]" then
                 inSection = false
-            // We are in the block and the line has an "="
             elsif inSection and IndexOfSubstring(line, "=", false) > 0 then
-                
+
                 kvParts = SplitString(line, "=")
-                valStr = TrimString(kvParts[1]) // "9, RegMem, 2, 0"
-                parts = SplitString(valStr, ",")
-                
-                if Size(parts) >= 3 then
-                    eBar = StringToInt(TrimString(parts[0]))
-                    eType = TrimString(parts[1])
-                    eVal = StringToInt(TrimString(parts[2]))
-                    
-                    if Size(parts) >= 4 then 
-                        eOffset = StringToInt(TrimString(parts[3])) 
-                    else 
-                        eOffset = 0 
-                    end
-                    
-                    // Store in memory for fast access
-                    Arr_TL_Bar <-- eBar
-                    Arr_TL_Type <-- eType
-                    Arr_TL_Val <-- eVal
-                    Arr_TL_Offset <-- eOffset
-                    
-                    // ZEBRA SYNC FOR SONGPARTS (MARKERS)
-                    if eType == "Marker" then
-                        // eVal contains the part number (0 = Intro, 1 = Verse, etc.)
-                        if eVal >= 0 and eVal < Size(Arr_BarTriggers) then
-                            Arr_BarTriggers[eVal] = eBar
-                            
-                            // ---> Adjust song length to last marker <---
-                            if eBar > SongDurationBars then SongDurationBars = eBar end
+                key = TrimString(kvParts[0])
+                valStr = TrimString(kvParts[1])
+
+                // Parse metadata keys
+                if key == "TotalDurationMS" then
+                    RecordEndTimeMS = StringToDouble(valStr)
+                elsif key == "StartBPM" then
+                    RecordedBPM = StringToDouble(valStr)
+                elsif key == "TimeSignature" then
+                    RecordedTimeSig = StringToInt(valStr)
+
+                // Parse event lines: Event_N=<ms>, <Type>, <Value>
+                elsif IndexOfSubstring(key, "Event_", false) == 0 then
+                    parts = SplitString(valStr, ",")
+
+                    if Size(parts) >= 3 then
+                        eTimeMS = StringToDouble(TrimString(parts[0]))
+                        eType = TrimString(parts[1])
+                        eVal = StringToInt(TrimString(parts[2]))
+
+                        Snap_TL_TimeMS <-- eTimeMS
+                        Snap_TL_Type <-- eType
+                        Snap_TL_Val <-- eVal
+                        Snap_TL_Fired <-- false
+
+                        // Sync bar triggers for Marker events (if bars are calculable)
+                        if eType == "Marker" and RecordEndTimeMS > 0.0 then
+                            if eVal >= 0 and eVal < Size(Arr_BarTriggers) then
+                                Arr_BarTriggers[eVal] = CalculateBarFromMS(eTimeMS)
+                            end
                         end
                     end
                 end
             end
         end
-        Trace("PROMPTER: Timeline loaded. " + Size(Arr_TL_Bar) + " events found.")
+        Trace("PROMPTER: Timeline loaded. " + Size(Snap_TL_TimeMS) + " events found.")
     else
         Trace("PROMPTER: No INI file found. Timeline is empty.")
     end
     BuildRecDisplayLines()
     RefreshRecDisplay(1.0)
-
 End
 
 // ---------------------------------------------------------
@@ -11384,13 +11685,20 @@ Function EvaluateTransportSync()
         end
     end
     
+    // --- Timeline auto-start on transport ---
+    if playing then
+        if not TimelinePlaybackActive and not TimelineRecActive and Size(Snap_TL_TimeMS) > 0 then
+            StartTimelinePlayback()
+        end
+    end
+
     // --- UI Updates ---
-    if RecordMode > 0 then
+    if RecordMode > 0 or TimelineRecActive then
         BuildRecDisplayLines()
         RefreshRecDisplay(GetWidgetValue(SLD_CurrentState))
     end
-    
-    ProcessTopQueueJobResult(true) 
+
+    ProcessTopQueueJobResult(true)
 End
 
 
@@ -11412,8 +11720,8 @@ Initialization
    SetWidgetValue(BTN_Record_Overdub, 0.0)
    SetWidgetValue(BTN_Record_Replace, 0.0)
    IsPerformanceActive = false
-   Arr_Rec_Bar = []; Arr_Rec_Type = []; Arr_Rec_Val = []; Arr_Rec_Offset = []
-   
+   Arr_Rec_Type = []; Arr_Rec_Val = []
+
    // ====================================================================================
    // PHASE 1: PATHS
    // ====================================================================================
@@ -11757,7 +12065,7 @@ On WidgetValueChanged(newValue : Double) from BTN_Record_Overdub
                 if Arr_BarTriggers[tmpIdx] <= CurrentBar then NextRecPartIdx = tmpIdx + 1 end
                 tmpIdx = tmpIdx + 1
             End
-            Arr_Rec_Bar = []; Arr_Rec_Type = []; Arr_Rec_Val = []; Arr_Rec_Offset = []
+            Arr_Rec_Type = []; Arr_Rec_Val = []
             UpdatePrompter(false); BuildRecDisplayLines(); ScrollToCurrentTimelineEvent()
             Trace("PROMPTER: REC OVERDUB ARMED at Bar " + RecordStartBar)
         else
@@ -11787,7 +12095,7 @@ On WidgetValueChanged(newValue : Double) from BTN_Record_Replace
                 if Arr_BarTriggers[tmpIdx] <= CurrentBar then NextRecPartIdx = tmpIdx + 1 end
                 tmpIdx = tmpIdx + 1
             End
-            Arr_Rec_Bar = []; Arr_Rec_Type = []; Arr_Rec_Val = []; Arr_Rec_Offset = []
+            Arr_Rec_Type = []; Arr_Rec_Val = []
             UpdatePrompter(false); BuildRecDisplayLines(); ScrollToCurrentTimelineEvent()
             Trace("PROMPTER: REC REPLACE ARMED at Bar " + RecordStartBar)
         else
@@ -12641,7 +12949,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
        end 
        
        // TIMELINE RECORDING FOR MACROS (SWITCHES ONLY)
-       if RecordMode > 0 and IsPerformanceActive then
+       if (RecordMode > 0 or TimelineRecActive) and IsPerformanceActive then
            if newVal == 1.0 then
                RecordTimelineEvent("Macro", paramIdx)
            end
@@ -12690,8 +12998,8 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerS
     // TIMELINE RECORDING FOR PART CHANGES (STYLE)
     // ========================================================
     // Record when REC is on AND it's a key press (> 0.5)
-    if RecordMode > 0 and newVal > 0.5 then
-        
+    if (RecordMode > 0 or TimelineRecActive) and newVal > 0.5 then
+
         // Filter out system pings (Start/Stop, HW flags)
         // P_STYLE_START_STOP = 1, P_STYLE_HW_START = 29, Arranger HW button = 44
         if paramIdx != 1 and paramIdx != 29 and paramIdx != 44 then
@@ -12808,9 +13116,18 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0
         end
     end
     
+    // Timeline NoteOn-detection playback start
+    if IsNoteOn(m) then
+        if not TimelinePlaybackActive and not TimelineRecActive and Size(Snap_TL_TimeMS) > 0 then
+            if GetWidgetValue(BTN_TL_HostSync) > 0.5 and not IsPlayheadEnabled() then
+                StartTimelinePlayback()
+            end
+        end
+    end
+
     // 3. Keyboard split learning (if active)
     ProcessMidiLearn(m)
-    
+
     // 4. Looper
     FeedLooper_Note(m)
     
@@ -13196,18 +13513,15 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
    
    // --- UI PROMPTER UPDATE ---
    if not IsLoading and not IsLoadingSnapshot then 
-       if RecordMode > 0 then 
-           UpdatePrompter(false) 
-       else 
-           UpdatePrompter(true)  
+       if RecordMode > 0 or TimelineRecActive then
+           UpdatePrompter(false)
+       else
+           UpdatePrompter(true)
        end
    end
    
-   // --- TIMELINE TRIGGER RESET ---
-   for e = 0; e < Size(Arr_TL_Bar); e = e + 1 do
-        if Arr_TL_Bar[e] == CurrentBar then Arr_TL_Fired[e] = false end
-   end
-   
+   // --- TIMELINE TRIGGER RESET (removed: ms-based playback resets Snap_TL_Fired at start) ---
+
    // ---> TIME DOMAIN TRACE <---
    if beat == 1 and subbeat == 0 then
        if DebugMode then TraceTimeDomains() end
@@ -13381,6 +13695,7 @@ On TimerTick(ms : Double)
      maxCountInBeats, remB, ledIndex : Integer
      msLeft_blink : Double = 0.0; timeSinceHW : Double = 0.0; t_progress : Double = 0.0; 
      a_val : Double = 0.0; msSinceBarStart : Double = 0.0; currentBPM_Tick : Double = 0.0; msPerBeat : Double = 0.0
+     msSinceSongStart : Double = 0.0
      
    // ========================================================================
    // --- INITIALIZATION FOR THIS TICK ---
@@ -13532,8 +13847,18 @@ On TimerTick(ms : Double)
            end
        end
 
+       // Timeline count-in contributes to the same LED display
+       if TimelineCountInTimer > 0.0 and not TimelineRecActive then
+           msLeft_blink = TimelineCountInTimer - TimeSinceStartup()
+           if msLeft_blink > 0.0 then
+               remB = Round((msLeft_blink + (msPerBeat / 2.0)) / msPerBeat)
+               if remB > maxCountInBeats then maxCountInBeats = remB end
+               anyLooperActive = true  // Ensure LED display updates during Timeline count-in
+           end
+       end
+
        if anyLooperActive then
-           
+
            // CASE A: COUNT-IN RUNNING (transport still stopped)
            if maxCountInBeats > 0 then
                ledIndex = 4 - ((maxCountInBeats - 1) % 4)
@@ -13621,11 +13946,24 @@ On TimerTick(ms : Double)
                        
                        if DebugMode then Trace("COUNT-IN FINISHED: HostSync OFF. Looper starts isolated (State 1).") end
                    end
-                   
+
                end
            end
        End
-       
+
+       // --- TIMELINE COUNT-IN MONITOR ---
+       if TimelineCountInTimer > 0.0 and not TimelineRecActive then
+           if TimeSinceStartup() >= TimelineCountInTimer then
+               TimelineCountInTimer = 0.0
+               TimelineRecActive = true
+               RecordStartTimeMS = TimeSinceStartup()
+
+               Trace("TIMELINE: Count-in expired. Recording started at " + Round(RecordStartTimeMS) + "ms")
+               OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: REC <<<", Local_IP, Local_PORT)
+               MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+           end
+       end
+
        ProcessLooperPlayback()
        
        // --- ISOLATED AUTO-TRANSITION (WHEN HOST SYNC IS OFF) ---
@@ -13778,31 +14116,21 @@ On TimerTick(ms : Double)
         
         if LastBarStartTime > 0.0 then msSinceBarStart = TimeSinceStartup() - LastBarStartTime end
         
-        // ========================================================================
-        // ---> TIMELINE ACTION EXECUTOR <---
-        // ========================================================================
-        if RecordMode == 0 and IsPerformanceActive and GetWidgetValue(BTN_MIDIAnchorPlayback) > 0.5 then
-            for tl_idx = 0; tl_idx < Size(Arr_TL_Bar); tl_idx = tl_idx + 1 do
-                if Arr_TL_Bar[tl_idx] == CurrentBar and Arr_TL_Fired[tl_idx] == false then
-                    if msSinceBarStart >= IntToFloat(Arr_TL_Offset[tl_idx]) then
-                        
-                        if Arr_TL_Type[tl_idx] == "Macro" then SetParameter(ExternalArranger, Arr_TL_Val[tl_idx], 1.0) end
-                        
-                        if Arr_TL_Type[tl_idx] == "Map" then
-                            if Arr_TL_Val[tl_idx] >= 0 and Arr_TL_Val[tl_idx] < Size(CtrlMapList) then
-                                Trace("TIMELINE: Auto-Switching Map to -> " + CtrlMapList[Arr_TL_Val[tl_idx]])
-                                LoadControllerMap(CtrlMapList[Arr_TL_Val[tl_idx]])
-                                
-                                HardwareSyncTimer = TimeSinceStartup() + 400.0 // Fader smooth nachziehen
-                                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TL-MAP: " + CtrlMapList[Arr_TL_Val[tl_idx]] + " <<<", Local_IP, Local_PORT)
-                                MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-                            end
-                        end
-                        
-                        if Arr_TL_Type[tl_idx] == "Style" then TriggerStyleAction(Arr_TL_Val[tl_idx]) end
-                        
-                        Arr_TL_Fired[tl_idx] = true
-                    end
+        // --- TIMELINE PLAYBACK (ms-based) ---
+        if TimelinePlaybackActive and not TimelineRecActive then
+            msSinceSongStart = TimeSinceStartup() - PlaybackStartTimeMS
+            for tl_idx = 0; tl_idx < Size(Snap_TL_TimeMS); tl_idx = tl_idx + 1 do
+                if Snap_TL_TimeMS[tl_idx] <= msSinceSongStart and Snap_TL_Fired[tl_idx] == false then
+                    FireTimelineEvent(Snap_TL_Type[tl_idx], Snap_TL_Val[tl_idx])
+                    Snap_TL_Fired[tl_idx] = true
+                end
+            end
+
+            // Stop playback after last event + 1 second buffer
+            if Size(Snap_TL_TimeMS) > 0 then
+                if msSinceSongStart > Snap_TL_TimeMS[Size(Snap_TL_TimeMS) - 1] + 1000.0 then
+                    TimelinePlaybackActive = false
+                    Trace("TIMELINE: Playback finished.")
                 end
             end
         end
