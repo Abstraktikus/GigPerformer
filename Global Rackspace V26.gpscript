@@ -7572,17 +7572,17 @@ End
 
 Function CycleGlobalSystemMode()
    var modeName : String
-   
-   // 4 modes: 0 (Voice), 1 (Looper), 2 (Controller Map), 3 (Strip Control)
+
+   StickySystemMode = -1  // Reset sticky on explicit mode change
+
    GlobalSystemMode = GlobalSystemMode + 1
-   if GlobalSystemMode > 3 then GlobalSystemMode = 0 end
+   if GlobalSystemMode > 4 then GlobalSystemMode = 0 end
 
    modeName = SysModeNames[GlobalSystemMode]
 
    Trace("SYS-MODE: Switched to " + modeName)
    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-   // Lock prevents hardware sync fader echoes from overwriting the mode display
    MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
 End
 
@@ -9488,17 +9488,32 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
            
        // SYSTEM TOGGLE FOR DIRECT CCs
        elsif SYSTEM_TOGGLE_CCIdx == cc then
-           SystemModeActive = (val > 0.5)
-           if SystemModeActive then
+           if val > 0.5 then
+               // SUSTAIN PRESS: Restore sticky state or enter fresh
+               SystemModeActive = true
+               if StickySystemMode >= 0 then
+                   GlobalSystemMode = StickySystemMode
+                   if StickySystemMode == 4 then
+                       TimelineSubMode = StickyTimelineSubMode
+                       TimelineRecState = StickyTimelineRecState
+                   end
+                   Trace("SYS-MODE: RESTORED -> " + SysModeNames[GlobalSystemMode])
+               end
                mName = SysModeNames[GlobalSystemMode]
-               Trace("SYS-MODE: ON -> " + mName + " (via CC" + cc + ")")
                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + mName + " <<<", Local_IP, Local_PORT)
                MacroFeedbackTimer = TimeSinceStartup() + 2000.0
                MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
            else
-               Trace("SYS-MODE: OFF") 
+               // SUSTAIN RELEASE: Save sticky state, do NOT stop Timeline recording
+               StickySystemMode = GlobalSystemMode
+               if GlobalSystemMode == 4 then
+                   StickyTimelineSubMode = TimelineSubMode
+                   StickyTimelineRecState = TimelineRecState
+               end
+               SystemModeActive = false
+               Trace("SYS-MODE: OFF (sticky=" + StickySystemMode + ")")
            end
-       end 
+       end
        
        // --- B: ARE THERE PARAMETER LINKS FOR THIS CC? ---
        For i = 0; i < Link_Count; i = i + 1 Do
