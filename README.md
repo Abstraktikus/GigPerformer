@@ -56,6 +56,17 @@ Define named controller maps per song that assign hardware knobs/sliders to VST 
 
 All hardware is configured via `DeviceConfig.txt` — no hardcoded MIDI devices in the script. Supports multiple devices with capability flags (transport sync, SysEx, joystick, crossfader targets, feedback). Switch your entire hardware setup by editing one text file.
 
+### AnchorPlayback — Chord-Based Part Detection
+
+A passive observer that detects where you actually are in a song by matching played root notes against the `.gpchord` chord progression. Solves the fundamental problem of ms-based timelines drifting from reality in a live band context (extended solos, skipped verses, rushed sections).
+
+- **Manual Property** — assign each MIDI channel as Upper (melody hand) or Lower (chord hand); AnchorPlayback reads from the Lower channel
+- **Root Sequence Parser** — extracts pitch classes from chord notation (`[Dm]` → 2, `[F#m7]` → 6) with consecutive deduplication
+- **Forward-Only Tracker** — matches played roots against the expected progression; 2 consecutive matches trigger a part change
+- **Timeline Integration** — updates the prompter display, fires marker events, and optionally corrects the timeline position via TimeJump
+
+Controlled by three buttons: `BTN_MIDIAnchorPlayback` (master switch), `BTN_TimeJump` (allow timeline correction), and `BTN_Autopilot` (fat-finger correction for RegMem).
+
 ### SYS-MODE Navigation
 
 A 5-mode system accessible via joystick/sustain pedal:
@@ -73,11 +84,10 @@ Devices without a joystick (e.g. MiniLab) access SYS-MODEs via `SYSMODE_CYCLE` a
 
 Planned features, roughly in order of implementation:
 
-1. **Automatic Bar Synchronization** — Detect the current song position by matching manual section changes (SYSREG) and played chords within an AnchorWindow against the timeline
-2. **MIDI Recorder & Player** — Record and play back MIDI performances, bar-aligned to the timeline
-3. **Overdub Layers** — Stack multiple recording takes on top of each other, building up arrangements layer by layer
-4. **Backing Tracks Integration** — Trigger and sync audio backing tracks to the timeline with automatic cue points and transport control
-5. **LFO Engine** — Scriptable LFOs linked to Controller Map macros for automated parameter modulation (filter sweeps, tremolo, panning, etc.)
+1. **MIDI Recorder & Player** — Record and play back MIDI performances, bar-aligned to the timeline
+2. **Overdub Layers** — Stack multiple recording takes on top of each other, building up arrangements layer by layer
+3. **Backing Tracks Integration** — Trigger and sync audio backing tracks to the timeline with automatic cue points and transport control
+4. **LFO Engine** — Scriptable LFOs linked to Controller Map macros for automated parameter modulation (filter sweeps, tremolo, panning, etc.)
 
 ## Requirements
 
@@ -97,7 +107,7 @@ Planned features, roughly in order of implementation:
    - `GenosMapping.txt` — Genos voice mappings (if applicable)
 3. **Open** `examples/Test.gig` in Gig Performer
 4. **Paste** the Global Rackspace script (`Global Rackspace.gpscript`) into the Global Rackspace script editor
-5. **Paste** the Note Prozessor script (`Note Prozessor 7.4.gpscript`) into the corresponding rackspace
+5. **Paste** the Note Prozessor script (`Note Prozessor 7.5.gpscript`) into the corresponding rackspace
 6. **Adjust** `UserSnapshotPath` and `UserChordProPath` in Section 1 of the script to match your file locations
 7. **Add songs** as `.ini` + `.gpchord` files (see examples: `SlowHip80erDream`, `VSTPlayMode`)
 
@@ -105,7 +115,7 @@ Planned features, roughly in order of implementation:
 
 ```
 ├── Global Rackspace.gpscript   # Main script (current version)
-├── Note Prozessor 7.4.gpscript     # Per-rackspace note processing
+├── Note Prozessor 7.5.gpscript     # Per-rackspace note processing
 ├── Genos2_Control V2.gpscript      # Genos2 integration script
 ├── examples/                       # Ready-to-use test data
 │   ├── DeviceConfig.txt            # Hardware configuration (INI format)

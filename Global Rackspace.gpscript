@@ -70,7 +70,8 @@ Var
    HumanRoutingMap : String Array = ["1", "1", "1", "1", "1", "1", "1", "1", "9", "10", "2", "2", "3", "4", "5,6", "7,8"]
    SECTION_KEYWORDS : String Array = ["Intro", "Verse", "Chorus", "Bridge", "Solo", "Outro", "Interlude", "Pre-Chorus", "Instrumental", "Coda", "Hook", "Refrain", "Break"]
    SyncModeNames : String Array = ["ISOLATED", "ARRANGER LEADS", "GP LEADS", "FULL SYNC", "INITIAL LATCH"]
-   UsageCategories : String Array = ["Free", "Upper", "Lower", "Multi Pad 1", "Multi Pad 2", "Multi Pad 3", "Multi Pad 4", "Drums 1", "Drums 2", "Bass", "Chord 1", "Chord 2", "Pad", "Phrase 1", "Phrase 2", "Strings 1", "Strings 2", "Piano", "Lead 1", "Lead 2", "PolySynth 1", "PolySynth 2", "Brass 1", "Brass 2", "Woodwind", "Choir 1", "Choir 2", "Bells 1", "Bells 2", "Accordion", "Organ 1", "Organ 2"] 
+   UsageCategories : String Array = ["Free", "Multi Pad 1", "Multi Pad 2", "Multi Pad 3", "Multi Pad 4", "Drums 1", "Drums 2", "Bass", "Chord 1", "Chord 2", "Pad", "Phrase 1", "Phrase 2", "Strings 1", "Strings 2", "Piano", "Lead 1", "Lead 2", "PolySynth 1", "PolySynth 2", "Brass 1", "Brass 2", "Woodwind", "Choir 1", "Choir 2", "Bells 1", "Bells 2", "Accordion", "Organ 1", "Organ 2"]
+   ManualNames : String Array = ["None", "Upper", "Lower"]
    NoteNamesSharp : String Array = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
    NoteNamesFlat  : String Array = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
    
@@ -204,6 +205,7 @@ Var
 
    // --- Channel Injection ---
    LBL_ChannelUsage, BTN_ChannelUsage_Prev, BTN_ChannelUsage_Next                : Widget
+   BTN_Manual_Prev, LBL_Manual, BTN_Manual_Next                                  : Widget
    LBL_VSTRouting, W_VelocityMeter                                               : Widget
    LBL_Injection_Split, BTN_Inject_KBSplit_Lowest, BTN_Inject_KBSplit_Highest    : Widget
    BTN_LearnMin, BTN_LearnMax                                                    : Widget
@@ -313,6 +315,16 @@ Var
     PlaybackStartTimeMS : Double = 0.0       // Set when playback begins
     TimelinePlaybackActive : Boolean = false // True during ms-based playback
 
+    // --- ANCHORPLAYBACK STATE ---
+    AnchorLowerChIdx      : Integer = -1    // First channel with Manual = Lower
+    AnchorUpperChIdx      : Integer = -1    // First channel with Manual = Upper
+    AnchorCurrentPartIdx  : Integer = 0     // Which part Anchor thinks is active
+    AnchorRootCursor      : Integer = 0     // Position in current part's root sequence
+    AnchorMatchCount      : Integer = 0     // Consecutive matches against NEXT part
+    AnchorLastRoot        : Integer = -1    // Last detected root (pitch class), -1 = none
+    AnchorDetectedRootIdx : Integer = -1    // Cached param index for p_DetectedRoot
+    AnchorHasNotesIdx     : Integer = -1    // Cached param index for p_HasNotes
+
    FirstRunDone, FactoryLearnDone : Boolean = false
 
    InputSyncTimer, OutputSyncTimer, SnapshotPostLoadTimer : Double = 0.0
@@ -379,6 +391,7 @@ Var
    Mem_SoloStrict         : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_SoloSmart          : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_UserMute           : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+   Mem_Manual             : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_ManualVSTBypass    : Boolean Array = [false, false, false, false, false, false, false, false, false, false]
    
    Mem_NP_ChordMode       : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -555,7 +568,12 @@ Var
    Snap_TL_Type : String Array
    Snap_TL_Val : Integer Array
    Snap_TL_Fired : Boolean Array
-   
+
+   // --- ANCHOR ROOT SEQUENCE (parsed from .gpchord) ---
+   Arr_PartRootSeq   : Integer Array   // All roots concatenated (pitch classes 0-11)
+   Arr_PartRootStart : Integer Array   // Start index in Arr_PartRootSeq per part
+   Arr_PartRootLen   : Integer Array   // Number of roots per part
+
    // --- Animation & Style ---
    Anim_Active    : Boolean Array = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
    Anim_Start, Anim_Target, Anim_StartTime, Anim_Duration, Arr_Anim_DurMS,Arr_Anim_Target : Double Array  = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -2229,12 +2247,14 @@ Function UpdateUsageLabelDisplay()
    
    if firstScopeIdx == -1 then
       SetWidgetLabel(LBL_ChannelUsage, "No Scope")
+      SetWidgetLabel(LBL_Manual, ManualNames[0])
       SetWidgetLabel(LBL_VSTRouting, "-")
-      
+
       // No selection -> hide buttons
       For i = 0; i < 3; i = i + 1 Do SetWidgetHideOnPresentation(W_Inject_Bypass[i], true) End
    else
       SetWidgetLabel(LBL_ChannelUsage, ChannelUsage[firstScopeIdx])
+      SetWidgetLabel(LBL_Manual, ManualNames[Mem_Manual[firstScopeIdx]])
       
       // 1. Find up to 3 VSTs assigned to this channel
       count = 0
@@ -9184,6 +9204,52 @@ Function CycleChannelUsage(direction : Integer)
    end // Ende vom Zaun
 End
 
+Function UpdateAnchorChannels()
+   var i, probeIdx : Integer
+   AnchorLowerChIdx = -1
+   AnchorUpperChIdx = -1
+   For i = 0; i < 16; i = i + 1 Do
+       if Mem_Manual[i] == 2 and AnchorLowerChIdx == -1 then AnchorLowerChIdx = i end
+       if Mem_Manual[i] == 1 and AnchorUpperChIdx == -1 then AnchorUpperChIdx = i end
+   End
+
+   // Cache parameter indices (only need to do this once, all NoteProcessors have same layout)
+   if AnchorDetectedRootIdx == -1 then
+       probeIdx = -1
+       if AnchorLowerChIdx >= 0 then probeIdx = AnchorLowerChIdx
+       elsif AnchorUpperChIdx >= 0 then probeIdx = AnchorUpperChIdx
+       end
+       if probeIdx >= 0 then
+           AnchorDetectedRootIdx = GetParamIdxByName(BLK_NoteProcessor[probeIdx], "p_DetectedRoot")
+           AnchorHasNotesIdx = GetParamIdxByName(BLK_NoteProcessor[probeIdx], "p_HasNotes")
+       end
+   end
+
+   Trace("ANCHOR: Lower=Ch" + IntToString(AnchorLowerChIdx + 1) + " Upper=Ch" + IntToString(AnchorUpperChIdx + 1))
+End
+
+Function CycleManual(direction : Integer)
+   var firstScopeIdx, currentVal, newVal, i : Integer
+
+   firstScopeIdx = GetFirstActiveScope()
+
+   if firstScopeIdx > -1 then
+       currentVal = Mem_Manual[firstScopeIdx]
+       newVal = currentVal + direction
+       if newVal < 0 then newVal = 2
+       elsif newVal > 2 then newVal = 0 end
+
+       For i = 0; i < 16; i = i + 1 Do
+           if OutputScope[i] then
+               Mem_Manual[i] = newVal
+           end
+       End
+
+       SetWidgetLabel(LBL_Manual, ManualNames[newVal])
+       UpdateAnchorChannels()
+   end
+End
+
 Function CycleScopeSection(direction : Integer)
     var i : Integer
     var currentIdx : Integer = CurrentEditScope
@@ -10376,6 +10442,92 @@ Function FinishRecording()
 End
 
 // ---------------------------------------------------------
+// ANCHOR: CHORD-TO-ROOT PARSER
+// ---------------------------------------------------------
+
+Function ChordNameToRoot(chordName : String) Returns Integer
+   // Extracts root pitch class (0-11) from chord name like "Dm", "F#m7", "Bb"
+   // Returns -1 if unparseable
+   var root : Integer = -1
+   var first, second : String
+
+   if Length(chordName) == 0 then result = -1
+   else
+       first = CopySubstring(chordName, 0, 1)
+
+       if first == "C" then root = 0
+       elsif first == "D" then root = 2
+       elsif first == "E" then root = 4
+       elsif first == "F" then root = 5
+       elsif first == "G" then root = 7
+       elsif first == "A" then root = 9
+       elsif first == "B" then root = 11
+       elsif first == "H" then root = 11
+       end
+
+       if root >= 0 and Length(chordName) >= 2 then
+           second = CopySubstring(chordName, 1, 1)
+           if second == "#" then
+               root = root + 1
+               if root > 11 then root = 0 end
+           elsif second == "b" then
+               root = root - 1
+               if root < 0 then root = 11 end
+           end
+       end
+
+       result = root
+   end
+End
+
+Function ParsePartRoots()
+   // Extracts root pitch classes from Arr_PartText_Raw chord notation [Dm], [F], etc.
+   // Populates flat arrays: Arr_PartRootSeq, Arr_PartRootStart, Arr_PartRootLen
+   var i, j, txtLen, rootPC, lastRoot : Integer
+   var txt, chordName, c : String
+   var inChord : Boolean = false
+   var partStart, partCount : Integer
+
+   Arr_PartRootSeq = []; Arr_PartRootStart = []; Arr_PartRootLen = []
+
+   For i = 0; i < Size(Arr_PartText_Raw); i = i + 1 Do
+       txt = Arr_PartText_Raw[i]
+       txtLen = Length(txt)
+       partStart = Size(Arr_PartRootSeq)
+       partCount = 0
+       lastRoot = -1
+       chordName = ""
+       inChord = false
+
+       j = 0
+       While j < txtLen Do
+           c = CopySubstring(txt, j, 1)
+           if c == "[" then
+               inChord = true
+               chordName = ""
+           elsif c == "]" then
+               inChord = false
+               rootPC = ChordNameToRoot(chordName)
+               // Deduplicate consecutive identical roots
+               if rootPC >= 0 and rootPC != lastRoot then
+                   Arr_PartRootSeq <-- rootPC
+                   partCount = partCount + 1
+                   lastRoot = rootPC
+               end
+           elsif inChord then
+               chordName = chordName + c
+           end
+           j = j + 1
+       End
+
+       Arr_PartRootStart <-- partStart
+       Arr_PartRootLen <-- partCount
+   End
+
+   Trace("ANCHOR: Parsed " + Size(Arr_PartRootSeq) + " roots across " + Size(Arr_PartRootStart) + " parts.")
+End
+
+// ---------------------------------------------------------
 // PARSER & LOADER FOR CHORD VIEWER (CLEAN TEXT EDITION)
 // ---------------------------------------------------------
 
@@ -10508,8 +10660,12 @@ Function ParseSongData()
        SongDurationBars = currentBarTrigger + 10 // Buffer for the end
        
        // Reset to start
-       CurrentBar = 1; GlobalBarOffset = 1 - LastSystemBar; LastFiredBar = -1; CurrentState = 4 
+       CurrentBar = 1; GlobalBarOffset = 1 - LastSystemBar; LastFiredBar = -1; CurrentState = 4
        RecalculateTextDisplay(); OSC_SendDoubleSpecific("/UI/SetScrubber", 1.0, Local_IP, Local_PORT)
+
+       // Parse root sequences for AnchorPlayback
+       ParsePartRoots()
+       UpdateAnchorChannels()
    End
 End
 
@@ -10692,6 +10848,7 @@ Function SaveSongSnapshot()
              if Mem_SoloStrict[i] == 1 then content = content + "Ch" + (i+1) + "_SoloStrict=1" + NEW_LINE end
              if Mem_SoloSmart[i] == 1 then content = content + "Ch" + (i+1) + "_SoloSmart=1" + NEW_LINE end
              if Mem_UserMute[i] == 1 then content = content + "Ch" + (i+1) + "_UserMute=1" + NEW_LINE end
+             if Mem_Manual[i] > 0 then content = content + "Ch" + (i+1) + "_Manual=" + IntToString(Mem_Manual[i]) + NEW_LINE end
              if OutputScope[i] then content = content + "Ch" + (i+1) + "_Scope=1" + NEW_LINE end
              
              if foundReference then
@@ -10884,7 +11041,8 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
    var targetCopyRef : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
    var targetSoloStrict : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    var targetSoloSmart  : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-   var targetUserMute   : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] 
+   var targetUserMute   : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+   var targetManual     : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    var targetScope : Boolean Array = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
    var targetManualBypass : Boolean Array = [false, false, false, false, false, false, false, false, false, false]
    var scopeFound : Boolean = false
@@ -11035,7 +11193,9 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                            elsif IndexOfSubstring(key, "_SoloSmart", false) > -1 then
                                targetSoloSmart[chIdx] = StringToInt(valStr)  
                            elsif IndexOfSubstring(key, "_UserMute", false) > -1 then
-                               targetUserMute[chIdx] = StringToInt(valStr)  
+                               targetUserMute[chIdx] = StringToInt(valStr)
+                           elsif IndexOfSubstring(key, "_Manual", false) > -1 then
+                               targetManual[chIdx] = StringToInt(valStr)
                            elsif IndexOfSubstring(key, "_Scope", false) > -1 then
                                if val > 0.5 then 
                                    targetScope[chIdx] = true
@@ -11225,6 +11385,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                    Mem_SoloStrict[i] = 0 //targetSoloStrict[i]
                    Mem_SoloSmart[i]  = 0 //targetSoloSmart[i]
                    Mem_UserMute[i]   = 0 //targetUserMute[i]
+                   Mem_Manual[i] = targetManual[i]
                    
                    // Pass mute status to the plugin
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_UserMute"); if idx > -1 then SetParameter(BLK_NoteProcessor[i], idx, IntToFloat(targetUserMute[i])) end
@@ -11233,7 +11394,8 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                 end
                 ChannelUsage[i] = targetUsage[i]
              End
-            
+            UpdateAnchorChannels()
+
             // --- RESTORE LOOPER STATE ---
             SetWidgetValue(BTN_Loop_HostSync, targetHostSync)
             SetWidgetValue(BTN_Loop_CountIn, targetCountIn)
@@ -11971,6 +12133,20 @@ On WidgetValueChanged(val : Double) from BTN_ChannelUsage_Prev
    if val > 0.5 then
       CycleChannelUsage(-1)
       SetWidgetValue(BTN_ChannelUsage_Prev, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_Manual_Next
+   if val > 0.5 then
+       CycleManual(1)
+       SetWidgetValue(BTN_Manual_Next, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_Manual_Prev
+   if val > 0.5 then
+       CycleManual(-1)
+       SetWidgetValue(BTN_Manual_Prev, 0.0)
    end
 End
 
@@ -13203,6 +13379,14 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
    SetWidgetValue(BTN_Record_Replace, 0.0)
    RecordMode = 0
    StripLiveDirty = false
+   AnchorCurrentPartIdx = 0
+   AnchorRootCursor = 0
+   AnchorMatchCount = 0
+   AnchorLastRoot = -1
+   AnchorLowerChIdx = -1
+   AnchorUpperChIdx = -1
+   AnchorDetectedRootIdx = -1
+   AnchorHasNotesIdx = -1
 
    ShowVSTOverlay("LOADING SONG...", 3000.0)
    
@@ -13689,6 +13873,116 @@ On OSCMessageReceived(m : OSCMessage) Matching "/GP/ViewReady"
 End
 
 // ---------------------------------------------------------
+// ANCHORPLAYBACK: FORWARD-ONLY ROOT TRACKER
+// ---------------------------------------------------------
+
+Function ExecuteAnchorPartChange(newPartIdx : Integer)
+   var i, markerEventIdx : Integer
+   var sectionName : String = ""
+
+   if newPartIdx < Size(Arr_SectionNames) then sectionName = Arr_SectionNames[newPartIdx] end
+
+   // 1. ALWAYS: Update prompter display
+   PreviewPartIdx = newPartIdx
+   UpdatePrompter(false)
+
+   // 2. ALWAYS: HUD feedback
+   if sectionName != "" then
+       OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> ANCHOR: " + sectionName + " <<<", Local_IP, Local_PORT)
+       MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+   end
+
+   // 3. TIMEJUMP: Correct timeline position if enabled
+   if GetWidgetValue(BTN_TimeJump) > 0.5 and TimelinePlaybackActive then
+       // Find the Marker event for this part in the timeline
+       markerEventIdx = -1
+       i = 0
+       While i < Size(Snap_TL_Type) and markerEventIdx == -1 Do
+           if Snap_TL_Type[i] == "Marker" and Snap_TL_Val[i] == newPartIdx then
+               markerEventIdx = i
+           end
+           i = i + 1
+       End
+
+       if markerEventIdx >= 0 then
+           // Adjust PlaybackStartTimeMS so msSinceSongStart aligns with the marker's ms
+           PlaybackStartTimeMS = TimeSinceStartup() - Snap_TL_TimeMS[markerEventIdx]
+           Trace("ANCHOR: TimeJump -> Corrected timeline to " + Round(Snap_TL_TimeMS[markerEventIdx]) + "ms (Part: " + sectionName + ")")
+       end
+   end
+
+   Trace("ANCHOR: Part change -> " + sectionName + " (idx=" + newPartIdx + ")")
+End
+
+Function ProcessAnchorPlayback()
+   var currentRoot, nextPartIdx, expectedRoot, nextExpectedRoot, matchThreshold : Integer
+   var srcChIdx : Integer = -1
+
+   // 1. GATE: Feature active? Channels configured? Root data available?
+   if GetWidgetValue(BTN_MIDIAnchorPlayback) < 0.5 then // Feature off
+   elsif Size(Arr_PartRootSeq) == 0 then // No chord data
+   elsif AnchorDetectedRootIdx == -1 then // Parameters not cached
+   else
+       // 2. READ ROOT from Lower (fallback: Upper)
+       if AnchorLowerChIdx >= 0 then
+           if GetParameter(BLK_NoteProcessor[AnchorLowerChIdx], AnchorHasNotesIdx) > 0.5 then
+               srcChIdx = AnchorLowerChIdx
+           end
+       end
+       if srcChIdx == -1 and AnchorUpperChIdx >= 0 then
+           if GetParameter(BLK_NoteProcessor[AnchorUpperChIdx], AnchorHasNotesIdx) > 0.5 then
+               srcChIdx = AnchorUpperChIdx
+           end
+       end
+
+       if srcChIdx >= 0 then
+           currentRoot = Round(GetParameter(BLK_NoteProcessor[srcChIdx], AnchorDetectedRootIdx) * 11.0)
+
+           // 3. DEDUPLICATE — same root as last time, no new info
+           if currentRoot != AnchorLastRoot then
+               AnchorLastRoot = currentRoot
+
+               // 4. TRACK against current part
+               if AnchorCurrentPartIdx < Size(Arr_PartRootStart) then
+                   if AnchorRootCursor < Arr_PartRootLen[AnchorCurrentPartIdx] then
+                       expectedRoot = Arr_PartRootSeq[Arr_PartRootStart[AnchorCurrentPartIdx] + AnchorRootCursor]
+                       if currentRoot == expectedRoot then
+                           AnchorRootCursor = AnchorRootCursor + 1
+                           if AnchorRootCursor >= Arr_PartRootLen[AnchorCurrentPartIdx] then
+                               AnchorRootCursor = 0  // Wrap — part is repeating
+                           end
+                       end
+                   end
+               end
+
+               // 5. CHECK against next part
+               nextPartIdx = AnchorCurrentPartIdx + 1
+               if nextPartIdx < Size(Arr_PartRootStart) then
+                   if AnchorMatchCount < Arr_PartRootLen[nextPartIdx] then
+                       nextExpectedRoot = Arr_PartRootSeq[Arr_PartRootStart[nextPartIdx] + AnchorMatchCount]
+                       if currentRoot == nextExpectedRoot then
+                           AnchorMatchCount = AnchorMatchCount + 1
+                       else
+                           AnchorMatchCount = 0  // Reset
+                       end
+                   end
+
+                   // 6. TRIGGER part change at dynamic threshold (min 1 for single-chord parts)
+                   matchThreshold = Arr_PartRootLen[nextPartIdx]
+                   if matchThreshold > 2 then matchThreshold = 2 end
+                   if matchThreshold > 0 and AnchorMatchCount >= matchThreshold then
+                       AnchorCurrentPartIdx = nextPartIdx
+                       AnchorRootCursor = 0  // Restart tracking in new part
+                       AnchorMatchCount = 0
+                       ExecuteAnchorPartChange(AnchorCurrentPartIdx)
+                   end
+               end
+           end
+       end
+   end
+End
+
+// ---------------------------------------------------------
 // TIMER EVENTS
 // ---------------------------------------------------------
 
@@ -14148,14 +14442,17 @@ On TimerTick(ms : Double)
                 end
             end
         end
-        
+
+        // --- ANCHORPLAYBACK (chord-based part tracking) ---
+        ProcessAnchorPlayback()
+
         if SnapshotPostLoadTimer > 0.0 then
           if TimeSinceStartup() > SnapshotPostLoadTimer then
               ScanGlobalInstruments()
               UpdateUsageLabelDisplay()
               IsLoadingSnapshot = false
               SnapshotPostLoadTimer = 0.0
-              
+
               // ========================================================
               // ---> NEW: INITIAL AUTO-SHOW AFTER SONG LOADING <---
               // ========================================================
