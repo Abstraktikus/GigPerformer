@@ -9227,7 +9227,7 @@ Function CycleManual(direction : Integer)
 End
 
 Function UpdateAnchorChannels()
-   var i : Integer
+   var i, probeIdx : Integer
    AnchorLowerChIdx = -1
    AnchorUpperChIdx = -1
    For i = 0; i < 16; i = i + 1 Do
@@ -9237,7 +9237,7 @@ Function UpdateAnchorChannels()
 
    // Cache parameter indices (only need to do this once, all NoteProcessors have same layout)
    if AnchorDetectedRootIdx == -1 then
-       var probeIdx : Integer = -1
+       probeIdx = -1
        if AnchorLowerChIdx >= 0 then probeIdx = AnchorLowerChIdx
        elsif AnchorUpperChIdx >= 0 then probeIdx = AnchorUpperChIdx
        end
@@ -13915,7 +13915,7 @@ Function ExecuteAnchorPartChange(newPartIdx : Integer)
 End
 
 Function ProcessAnchorPlayback()
-   var currentRoot, nextPartIdx, expectedRoot, nextExpectedRoot : Integer
+   var currentRoot, nextPartIdx, expectedRoot, nextExpectedRoot, matchThreshold : Integer
    var srcChIdx : Integer = -1
 
    // 1. GATE: Feature active? Channels configured? Root data available?
@@ -13968,7 +13968,7 @@ Function ProcessAnchorPlayback()
                    end
 
                    // 6. TRIGGER part change at dynamic threshold (min 1 for single-chord parts)
-                   var matchThreshold : Integer = Arr_PartRootLen[nextPartIdx]
+                   matchThreshold = Arr_PartRootLen[nextPartIdx]
                    if matchThreshold > 2 then matchThreshold = 2 end
                    if matchThreshold > 0 and AnchorMatchCount >= matchThreshold then
                        AnchorCurrentPartIdx = nextPartIdx
