@@ -10483,16 +10483,16 @@ End
 Function ParsePartRoots()
    // Extracts root pitch classes from Arr_PartText_Raw chord notation [Dm], [F], etc.
    // Populates flat arrays: Arr_PartRootSeq, Arr_PartRootStart, Arr_PartRootLen
-   var i, j, blockLen, rootPC, lastRoot : Integer
-   var block, chordName, c : String
+   var i, j, txtLen, rootPC, lastRoot : Integer
+   var txt, chordName, c : String
    var inChord : Boolean = false
    var partStart, partCount : Integer
 
    Arr_PartRootSeq = []; Arr_PartRootStart = []; Arr_PartRootLen = []
 
    For i = 0; i < Size(Arr_PartText_Raw); i = i + 1 Do
-       block = Arr_PartText_Raw[i]
-       blockLen = Length(block)
+       txt = Arr_PartText_Raw[i]
+       txtLen = Length(txt)
        partStart = Size(Arr_PartRootSeq)
        partCount = 0
        lastRoot = -1
@@ -10500,8 +10500,8 @@ Function ParsePartRoots()
        inChord = false
 
        j = 0
-       While j < blockLen Do
-           c = CopySubstring(block, j, 1)
+       While j < txtLen Do
+           c = CopySubstring(txt, j, 1)
            if c == "[" then
                inChord = true
                chordName = ""
