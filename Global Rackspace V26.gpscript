@@ -541,8 +541,8 @@ Var
    Arr_FileLines, Arr_SectionNames, Arr_Cues, Arr_PartText_Raw, Arr_Text_Chords, Arr_Text_Lyrics : String Array
    Arr_TL_Type, Arr_Rec_Type : String Array
    Arr_SectionLineIndices, Arr_BarTriggers, Arr_PartAnchors, Arr_TL_Val, Arr_Rec_Val : Integer Array
-   Arr_TL_Bar, Arr_TL_Offset, Arr_Rec_Bar, Arr_Rec_Offset : Integer Array  // Legacy bar arrays (kept for bar calculation)
-   Arr_TL_Fired : Boolean Array
+   Arr_TL_Bar, Arr_TL_Offset, Arr_Rec_Bar, Arr_Rec_Offset : Integer Array  // Legacy bar arrays (used by FinishRecording/JumpToRegMemAnchor/CheckRegMemAutopilot)
+   Arr_TL_Fired : Boolean Array  // Legacy fired flag (replaced by Snap_TL_Fired in new ms-based system)
 
    // --- MS-BASED TIMELINE ARRAYS ---
    // Working (current recording session)
@@ -4844,51 +4844,51 @@ End
 // =========================================================
 
 Function BuildRecDisplayLines()
-    var i, partIdx : Integer
-    var line, eType, valStr, pad : String
-    
+    var i, partIdx, tms : Integer
+    var line, eType, valStr : String
+
     RecDisplayLines = []
 
-    // 1. SHOW EXISTING TIMELINE (always visible!)
-    if Size(Arr_TL_Bar) == 0 and Size(Arr_Rec_Bar) == 0 then
+    // 1. SHOW COMMITTED TIMELINE (Snap_TL_* = last saved/committed state)
+    if Size(Snap_TL_TimeMS) == 0 and Size(Arr_Rec_TimeMS) == 0 then
         RecDisplayLines <-- "(Timeline is empty)"
     else
-        for i = 0; i < Size(Arr_TL_Bar); i = i + 1 do
-            eType = Arr_TL_Type[i]
+        for i = 0; i < Size(Snap_TL_TimeMS); i = i + 1 do
+            eType = Snap_TL_Type[i]
+            tms = Round(Snap_TL_TimeMS[i])
 
-            if eType == "RegMem" then valStr = "Registration " + Arr_Rec_Val[i]
-                elsif eType == "Macro" then valStr = "Fader/Btn " + (Arr_Rec_Val[i] + 1) 
-                elsif eType == "Style" then valStr = "Style Action " + Arr_Rec_Val[i]
-                elsif eType == "Map" then 
-                    if Arr_Rec_Val[i] >= 0 and Arr_Rec_Val[i] < Size(CtrlMapList) then
-                        valStr = "Map: " + CtrlMapList[Arr_Rec_Val[i]]
+            if eType == "RegMem" then valStr = "Registration " + Snap_TL_Val[i]
+                elsif eType == "Macro" then valStr = "Fader/Btn " + (Snap_TL_Val[i] + 1)
+                elsif eType == "Style" then valStr = "Style Action " + Snap_TL_Val[i]
+                elsif eType == "Map" then
+                    if Snap_TL_Val[i] >= 0 and Snap_TL_Val[i] < Size(CtrlMapList) then
+                        valStr = "Map: " + CtrlMapList[Snap_TL_Val[i]]
                     else
                         valStr = "Map: Unknown"
                     end
                 // -------------
                 elsif eType == "Marker" then
-                partIdx = Arr_TL_Val[i]
+                partIdx = Snap_TL_Val[i]
                 if partIdx >= 0 and partIdx < Size(Arr_SectionNames) then valStr = "Set: " + Arr_SectionNames[partIdx]
                 else valStr = "Set: Unknown Part" end
-            else valStr = "Value: " + Arr_TL_Val[i] end
+            else valStr = "Value: " + Snap_TL_Val[i] end
 
-            if Arr_TL_Bar[i] < 10 then pad = "  " elsif Arr_TL_Bar[i] < 100 then pad = " " else pad = "" end
-            line = "Bar " + pad + Arr_TL_Bar[i] + " | " + valStr
-            if Arr_TL_Offset[i] > 0 then line = line + " (+" + Arr_TL_Offset[i] + "ms)" end
+            line = tms + "ms | " + valStr
 
             RecDisplayLines <-- line
         end
-        
-        // 2. APPEND NEW RECORDINGS AT BOTTOM (live feedback)
-        if Size(Arr_Rec_Bar) > 0 then
+
+        // 2. APPEND NEW RECORDINGS AT BOTTOM (live feedback during active recording)
+        if Size(Arr_Rec_TimeMS) > 0 then
             RecDisplayLines <-- "--- NEW EVENTS ---"
-            for i = 0; i < Size(Arr_Rec_Bar); i = i + 1 do
+            for i = 0; i < Size(Arr_Rec_TimeMS); i = i + 1 do
                 eType = Arr_Rec_Type[i]
+                tms = Round(Arr_Rec_TimeMS[i])
 
                 if eType == "RegMem" then valStr = "Registration " + Arr_Rec_Val[i]
-                elsif eType == "Macro" then valStr = "Fader/Btn " + (Arr_Rec_Val[i] + 1) 
+                elsif eType == "Macro" then valStr = "Fader/Btn " + (Arr_Rec_Val[i] + 1)
                 elsif eType == "Style" then valStr = "Style Action " + Arr_Rec_Val[i]
-                elsif eType == "Map" then 
+                elsif eType == "Map" then
                     if Arr_Rec_Val[i] >= 0 and Arr_Rec_Val[i] < Size(CtrlMapList) then
                         valStr = "Map: " + CtrlMapList[Arr_Rec_Val[i]]
                     else
@@ -4901,8 +4901,7 @@ Function BuildRecDisplayLines()
                     else valStr = "Set: Unknown Part" end
                 else valStr = "Value: " + Arr_Rec_Val[i] end
 
-                if Arr_Rec_Bar[i] < 10 then pad = "  " elsif Arr_Rec_Bar[i] < 100 then pad = " " else pad = "" end
-                line = "Bar " + pad + Arr_Rec_Bar[i] + " | " + valStr + " [NEW]"
+                line = tms + "ms | " + valStr + " [NEW]"
 
                 RecDisplayLines <-- line
             end
@@ -4925,7 +4924,9 @@ Function RefreshRecDisplay(scrollVal : Double)
         SetWidgetLabel(LBL_CurrentState, finalText)
     else
         // 2. NORMAL MODE (list view)
-        if RecordMode == 0 then
+        if TimelineRecActive then
+            stateHeader = "--- TIMELINE (MS-REC ACTIVE) ---"
+        elsif RecordMode == 0 then
             stateHeader = "--- TIMELINE (PLAY MODE) ---"
         elsif RecordMode == 1 then
             if IsPerformanceActive or IsPlayheadEnabled() then stateHeader = "--- TIMELINE (OVERDUB REC) ---"
@@ -4968,27 +4969,19 @@ End
 // ============================================================================
 
 Function ScrollToCurrentTimelineEvent()
-    var i : Integer = 0
     var targetLine : Integer = -1
     var totalLines : Integer = Size(RecDisplayLines)
-    var displayLines : Integer = 15 
+    var displayLines : Integer = 15
     var maxStart : Integer = totalLines - displayLines
     var scrollVal : Double = 0.0
 
-    While i < Size(Arr_TL_Bar) and targetLine == -1 Do
-        if Arr_TL_Bar[i] >= CurrentBar then
-            targetLine = i
-        end
-        i = i + 1
-    End
-    
-    // Fallback: If at end of song and recording, scroll to new events
-    if targetLine == -1 then
-        if Size(Arr_Rec_Bar) > 0 then
-            targetLine = Size(Arr_TL_Bar) + 1 // +1 for the "--- NEW EVENTS ---" separator line
-        else
-            targetLine = totalLines // All the way down
-        end
+    // Scroll to the last committed event (no bar-based position — just scroll to end)
+    targetLine = Size(Snap_TL_TimeMS) - 1
+    if targetLine < 0 then targetLine = 0 end
+
+    // Fallback: If actively recording, scroll to new events section
+    if Size(Arr_Rec_TimeMS) > 0 then
+        targetLine = Size(Snap_TL_TimeMS) + 1 // +1 for the "--- NEW EVENTS ---" separator line
     end
 
     if maxStart <= 0 then 
@@ -5048,7 +5041,7 @@ Function UpdatePrompter(moveSlider : Boolean)
    var isWrite : Boolean
    var timeStr, barStr, finalCountStr, headerStr, footerStr, nextSection, cueText, curTimeStr : String
      
-   isWrite = (RecordMode > 0)
+   isWrite = (RecordMode > 0) or TimelineRecActive
    
    If IsEmptyMode Then
        currentIndex = 0
@@ -11671,7 +11664,7 @@ Function EvaluateTransportSync()
     end
 
     // --- UI Updates ---
-    if RecordMode > 0 then
+    if RecordMode > 0 or TimelineRecActive then
         BuildRecDisplayLines()
         RefreshRecDisplay(GetWidgetValue(SLD_CurrentState))
     end
@@ -11698,8 +11691,8 @@ Initialization
    SetWidgetValue(BTN_Record_Overdub, 0.0)
    SetWidgetValue(BTN_Record_Replace, 0.0)
    IsPerformanceActive = false
-   Arr_Rec_Bar = []; Arr_Rec_Type = []; Arr_Rec_Val = []; Arr_Rec_Offset = []
-   
+   Arr_Rec_Type = []; Arr_Rec_Val = []
+
    // ====================================================================================
    // PHASE 1: PATHS
    // ====================================================================================
@@ -12043,7 +12036,7 @@ On WidgetValueChanged(newValue : Double) from BTN_Record_Overdub
                 if Arr_BarTriggers[tmpIdx] <= CurrentBar then NextRecPartIdx = tmpIdx + 1 end
                 tmpIdx = tmpIdx + 1
             End
-            Arr_Rec_Bar = []; Arr_Rec_Type = []; Arr_Rec_Val = []; Arr_Rec_Offset = []
+            Arr_Rec_Type = []; Arr_Rec_Val = []
             UpdatePrompter(false); BuildRecDisplayLines(); ScrollToCurrentTimelineEvent()
             Trace("PROMPTER: REC OVERDUB ARMED at Bar " + RecordStartBar)
         else
@@ -12073,7 +12066,7 @@ On WidgetValueChanged(newValue : Double) from BTN_Record_Replace
                 if Arr_BarTriggers[tmpIdx] <= CurrentBar then NextRecPartIdx = tmpIdx + 1 end
                 tmpIdx = tmpIdx + 1
             End
-            Arr_Rec_Bar = []; Arr_Rec_Type = []; Arr_Rec_Val = []; Arr_Rec_Offset = []
+            Arr_Rec_Type = []; Arr_Rec_Val = []
             UpdatePrompter(false); BuildRecDisplayLines(); ScrollToCurrentTimelineEvent()
             Trace("PROMPTER: REC REPLACE ARMED at Bar " + RecordStartBar)
         else
@@ -12927,7 +12920,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
        end 
        
        // TIMELINE RECORDING FOR MACROS (SWITCHES ONLY)
-       if RecordMode > 0 and IsPerformanceActive then
+       if (RecordMode > 0 or TimelineRecActive) and IsPerformanceActive then
            if newVal == 1.0 then
                RecordTimelineEvent("Macro", paramIdx)
            end
@@ -12976,8 +12969,8 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerS
     // TIMELINE RECORDING FOR PART CHANGES (STYLE)
     // ========================================================
     // Record when REC is on AND it's a key press (> 0.5)
-    if RecordMode > 0 and newVal > 0.5 then
-        
+    if (RecordMode > 0 or TimelineRecActive) and newVal > 0.5 then
+
         // Filter out system pings (Start/Stop, HW flags)
         // P_STYLE_START_STOP = 1, P_STYLE_HW_START = 29, Arranger HW button = 44
         if paramIdx != 1 and paramIdx != 29 and paramIdx != 44 then
@@ -13491,10 +13484,10 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
    
    // --- UI PROMPTER UPDATE ---
    if not IsLoading and not IsLoadingSnapshot then 
-       if RecordMode > 0 then 
-           UpdatePrompter(false) 
-       else 
-           UpdatePrompter(true)  
+       if RecordMode > 0 or TimelineRecActive then
+           UpdatePrompter(false)
+       else
+           UpdatePrompter(true)
        end
    end
    
