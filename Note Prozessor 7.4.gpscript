@@ -72,7 +72,11 @@ Var
    p_QuantScale      : Parameter 0 .. 5 = 0   // 0=Major, 1=Minor, 2=MajPenta, 3=MinPenta, 4=Blues, 5=Dorian
    
    p_FactoryReset : Parameter 0 .. 1 = 0
-   
+
+   // --- 12. ANCHOR OUTPUT (NEW V7.5) ---
+   p_DetectedRoot  : Parameter 0 .. 11 = 0   // Pitch Class: 0=C, 2=D, 5=F, etc.
+   p_HasNotes      : Parameter 0 .. 1 = 0    // 1 = at least one note held
+
    clrIdx : Integer
    
    // Interne State Machine für Mono Mode
@@ -89,7 +93,7 @@ Var
 Initialization
    var i : Integer
    For i = 0; i < 128; i = i + 1 Do ActiveNoteTrack <-- -1 End
-   SetDisplayMessage("V7.4 - Ultimate Strip (VelRange, Quantizer, Humanizer, POG)")
+   SetDisplayMessage("V7.5 - Ultimate Strip (AnchorRoot, VelRange, Quantizer, Humanizer, POG)")
 End
 
 // ---------------------------------------------------------
@@ -154,7 +158,10 @@ On ParameterValueChanged matching p_FactoryReset
       p_VelRangeActive = 0; p_MinVel = 0; p_MaxVel = 127
       p_HumanizeActive = 0; p_HumVelAmount = 0; p_HumTimeAmount = 0
       p_QuantizeActive = 0; p_QuantKey = 0; p_QuantScale = 0
-      
+
+      // NEW V7.5 Reset
+      p_DetectedRoot = 0; p_HasNotes = 0
+
       ExecutePanic()
       p_FactoryReset = 0
    end
@@ -548,6 +555,7 @@ End
 // ---------------------------------------------------------
 On MidiEvent(m : MidiMessage)
    var rawNote, transNote, vel, newVel, chn, status, ccNum : Integer = 0
+   var lowNote, li : Integer = 0
 
    // TÜRSTEHER 1: MUTE & SOLO FIREWALL
    if Round(p_SoloMute) == 1 or Round(p_UserMute) == 1 then
@@ -594,9 +602,17 @@ On MidiEvent(m : MidiMessage)
                         if Round(p_ChordMode) == 1 then
                            AddHeldNote(transNote); UpdateChordLogic(chn)
                            if Round(p_MuteOriginal) == 0 then PlayOutNote(transNote, newVel, chn) end
-                        else 
+                        else
+                           AddHeldNote(transNote)  // Track for anchor even without ChordMode
                            PlayOutNote(transNote, newVel, chn)
                         end
+                    end
+                    // ANCHOR: Always update root output
+                    p_HasNotes = 1
+                    if Size(heldNotes) >= 2 then
+                        p_DetectedRoot = CalculateRootMath(transNote) % 12
+                    else
+                        p_DetectedRoot = transNote % 12
                     end
                  end
              end
@@ -616,9 +632,25 @@ On MidiEvent(m : MidiMessage)
                  if Round(p_ChordMode) == 1 then
                     RemoveHeldNote(transNote); UpdateChordLogic(chn)
                     if Round(p_MuteOriginal) == 0 then StopOutNote(transNote, chn) end
-                 else 
+                 else
+                    RemoveHeldNote(transNote)  // Track for anchor even without ChordMode
                     StopOutNote(transNote, chn)
                  end
+             end
+             // ANCHOR: Update root output
+             if Size(heldNotes) > 0 then
+                 p_HasNotes = 1
+                 if Size(heldNotes) >= 2 then
+                     lowNote = heldNotes[0]
+                     for li = 1; li < Size(heldNotes); li = li + 1 do
+                         if heldNotes[li] < lowNote then lowNote = heldNotes[li] end
+                     end
+                     p_DetectedRoot = CalculateRootMath(lowNote) % 12
+                 else
+                     p_DetectedRoot = heldNotes[0] % 12
+                 end
+             else
+                 p_HasNotes = 0
              end
           end
 
