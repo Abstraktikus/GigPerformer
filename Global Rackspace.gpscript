@@ -361,6 +361,7 @@ Var
    // --- Strip Control State ---
    Strip_ThemeIdx   : Integer = 8   // Index into MacroGroup_Names (8=Octaver, 9=Humanizer, 10=Quantizer, 11=Sustain)
    Strip_ChannelIdx : Integer = 0   // Current channel (0-15)
+   StripLiveDirty   : Boolean = false // True when STRIP made live changes not reflected in widgets
 
    // ========================================================================
    // SECTION 7: CHANNEL MEMORY
@@ -9789,12 +9790,14 @@ Function ToggleStripMacro()
          currentVal = Mem_SoloSmart[ch]
          newVal = 1 - currentVal
          Mem_SoloSmart[ch] = newVal
+         if newVal == 1 then Mem_SoloStrict[ch] = 0 end // Mutual exclusion
          paramName = "Smart Solo"
 
       Strip_ThemeIdx == 4  Do // Strict Solo
          currentVal = Mem_SoloStrict[ch]
          newVal = 1 - currentVal
          Mem_SoloStrict[ch] = newVal
+         if newVal == 1 then Mem_SoloSmart[ch] = 0 end // Mutual exclusion
          paramName = "Strict Solo"
 
       Strip_ThemeIdx == 5  Do // User Mute
@@ -9852,6 +9855,8 @@ Function ToggleStripMacro()
       MacroFeedbackTimer = TimeSinceStartup() + 2000.0
       MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
       Trace("STRIP TOGGLE: Ch " + IntToString(ch + 1) + " | " + paramName + " = " + statusStr)
+      StripLiveDirty = true
+      UpdateSoloMuteState()
       UpdateMetaColors()
    end
 End
@@ -13197,7 +13202,8 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
    SetWidgetValue(BTN_Record_Overdub, 0.0)
    SetWidgetValue(BTN_Record_Replace, 0.0)
    RecordMode = 0
-   
+   StripLiveDirty = false
+
    ShowVSTOverlay("LOADING SONG...", 3000.0)
    
    Trace("Song Switch Initiated: " + oldSongIndex + " -> " + newSongIndex)
@@ -14131,6 +14137,14 @@ On TimerTick(ms : Double)
                 if msSinceSongStart > Snap_TL_TimeMS[Size(Snap_TL_TimeMS) - 1] + 1000.0 then
                     TimelinePlaybackActive = false
                     Trace("TIMELINE: Playback finished.")
+                    // Restore configured state if STRIP made live changes
+                    if StripLiveDirty then
+                        LoadControllerMap(CurrentCtrlMapName)
+                        StripLiveDirty = false
+                        Trace("STRIP: Live changes restored via controller map reload.")
+                        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> STRIP RESTORED <<<", Local_IP, Local_PORT)
+                        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+                    end
                 end
             end
         end
