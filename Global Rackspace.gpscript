@@ -9204,28 +9204,6 @@ Function CycleChannelUsage(direction : Integer)
    end // Ende vom Zaun
 End
 
-Function CycleManual(direction : Integer)
-   var firstScopeIdx, currentVal, newVal, i : Integer
-
-   firstScopeIdx = GetFirstActiveScope()
-
-   if firstScopeIdx > -1 then
-       currentVal = Mem_Manual[firstScopeIdx]
-       newVal = currentVal + direction
-       if newVal < 0 then newVal = 2
-       elsif newVal > 2 then newVal = 0 end
-
-       For i = 0; i < 16; i = i + 1 Do
-           if OutputScope[i] then
-               Mem_Manual[i] = newVal
-           end
-       End
-
-       SetWidgetLabel(LBL_Manual, ManualNames[newVal])
-       UpdateAnchorChannels()
-   end
-End
-
 Function UpdateAnchorChannels()
    var i, probeIdx : Integer
    AnchorLowerChIdx = -1
@@ -9248,6 +9226,28 @@ Function UpdateAnchorChannels()
    end
 
    Trace("ANCHOR: Lower=Ch" + IntToString(AnchorLowerChIdx + 1) + " Upper=Ch" + IntToString(AnchorUpperChIdx + 1))
+End
+
+Function CycleManual(direction : Integer)
+   var firstScopeIdx, currentVal, newVal, i : Integer
+
+   firstScopeIdx = GetFirstActiveScope()
+
+   if firstScopeIdx > -1 then
+       currentVal = Mem_Manual[firstScopeIdx]
+       newVal = currentVal + direction
+       if newVal < 0 then newVal = 2
+       elsif newVal > 2 then newVal = 0 end
+
+       For i = 0; i < 16; i = i + 1 Do
+           if OutputScope[i] then
+               Mem_Manual[i] = newVal
+           end
+       End
+
+       SetWidgetLabel(LBL_Manual, ManualNames[newVal])
+       UpdateAnchorChannels()
+   end
 End
 
 Function CycleScopeSection(direction : Integer)
