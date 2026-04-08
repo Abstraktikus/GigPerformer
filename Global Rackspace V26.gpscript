@@ -7614,6 +7614,96 @@ Function StartTimelineRecording()
     MacroFeedbackTimer = TimeSinceStartup() + GetCountInDurationMS() + 500.0
 End
 
+Function CommitTimelineRecording()
+    var i : Integer
+
+    // Copy Working → Committed
+    Snap_TL_TimeMS = []; Snap_TL_Type = []; Snap_TL_Val = []
+    for i = 0; i < Size(Arr_Rec_TimeMS); i = i + 1 do
+        Snap_TL_TimeMS <-- Arr_Rec_TimeMS[i]
+        Snap_TL_Type <-- Arr_Rec_Type[i]
+        Snap_TL_Val <-- Arr_Rec_Val[i]
+    end
+    Snap_TL_Fired = []
+
+    TimelineRecActive = false
+    TimelineCountInTimer = 0.0
+    Trace("TIMELINE: Recording committed. " + Size(Snap_TL_TimeMS) + " events.")
+End
+
+Function DiscardTimelineRecording()
+    Arr_Rec_TimeMS = []; Arr_Rec_Type = []; Arr_Rec_Val = []
+    TimelineRecActive = false
+    TimelineCountInTimer = 0.0
+
+    Trace("TIMELINE: Recording discarded.")
+    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> RECORDING DISCARDED <<<", Local_IP, Local_PORT)
+    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+End
+
+Function ExecuteRecSongpart()
+    var partName : String
+
+    if not TimelineRecActive then
+        Trace("TIMELINE: REC_SONGPART ignored (not recording)")
+        Exit
+    end
+
+    // No parts loaded — single-marker recording (marks song end)
+    if Size(Arr_SectionNames) == 0 then
+        RecordEndTimeMS = TimeSinceStartup() - RecordStartTimeMS
+        RecordTimelineEvent("Marker", 0)
+        CommitTimelineRecording()
+        TimelineSubMode = 0
+        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SONG RECORDED <<<", Local_IP, Local_PORT)
+        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        Exit
+    end
+
+    // Last part already recorded — this press = END OF SONG
+    if TimelineCurrentPartIdx >= Size(Arr_SectionNames) then
+        RecordEndTimeMS = TimeSinceStartup() - RecordStartTimeMS
+        RecordTimelineEvent("Marker", TimelineCurrentPartIdx)
+        CommitTimelineRecording()
+        TimelineSubMode = 0
+        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SONG RECORDED <<<", Local_IP, Local_PORT)
+        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        Trace("TIMELINE: END OF SONG at " + Round(RecordEndTimeMS) + "ms")
+        Exit
+    end
+
+    // Normal part marker
+    partName = Arr_SectionNames[TimelineCurrentPartIdx]
+    RecordTimelineEvent("Marker", TimelineCurrentPartIdx)
+
+    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> PART: " + partName + " <<<", Local_IP, Local_PORT)
+    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+
+    TimelineCurrentPartIdx = TimelineCurrentPartIdx + 1
+    Trace("TIMELINE: Recorded part " + partName + ", next idx=" + TimelineCurrentPartIdx)
+End
+
+Function PartJumpPreview(dir : Integer)
+    var partName : String
+
+    if Size(Arr_SectionNames) == 0 then
+        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> NO PARTS LOADED <<<", Local_IP, Local_PORT)
+        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        Exit
+    end
+
+    PreviewPartIdx = PreviewPartIdx + dir
+    if PreviewPartIdx < 0 then PreviewPartIdx = 0 end
+    if PreviewPartIdx >= Size(Arr_SectionNames) then PreviewPartIdx = Size(Arr_SectionNames) - 1 end
+
+    partName = Arr_SectionNames[PreviewPartIdx]
+
+    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + partName + " <<<", Local_IP, Local_PORT)
+    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+
+    Trace("TIMELINE: Preview part " + PreviewPartIdx + " = " + partName)
+End
+
 // ---------------------------------------------------------
 // REALTIME SMART BYPASS
 // Monitors the matrix live and puts unused VSTs & channels to sleep
@@ -9759,6 +9849,50 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
             CycleStripChannel(dir)           // Wheel = switch channels (like Looper)
         elsif actionType == "BUTTON" then
             ToggleStripMacro()               // Button = toggle macro at grid position
+        end
+
+    // --- 4: TIMELINE (PLAY/REC with sub-mode) ---
+    elsif GlobalSystemMode == 4 then
+        if actionType == "Y_AXIS" or actionType == "BUTTON" then
+            // Toggle PLAY <-> REC
+            if TimelineSubMode == 0 then
+                // PLAY -> REC
+                TimelineSubMode = 1
+                TimelineRecState = 0  // Default to Replace
+                StartTimelineRecording()
+                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: REC (Replace) <<<", Local_IP, Local_PORT)
+            else
+                // REC -> PLAY (commit recording)
+                if TimelineRecActive then CommitTimelineRecording() end
+                TimelineSubMode = 0
+                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: PLAY <<<", Local_IP, Local_PORT)
+            end
+            MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+
+        elsif actionType == "X_AXIS" or actionType == "ENCODER" then
+            if TimelineSubMode == 0 then
+                // PLAY: Part Jump Preview
+                PartJumpPreview(dir)
+            else
+                // REC mode
+                if dir == 1 then
+                    // Right: Execute REC_SONGPART
+                    ExecuteRecSongpart()
+                elsif dir == -1 then
+                    // Left: Cycle Replace -> Overdub -> Discard
+                    TimelineRecState = TimelineRecState + 1
+                    if TimelineRecState > 2 then TimelineRecState = 0 end
+
+                    if TimelineRecState == 0 then
+                        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> REC: Replace <<<", Local_IP, Local_PORT)
+                    elsif TimelineRecState == 1 then
+                        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> REC: Overdub <<<", Local_IP, Local_PORT)
+                    elsif TimelineRecState == 2 then
+                        DiscardTimelineRecording()
+                    end
+                    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+                end
+            end
         end
     end
 End
