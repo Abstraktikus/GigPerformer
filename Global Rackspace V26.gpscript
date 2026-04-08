@@ -5334,39 +5334,25 @@ Function BuildZebraBlocks()
 End
 
 Function RecordTimelineEvent(eventType : String, eventVal : Integer)
-    var currentOffsetMS : Integer
-    var currentBPM : Double = GetBPM()
-    var recBar : Integer
+    var eventTimeMS : Double
 
-    // ========================================================
-    // GUARD: Only record when RecordMode is armed
-    // AND the transport (IsPerformanceActive) is actually running!
-    // ========================================================
-    if RecordMode > 0 and IsPerformanceActive then 
-        recBar = CurrentBar
-
-        // Calculate offset
-        if LastBarStartTime > 0.0 then 
-            currentOffsetMS = Round(TimeSinceStartup() - LastBarStartTime)
-        else 
-            currentOffsetMS = 0 
-        end
-
-        // Push early events to the next bar
-        if currentBPM > 0.0 and currentOffsetMS > (60000.0 / currentBPM * 3.5) then
-            currentOffsetMS = currentOffsetMS - Round(60000.0 / currentBPM * 4.0)
-            recBar = recBar + 1
-        end
-
-        // Write to the RAM buffer
-        Arr_Rec_Bar <-- recBar
-        Arr_Rec_Type <-- eventType
-        Arr_Rec_Val <-- eventVal
-        Arr_Rec_Offset <-- currentOffsetMS
-        
-        BuildRecDisplayLines()
-        RefreshRecDisplay(GetWidgetValue(SLD_CurrentState))
+    // GUARD: Only record when Timeline REC is active
+    if not TimelineRecActive then
+        Trace("TIMELINE-REC: Ignored (not active)")
+        Exit
     end
+
+    eventTimeMS = TimeSinceStartup() - RecordStartTimeMS
+
+    // Write to working arrays
+    Arr_Rec_TimeMS <-- eventTimeMS
+    Arr_Rec_Type <-- eventType
+    Arr_Rec_Val <-- eventVal
+
+    Trace("TIMELINE-REC: " + eventType + " val=" + eventVal + " at " + Round(eventTimeMS) + "ms")
+
+    BuildRecDisplayLines()
+    RefreshRecDisplay(GetWidgetValue(SLD_CurrentState))
 End
 
 Function RecalculateTextDisplay()
