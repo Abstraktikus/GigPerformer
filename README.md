@@ -58,22 +58,26 @@ All hardware is configured via `DeviceConfig.txt` — no hardcoded MIDI devices 
 
 ### SYS-MODE Navigation
 
-A 4-mode system accessible via joystick/sustain pedal:
+A 5-mode system accessible via joystick/sustain pedal:
 - **Voice Selector** — browse and load VST sounds
 - **Looper Control** — manage MIDI loops per channel  
 - **Controller Map** — switch and edit macro assignments
 - **Strip-Control** — channel strip parameters
+- **Timeline** — record and navigate song sections with ms-based event timing
+
+The Timeline mode features a PLAY/REC sub-mode system: PLAY provides safe navigation with part jump preview (joystick left/right shows upcoming song text in the OSC-UI), while REC enables recording of song part markers and macro events against external audio sources (e.g. Spotify). A shared count-in mechanism synchronizes the recording start. Events are stored as absolute milliseconds, with bar counts calculated after the full song is recorded.
+
+Devices without a joystick (e.g. MiniLab) access SYS-MODEs via `SYSMODE_CYCLE` and `SYSMODE_SELECT` macros.
 
 ## Roadmap
 
 Planned features, roughly in order of implementation:
 
-1. **Timeline SYS-MODE** — Navigate song sections (Intro, Verse, Chorus...) via joystick in a dedicated SYS-MODE. Supports section jumps as well as macro automation recording along the timeline
-2. **Automatic Bar Synchronization** — Detect the current song position by matching manual section changes (SYSREG) and played chords within an AnchorWindow against the timeline
-3. **MIDI Recorder & Player** — Record and play back MIDI performances, bar-aligned to the timeline
-4. **Overdub Layers** — Stack multiple recording takes on top of each other, building up arrangements layer by layer
-5. **Backing Tracks Integration** — Trigger and sync audio backing tracks to the timeline with automatic cue points and transport control
-6. **LFO Engine** — Scriptable LFOs linked to Controller Map macros for automated parameter modulation (filter sweeps, tremolo, panning, etc.)
+1. **Automatic Bar Synchronization** — Detect the current song position by matching manual section changes (SYSREG) and played chords within an AnchorWindow against the timeline
+2. **MIDI Recorder & Player** — Record and play back MIDI performances, bar-aligned to the timeline
+3. **Overdub Layers** — Stack multiple recording takes on top of each other, building up arrangements layer by layer
+4. **Backing Tracks Integration** — Trigger and sync audio backing tracks to the timeline with automatic cue points and transport control
+5. **LFO Engine** — Scriptable LFOs linked to Controller Map macros for automated parameter modulation (filter sweeps, tremolo, panning, etc.)
 
 ## Requirements
 
@@ -101,7 +105,6 @@ Planned features, roughly in order of implementation:
 
 ```
 ├── Global Rackspace V26.gpscript   # Main script (current version)
-├── Global Rackspace V25.gpscript   # Previous version
 ├── Note Prozessor 7.4.gpscript     # Per-rackspace note processing
 ├── Genos2_Control V2.gpscript      # Genos2 integration script
 ├── examples/                       # Ready-to-use test data
