@@ -1,5 +1,5 @@
 // =========================================================================
-// SCRIPTLET: V7.4 Ultimate Channel Strip
+// SCRIPTLET: V7.5 Ultimate Channel Strip
 // Features: Split, Transpose, VelFade, Chord-to-Root, AutoSustain
 // Filters: Explicit MIDI Whitelisting Filter (Sustain, CCs, PB, AT, PC)
 // Engine: Looper Solo Mute & Polyphonic Octave Generator (POG)
@@ -610,7 +610,11 @@ On MidiEvent(m : MidiMessage)
                     // ANCHOR: Always update root output
                     p_HasNotes = 1
                     if Size(heldNotes) >= 2 then
-                        p_DetectedRoot = CalculateRootMath(transNote) % 12
+                        lowNote = heldNotes[0]
+                        for li = 1; li < Size(heldNotes); li = li + 1 do
+                            if heldNotes[li] < lowNote then lowNote = heldNotes[li] end
+                        end
+                        p_DetectedRoot = CalculateRootMath(lowNote) % 12
                     else
                         p_DetectedRoot = transNote % 12
                     end
