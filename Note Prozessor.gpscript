@@ -55,6 +55,9 @@ Var
    p_OctaverMuteOrig : Parameter 0 .. 1 = 0   // Kill Dry (Löscht die Ursprungsnote)
    p_OctHighOffset   : Parameter 0 .. 3 = 0   // Start-Gap nach oben (0 = direkt drüber)
    p_OctHigh         : Parameter 0 .. 3 = 0   // Anzahl der Upper-Oktaven
+   p_OctRangeMin     : Parameter 0 .. 127 = 0     // Lower boundary for clone notes
+   p_OctRangeMax     : Parameter 0 .. 127 = 127   // Upper boundary for clone notes
+   p_OctRangeFade    : Parameter 0 .. 1 = 0       // VelocityFader toggle
 
    // --- 9. VELOCITY RANGE (NEW) ---
    p_VelRangeActive  : Parameter 0 .. 1 = 0
@@ -134,7 +137,7 @@ On ParameterValueChanged matching p_SoloMute, p_UserMute
 End
 
 // Hänger-Vermeidung: Wenn man aktiv am Pitch oder Quantizer schraubt
-On ParameterValueChanged matching p_Octaver, p_OctLow, p_OctLowOffset, p_OctHigh, p_OctHighOffset, p_OctaverMuteOrig, p_QuantizeActive, p_QuantKey, p_QuantScale
+On ParameterValueChanged matching p_Octaver, p_OctLow, p_OctLowOffset, p_OctHigh, p_OctHighOffset, p_OctaverMuteOrig, p_OctRangeMin, p_OctRangeMax, p_QuantizeActive, p_QuantKey, p_QuantScale
    ExecutePanic()
 End
 
@@ -153,7 +156,8 @@ On ParameterValueChanged matching p_FactoryReset
       
       // POG Reset
       p_Octaver = 0; p_OctLow = 0; p_OctLowOffset = 0; p_OctaverMuteOrig = 0; p_OctHighOffset = 0; p_OctHigh = 0
-      
+      p_OctRangeMin = 0; p_OctRangeMax = 127; p_OctRangeFade = 0
+
       // NEW V7.4 Reset
       p_VelRangeActive = 0; p_MinVel = 0; p_MaxVel = 127
       p_HumanizeActive = 0; p_HumVelAmount = 0; p_HumTimeAmount = 0
