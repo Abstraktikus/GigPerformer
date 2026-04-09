@@ -1637,7 +1637,10 @@ Function ResetChannelToStandard(chIdx : Integer)
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_OctLowOffset"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_OctHigh"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_OctHighOffset"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
-    
+    idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_OctRangeMin"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
+    idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_OctRangeMax"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 1.0) end
+    idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_OctRangeFade"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
+
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_VelRangeActive"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_MinVel"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 0.0) end
     idx = GetParamIdxByName(BLK_NoteProcessor[chIdx], "p_MaxVel"); if idx > -1 then SetParameter(BLK_NoteProcessor[chIdx], idx, 1.0) end
@@ -1657,6 +1660,7 @@ Function ResetChannelToStandard(chIdx : Integer)
     Mem_NP_Octaver[chIdx] = 0; Mem_NP_OctaverMuteOrig[chIdx] = 0
     Mem_NP_OctLow[chIdx] = 0; Mem_NP_OctLowOffset[chIdx] = 0
     Mem_NP_OctHigh[chIdx] = 0; Mem_NP_OctHighOffset[chIdx] = 0
+    Mem_NP_OctRangeMin[chIdx] = 0; Mem_NP_OctRangeMax[chIdx] = 127; Mem_NP_OctRangeFade[chIdx] = 0
     Mem_NP_VelRangeActive[chIdx] = 0; Mem_NP_MinVel[chIdx] = 0; Mem_NP_MaxVel[chIdx] = 127
     Mem_NP_HumanizeActive[chIdx] = 0; Mem_NP_HumVel[chIdx] = 0; Mem_NP_HumTime[chIdx] = 0
     Mem_NP_QuantizeActive[chIdx] = 0; Mem_NP_QuantKey[chIdx] = 0; Mem_NP_QuantScale[chIdx] = 0
@@ -11390,7 +11394,10 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_OctLowOffset"); if idx > -1 then Mem_NP_OctLowOffset[i] = Round(GetParameter(BLK_NoteProcessor[i], idx) * 3.0) end
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_OctHigh"); if idx > -1 then Mem_NP_OctHigh[i] = Round(GetParameter(BLK_NoteProcessor[i], idx) * 3.0) end
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_OctHighOffset"); if idx > -1 then Mem_NP_OctHighOffset[i] = Round(GetParameter(BLK_NoteProcessor[i], idx) * 3.0) end
-                   
+                   idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_OctRangeMin"); if idx > -1 then Mem_NP_OctRangeMin[i] = Round(GetParameter(BLK_NoteProcessor[i], idx) * 127.0) end
+                   idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_OctRangeMax"); if idx > -1 then Mem_NP_OctRangeMax[i] = Round(GetParameter(BLK_NoteProcessor[i], idx) * 127.0) end
+                   idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_OctRangeFade"); if idx > -1 then Mem_NP_OctRangeFade[i] = Round(GetParameter(BLK_NoteProcessor[i], idx)) end
+
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_VelRangeActive"); if idx > -1 then Mem_NP_VelRangeActive[i] = Round(GetParameter(BLK_NoteProcessor[i], idx)) end
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_MinVel"); if idx > -1 then Mem_NP_MinVel[i] = Round(GetParameter(BLK_NoteProcessor[i], idx) * 127.0) end
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_MaxVel"); if idx > -1 then Mem_NP_MaxVel[i] = Round(GetParameter(BLK_NoteProcessor[i], idx) * 127.0) end
