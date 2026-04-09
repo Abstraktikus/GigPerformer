@@ -13216,8 +13216,8 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
     var val : Integer = GetCCValue(m)
 
     // Device 0 joystick (only active while sustain pedal is held = SystemModeActive):
-    //   CC1 (up)  = navigate within current SYS-MODE
-    //   CC16 (down) = cycle SYS-MODE (VOICE → LOOPER → CONTROLLER MAP)
+    //   CC1 (up)   = Y_AXIS +1 (navigate within current SYS-MODE)
+    //   CC16 (down) = Y_AXIS -1 (navigate within current SYS-MODE)
     if SystemModeActive and (cc == 1 or cc == 16) then
         if cc == 1 then
             if val > 100 and not Joy_CC1_Fired then
@@ -13226,7 +13226,7 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
         end
         if cc == 16 then
             if val > 100 and not Joy_CC16_Fired then
-                Joy_CC16_Fired = true; CycleGlobalSystemMode()
+                Joy_CC16_Fired = true; ProcessSystemNavigation(0, "Y_AXIS", -1)
             elsif val < 20 then Joy_CC16_Fired = false end
         end
     else
@@ -14158,7 +14158,7 @@ On TimerTick(ms : Double)
            end
        end
 
-       if anyLooperActive then
+       if anyLooperActive or RecordMode > 0 or IsPerformanceActive then
 
            // CASE A: COUNT-IN RUNNING (transport still stopped)
            if maxCountInBeats > 0 then
