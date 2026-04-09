@@ -228,6 +228,9 @@ Var
    BTN_Inject_NP_OctLowOff_Down, LBL_Inject_NP_OctLowOffset, BTN_Inject_NP_OctLowOffset_Up    : Widget
    BTN_Inject_NP_OctHigh_Down, LBL_Inject_NP_OctHigh, BTN_Inject_NP_OctHigh_Up   : Widget
    BTN_Inject_NP_OctHighOff_Down, LBL_Inject_NP_OctHighOffset, BTN_Inject_NP_OctHighOffset_Up : Widget
+   BTN_LearnOctRangeMin, BTN_LearnOctRangeMax                                    : Widget
+   LBL_Inject_NP_OctRange                                                        : Widget
+   BTN_Inject_NP_OctRangeFade                                                    : Widget
    BTN_Inject_NP_VelRange                                                        : Widget
    BTN_Inject_NP_VelMin_Down, LBL_Inject_NP_VelMin, BTN_Inject_NP_VelMin_Up      : Widget
    BTN_Inject_NP_VelMax_Down, LBL_Inject_NP_VelMax, BTN_Inject_NP_VelMax_Up      : Widget
@@ -285,6 +288,7 @@ Var
    IsSaving, IsLoadingSnapshot, IsLoading : Boolean = false  
    IsHardwareLearning, IsPerformanceActive, IsPresetLocked : Boolean = false
    IsBrowsingFavorites, IsLearningMin, IsLearningMax : Boolean = false
+   IsLearningOctRangeMin, IsLearningOctRangeMax : Boolean = false
    IsWaitingForWakeUp, IsCorrectingPlayhead, IsInitialLatchArmed : Boolean = false
    IsEmptyMode : Boolean = true
    IncomingFromArranger : Boolean = false
@@ -417,6 +421,9 @@ Var
    Mem_NP_OctLowOffset    : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_NP_OctHigh         : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_NP_OctHighOffset   : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+   Mem_NP_OctRangeMin     : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+   Mem_NP_OctRangeMax     : Integer Array = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
+   Mem_NP_OctRangeFade    : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 
    // --- System Standards ---
    DEF_FadeIn, DEF_FadeOut, DEF_NP_ChordMode, DEF_NP_LatchMode, DEF_NP_Engine, DEF_NP_MuteOrig, DEF_NP_MinKeys, DEF_NP_Octave, DEF_NP_AutoSustain : Integer Array
