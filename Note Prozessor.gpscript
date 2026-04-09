@@ -288,7 +288,7 @@ End
 // THE OCTAVER ENGINE (The Note Multiplier & Timing Emitter)
 // ---------------------------------------------------------
 Function PlayOutNote(note : Integer, vel : Integer, chan : Integer)
-   var i, k, cloneNote : Integer
+   var i, k, cloneNote, cloneVel : Integer
    var msg : NoteMessage
    var delayMS : Double = 0.0
    
@@ -307,10 +307,11 @@ Function PlayOutNote(note : Integer, vel : Integer, chan : Integer)
        if k > 0 then
            for i = 1; i <= k; i = i + 1 do
                cloneNote = note - ((Round(p_OctLowOffset) + i) * 12)
-               if cloneNote >= 0 and cloneNote <= 127 then
+               cloneVel = GetOctRangeVelocity(cloneNote, vel)
+               if cloneVel > 0 then
                    // Subtiler Humanizer: Die Oktaven wackeln alle GANZ LEICHT gegeneinander (fettes Strumming!)
                    if Round(p_HumanizeActive) == 1 then delayMS = GetHumanizedDelay(p_HumTimeAmount) end
-                   msg = MakeNoteMessageEx(cloneNote, vel, chan)
+                   msg = MakeNoteMessageEx(cloneNote, cloneVel, chan)
                    if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg) 
                    else if delayMS > 0.0 then SendLater(msg, delayMS) else SendNow(msg) end end
                end
@@ -322,10 +323,11 @@ Function PlayOutNote(note : Integer, vel : Integer, chan : Integer)
        if k > 0 then
            for i = 1; i <= k; i = i + 1 do
                cloneNote = note + ((Round(p_OctHighOffset) + i) * 12)
-               if cloneNote >= 0 and cloneNote <= 127 then
+               cloneVel = GetOctRangeVelocity(cloneNote, vel)
+               if cloneVel > 0 then
                    if Round(p_HumanizeActive) == 1 then delayMS = GetHumanizedDelay(p_HumTimeAmount) end
-                   msg = MakeNoteMessageEx(cloneNote, vel, chan)
-                   if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg) 
+                   msg = MakeNoteMessageEx(cloneNote, cloneVel, chan)
+                   if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg)
                    else if delayMS > 0.0 then SendLater(msg, delayMS) else SendNow(msg) end end
                end
            end
@@ -356,23 +358,23 @@ Function StopOutNote(note : Integer, chan : Integer)
        if k > 0 then
            for i = 1; i <= k; i = i + 1 do
                cloneNote = note - ((Round(p_OctLowOffset) + i) * 12)
-               if cloneNote >= 0 and cloneNote <= 127 then
+               if GetOctRangeVelocity(cloneNote, 1) > 0 then
                    if Round(p_HumanizeActive) == 1 then delayMS = GetHumanizedDelay(p_HumTimeAmount) end
                    msg = MakeNoteMessageEx(cloneNote, 0, chan)
-                   if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg) 
+                   if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg)
                    else if delayMS > 0.0 then SendLater(msg, delayMS) else SendNow(msg) end end
                end
            end
        end
-       
+
        k = Round(p_OctHigh)
        if k > 0 then
            for i = 1; i <= k; i = i + 1 do
                cloneNote = note + ((Round(p_OctHighOffset) + i) * 12)
-               if cloneNote >= 0 and cloneNote <= 127 then
+               if GetOctRangeVelocity(cloneNote, 1) > 0 then
                    if Round(p_HumanizeActive) == 1 then delayMS = GetHumanizedDelay(p_HumTimeAmount) end
                    msg = MakeNoteMessageEx(cloneNote, 0, chan)
-                   if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg) 
+                   if Round(p_AutoSustain) == 1 then AutoSustainer_Play(Sustainer, msg)
                    else if delayMS > 0.0 then SendLater(msg, delayMS) else SendNow(msg) end end
                end
            end
