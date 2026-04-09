@@ -468,6 +468,7 @@ Var
    // --- Input Devices ---
    Joy_PB_Fired : Integer = 0
    Joy_CC1_Fired, Joy_CC16_Fired : Boolean = false
+   Joy_CC16_ArmTime : Double = 0.0  // Cross-talk guard: armed timestamp for CC16 decision window
    Last_VST_Browse_Val, Last_Macro_Scope_Val, Last_Macro_Browse_Val : Double = 0.5
    Last_RecPart_Val : Double = -1.0
    EncoderResetTimer_Scope, EncoderResetTimer_Browse, IgnoreInputTimer_Scope, IgnoreInputTimer_Browse : Double = 0.0
@@ -8741,7 +8742,12 @@ End
 Function EvaluateAutoSysMode()
    var i, newMode : Integer
    var looperArmed : Boolean = false
-   
+
+   // STRIP-CONTROL (3) and TIMELINE (4) are user-initiated modes — never auto-override
+   if GlobalSystemMode == 3 or GlobalSystemMode == 4 then
+       if DebugMode then Trace(">>> SYSMODE-DIAG: AUTO-SWITCH skipped (user mode " + SysModeNames[GlobalSystemMode] + ")") end
+   else
+
    // Prio 1: Check if looper is waiting or recording (State 1, 3, 5, 6, 8)
    i = 0
    While i < 16 and not looperArmed Do
@@ -8750,12 +8756,12 @@ Function EvaluateAutoSysMode()
        end
        i = i + 1
    End
-    
+
     if looperArmed then newMode = 1 // Prio 1: LOOPER CONTROL
     elsif GetWidgetValue(BTN_Focus_Mode) > 0.5 then newMode = 0 // Prio 2: VOICE SELECTOR
     else newMode = 2 // Prio 3: CONTROLLER MAP
     end
-    
+
     if newMode != GlobalSystemMode then
         GlobalSystemMode = newMode
         Trace("SYS-MODE AUTO-SWITCH: Changed to " + SysModeNames[GlobalSystemMode])
@@ -8775,6 +8781,7 @@ Function EvaluateAutoSysMode()
         OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + SysModeNames[GlobalSystemMode] + " <<<", Local_IP, Local_PORT)
         MacroFeedbackTimer = TimeSinceStartup() + 1500.0
     end
+   end // outer guard: skip for STRIP-CONTROL/TIMELINE
 End
 
 // ---------------------------------------------------------
@@ -9670,9 +9677,11 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
 
        // --- SYSMODE CYCLE / SELECT ---
        elsif matchedMacro == SYSMODE_CYCLE_MacroIdx and val > 0.5 then
+           if DebugMode then Trace(">>> SYSMODE-DIAG [A1] CYCLE via MacroIdx=" + matchedMacro + " from ExecuteHardwareMacro") end
            CycleGlobalSystemMode()
            SystemModeActive = true
        elsif matchedMacro == SYSMODE_SELECT_MacroIdx then
+           if DebugMode then Trace(">>> SYSMODE-DIAG [A2] SELECT via MacroIdx=" + matchedMacro + " target=" + Round(val * 4.0)) end
            SelectGlobalSystemMode(Round(val * 4.0))
 
        // --- EXTERNE MORPHS (ApplyEditorTest) ---
@@ -9749,9 +9758,11 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
 
        // --- SYSMODE MACROS ---
        elsif SYSMODE_CYCLE_CCIdx == cc and val > 0.5 then
+           if DebugMode then Trace(">>> SYSMODE-DIAG [B1] CYCLE via CC=" + cc + " (SYSMODE_CYCLE_CCIdx) in ProcessHardwareCC") end
            CycleGlobalSystemMode()
            SystemModeActive = true
        elsif SYSMODE_SELECT_CCIdx == cc then
+           if DebugMode then Trace(">>> SYSMODE-DIAG [B2] SELECT via CC=" + cc + " target=" + Round(val * 4.0) + " in ProcessHardwareCC") end
            SelectGlobalSystemMode(Round(val * 4.0))  // val 0.0-1.0 maps to mode 0-4
 
        // SYSTEM TOGGLE FOR DIRECT CCs
@@ -9760,6 +9771,7 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
                // SUSTAIN PRESS: Restore sticky state or enter fresh
                SystemModeActive = true
                if StickySystemMode >= 0 then
+                   if DebugMode then Trace(">>> SYSMODE-DIAG [C] STICKY RESTORE from " + GlobalSystemMode + " to " + StickySystemMode + " via SYSTEM_TOGGLE CC=" + cc) end
                    GlobalSystemMode = StickySystemMode
                    if StickySystemMode == 4 then
                        TimelineSubMode = StickyTimelineSubMode
@@ -9793,6 +9805,7 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
        // --- C: HAL DATABASE (translation from CC -> Macro) ---
        For i = 0; i < HW_Count; i = i + 1 Do
            if not HW_IsNote[i] and HW_Channel[i] == ch and HW_CC[i] == cc then
+               if DebugMode then Trace(">>> HAL-DIAG: CC=" + cc + " Ch=" + ch + " -> MacroIdx=" + HW_MacroIdx[i] + " val=" + val) end
                ExecuteHardwareMacro(HW_MacroIdx[i], val)
            end
        End
@@ -13216,8 +13229,8 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
     var val : Integer = GetCCValue(m)
 
     // Device 0 joystick (only active while sustain pedal is held = SystemModeActive):
-    //   CC1 (up)  = navigate within current SYS-MODE
-    //   CC16 (down) = cycle SYS-MODE (VOICE → LOOPER → CONTROLLER MAP)
+    //   CC1 (up)   = Y_AXIS +1 (navigate within current SYS-MODE)
+    //   CC16 (down) = cycle SYS-MODE (120ms decision window: dominant axis wins over cross-talk)
     if SystemModeActive and (cc == 1 or cc == 16) then
         if cc == 1 then
             if val > 100 and not Joy_CC1_Fired then
@@ -13225,9 +13238,13 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
             elsif val < 20 then Joy_CC1_Fired = false end
         end
         if cc == 16 then
-            if val > 100 and not Joy_CC16_Fired then
-                Joy_CC16_Fired = true; CycleGlobalSystemMode()
-            elsif val < 20 then Joy_CC16_Fired = false end
+            if val > 100 and Joy_CC16_ArmTime == 0.0 then
+                Joy_CC16_ArmTime = TimeSinceStartup()  // Arm: start 120ms decision window
+            end
+            if val < 20 then
+                Joy_CC16_ArmTime = 0.0  // Oscillation: CC16 returned to center → cancel
+                Joy_CC16_Fired = false
+            end
         end
     else
         ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_0, m)
@@ -14010,6 +14027,21 @@ On TimerTick(ms : Double)
    // A. SYSTEM LOGIC (PRIORITY: ALWAYS RUNS, EVEN WITH ACTIVE KILLSWITCH)
    // ========================================================================
 
+   // 0. JOYSTICK CROSS-TALK GUARD (CC16 vs PitchBend: dominant axis wins after 120ms)
+   if Joy_CC16_ArmTime > 0.0 and not Joy_CC16_Fired then
+       if TimeSinceStartup() - Joy_CC16_ArmTime >= 120.0 then
+           if Joy_PB_Fired == 0 then
+               // CC16 dominant (PB quiet after 120ms) → intentional down press
+               if DebugMode then Trace(">>> SYSMODE-DIAG [D] CYCLE via CC16 timer (120ms, PB quiet) in TimerTick") end
+               Joy_CC16_Fired = true
+               CycleGlobalSystemMode()
+           else
+               if DebugMode then Trace(">>> SYSMODE-DIAG [D-BLOCKED] CC16 suppressed (PB_Fired=" + Joy_PB_Fired + ") cross-talk") end
+           end
+           Joy_CC16_ArmTime = 0.0  // Decision made, clear window
+       end
+   end
+
    // 1. STABILIZATION TIMER (Replaces the 3s wait after view switch)
    if PostViewSwitchDelayTimer > 0.0 then
        if TimeSinceStartup() > PostViewSwitchDelayTimer then
@@ -14158,7 +14190,7 @@ On TimerTick(ms : Double)
            end
        end
 
-       if anyLooperActive then
+       if anyLooperActive or RecordMode > 0 or IsPerformanceActive then
 
            // CASE A: COUNT-IN RUNNING (transport still stopped)
            if maxCountInBeats > 0 then
