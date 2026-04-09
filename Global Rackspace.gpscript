@@ -8185,16 +8185,17 @@ Function InjectNPToggle(paramType : Integer, paramName : String, uiVal : Double)
          elsif paramType == 7 then Mem_NP_VelRangeActive[i] = intVal
          elsif paramType == 8 then Mem_NP_HumanizeActive[i] = intVal
          elsif paramType == 9 then Mem_NP_QuantizeActive[i] = intVal
+         elsif paramType == 10 then Mem_NP_OctRangeFade[i] = intVal
          end
-         
+
          pIdx = GetParamIdxByName(BLK_NoteProcessor[i], paramName)
          if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, IntToFloat(intVal)) end
-         
+
          if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
       end
    End
    // UI update is intentionally deferred to avoid flickering
-   UpdateMetaColors() 
+   UpdateMetaColors()
 End
 
 Function InjectNPStep(paramType : Integer, paramName : String, direction : Integer)
@@ -8417,45 +8418,51 @@ End
 Function ProcessMidiLearn(m : NoteMessage)
    var noteNum, pIdx, vel, i : Integer
    var paramVal : Double = 0.0
-   
-   // Only respond when learning and the key is pressed
-   if (IsLearningMin or IsLearningMax) and IsNoteOn(m) then
-       
+
+   if (IsLearningMin or IsLearningMax or IsLearningOctRangeMin or IsLearningOctRangeMax) and IsNoteOn(m) then
+
        noteNum = GetNoteNumber(m)
-       paramVal = noteNum / 127.0 // Convert to 0.0-1.0 for the plugin
-       
-       // INJECTION: Push the value to all selected channels
+       paramVal = noteNum / 127.0
+
        For i = 0; i < 16; i = i + 1 Do
           if OutputScope[i] then
-             
+
              if IsLearningMin then
-                // Parameter 0 is p_SplitMin in your V7.1 NoteProcessor!
                 SetParameter(BLK_NoteProcessor[i], 0, paramVal)
-             else
-                // Parameter 1 is p_SplitMax in your V7.1 NoteProcessor!
+             elsif IsLearningMax then
                 SetParameter(BLK_NoteProcessor[i], 1, paramVal)
+             elsif IsLearningOctRangeMin then
+                pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_OctRangeMin")
+                if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) end
+                Mem_NP_OctRangeMin[i] = noteNum
+             elsif IsLearningOctRangeMax then
+                pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_OctRangeMax")
+                if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) end
+                Mem_NP_OctRangeMax[i] = noteNum
              end
-             
-             // Sync memory and plugin
-             UpdateChannelFade(i, 4, 0, 0.0) 
-             
-             // Prevent stuck notes when transposing
+
+             if IsLearningMin or IsLearningMax then
+                 UpdateChannelFade(i, 4, 0, 0.0)
+             end
+
              if not IsUpdatingMatrix then Trigger_NotesOff(i + 1) end
           end
        End
-       
-       // Auto-Off: End learn mode and turn off buttons
+
        IsLearningMin = false
        IsLearningMax = false
+       IsLearningOctRangeMin = false
+       IsLearningOctRangeMax = false
        SetWidgetValue(BTN_LearnMin, 0.0)
        SetWidgetValue(BTN_LearnMax, 0.0)
-       
-       
-       // Update UI
+       SetWidgetValue(BTN_LearnOctRangeMin, 0.0)
+       SetWidgetValue(BTN_LearnOctRangeMax, 0.0)
+
        UpdateInjectionSplitDisplay()
-       UpdateMetaColors() // Split changed, channel may now be [CUST]
-       
-       Trace("LEARN SUCCESS: Injected Note " + noteNum + " to Scope.")
+       UpdateInjectionNPDisplay()
+       UpdateMetaColors()
+
+       if DebugMode then Trace("LEARN SUCCESS: Injected Note " + noteNum + " to Scope.") end
    end
    
    if (IsLearningVelMin or IsLearningVelMax) and IsNoteOn(m) then
@@ -12612,6 +12619,26 @@ On WidgetValueChanged(val : Double) from BTN_LearnMax
        IsLearningMin = false; IsLearningOctRangeMin = false; IsLearningOctRangeMax = false
        SetWidgetValue(BTN_LearnMin, 0.0); SetWidgetValue(BTN_LearnOctRangeMin, 0.0); SetWidgetValue(BTN_LearnOctRangeMax, 0.0)
    else IsLearningMax = false end
+End
+
+On WidgetValueChanged(val : Double) from BTN_LearnOctRangeMin
+   if val > 0.5 then
+       IsLearningOctRangeMin = true
+       IsLearningOctRangeMax = false; IsLearningMin = false; IsLearningMax = false
+       SetWidgetValue(BTN_LearnOctRangeMax, 0.0); SetWidgetValue(BTN_LearnMin, 0.0); SetWidgetValue(BTN_LearnMax, 0.0)
+   else IsLearningOctRangeMin = false end
+End
+
+On WidgetValueChanged(val : Double) from BTN_LearnOctRangeMax
+   if val > 0.5 then
+       IsLearningOctRangeMax = true
+       IsLearningOctRangeMin = false; IsLearningMin = false; IsLearningMax = false
+       SetWidgetValue(BTN_LearnOctRangeMin, 0.0); SetWidgetValue(BTN_LearnMin, 0.0); SetWidgetValue(BTN_LearnMax, 0.0)
+   else IsLearningOctRangeMax = false end
+End
+
+On WidgetValueChanged(val : Double) from BTN_Inject_NP_OctRangeFade
+   if not IsUpdatingNP then InjectNPToggle(10, "p_OctRangeFade", val) end
 End
 
 On WidgetValueChanged(val : Double) from BTN_Inject_KBSplit_Lowest
