@@ -250,6 +250,41 @@ End
 
 
 // ---------------------------------------------------------
+// OCTAVER RANGE: Velocity Gating & Edge Fade
+// ---------------------------------------------------------
+Function GetOctRangeVelocity(cloneNote : Integer, vel : Integer) Returns Integer
+   var rangeMin, rangeMax, rangeSpan, dist : Integer
+   var factor : Double = 1.0
+   var res : Integer = vel
+
+   rangeMin = Round(p_OctRangeMin)
+   rangeMax = Round(p_OctRangeMax)
+
+   // Gate: outside range -> suppress
+   if cloneNote < rangeMin or cloneNote > rangeMax then
+       res = 0
+   else
+       // VelocityFader: only when active AND range >= 10 notes
+       rangeSpan = rangeMax - rangeMin
+       if Round(p_OctRangeFade) == 1 and rangeSpan >= 10 then
+           dist = cloneNote - rangeMin
+           if dist < 5 then
+               factor = (IntToFloat(dist) + 1.0) / 6.0
+           else
+               dist = rangeMax - cloneNote
+               if dist < 5 then
+                   factor = (IntToFloat(dist) + 1.0) / 6.0
+               end
+           end
+           res = Round(IntToFloat(vel) * factor)
+           if res < 1 then res = 1 end
+       end
+   end
+
+   result = res
+End
+
+// ---------------------------------------------------------
 // THE OCTAVER ENGINE (The Note Multiplier & Timing Emitter)
 // ---------------------------------------------------------
 Function PlayOutNote(note : Integer, vel : Integer, chan : Integer)
