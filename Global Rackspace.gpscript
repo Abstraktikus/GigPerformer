@@ -2167,11 +2167,7 @@ Function UpdateInjectionNPDisplay()
          SetWidgetLabel(LBL_Inject_NP_OctHigh, IntToString(Mem_NP_OctHigh[firstScopeIdx]) + " Up")
          SetWidgetLabel(LBL_Inject_NP_OctHighOffset, "Gap " + IntToString(Mem_NP_OctHighOffset[firstScopeIdx]))
          // --- OCTAVE RANGE ---
-         if Mem_NP_OctRangeMin[firstScopeIdx] == 0 and Mem_NP_OctRangeMax[firstScopeIdx] == 127 then
-             SetWidgetLabel(LBL_Inject_NP_OctRange, "-")
-         else
-             SetWidgetLabel(LBL_Inject_NP_OctRange, GetLuxusLabel(Mem_NP_OctRangeMin[firstScopeIdx]) + " - " + GetLuxusLabel(Mem_NP_OctRangeMax[firstScopeIdx]))
-         end
+         SetWidgetLabel(LBL_Inject_NP_OctRange, GetLuxusLabel(Mem_NP_OctRangeMin[firstScopeIdx]) + " - " + GetLuxusLabel(Mem_NP_OctRangeMax[firstScopeIdx]))
          SetWidgetValue(BTN_Inject_NP_OctRangeFade, IntToFloat(Mem_NP_OctRangeFade[firstScopeIdx]))
 
          // ---> DYNAMIC SPLIT BOUNDARIES <---

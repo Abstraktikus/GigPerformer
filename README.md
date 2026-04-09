@@ -24,7 +24,7 @@ Browse and swap VST plugins per layer with a publisher/sound/preset hierarchy. R
 
 ### Channel Selector & Injection
 
-Select and configure up to 16 MIDI channels individually. The Injection panel controls per-channel parameters: keyboard split, velocity range, fade in/out, MIDI filters, root/transpose, octaver (POG), humanizer, and scale quantizer.
+Select and configure up to 16 MIDI channels individually. The Injection panel controls per-channel parameters: keyboard split, velocity range, fade in/out, MIDI filters, root/transpose, octaver (POG) with configurable range and velocity fade, humanizer, and scale quantizer.
 
 ![Channel Selector & Injection — Full channel config with all injection parameters](images/Channel%20Selector%20&%20Injection.png)
 
@@ -51,6 +51,8 @@ A dual-zone crossfader blending VST audio outputs (up to 16 channels) against MI
 Define named controller maps per song that assign hardware knobs/sliders to VST parameters and MIDI CCs. Includes macro learning, scene morphing with min/max capture, and Smart Adapt for automatic parameter linking.
 
 ![Controller Maps — Macro assignments with scene morphing](images/Controller%20Map.png)
+
+![Controller Map Sections — Macro ranges for Looper, Solo, Mute, Velocity, and Root](images/Controller%20Map%20Sections.png)
 
 ### Hardware Abstraction Layer (HAL)
 
