@@ -12599,12 +12599,18 @@ On WidgetValueChanged(w : Widget, index : Integer, val : Double) from
 End
 
 On WidgetValueChanged(val : Double) from BTN_LearnMin
-   if val > 0.5 then IsLearningMin = true; IsLearningMax = false; SetWidgetValue(BTN_LearnMax, 0.0)
+   if val > 0.5 then
+       IsLearningMin = true
+       IsLearningMax = false; IsLearningOctRangeMin = false; IsLearningOctRangeMax = false
+       SetWidgetValue(BTN_LearnMax, 0.0); SetWidgetValue(BTN_LearnOctRangeMin, 0.0); SetWidgetValue(BTN_LearnOctRangeMax, 0.0)
    else IsLearningMin = false end
 End
 
 On WidgetValueChanged(val : Double) from BTN_LearnMax
-   if val > 0.5 then IsLearningMax = true; IsLearningMin = false; SetWidgetValue(BTN_LearnMin, 0.0)
+   if val > 0.5 then
+       IsLearningMax = true
+       IsLearningMin = false; IsLearningOctRangeMin = false; IsLearningOctRangeMax = false
+       SetWidgetValue(BTN_LearnMin, 0.0); SetWidgetValue(BTN_LearnOctRangeMin, 0.0); SetWidgetValue(BTN_LearnOctRangeMax, 0.0)
    else IsLearningMax = false end
 End
 
