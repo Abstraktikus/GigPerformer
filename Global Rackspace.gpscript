@@ -2136,7 +2136,11 @@ Function UpdateInjectionNPDisplay()
       SetWidgetLabel(LBL_Inject_NP_OctLowOffset, "-")
       SetWidgetLabel(LBL_Inject_NP_OctHigh, "-")
       SetWidgetLabel(LBL_Inject_NP_OctHighOffset, "-")
-      
+      SetWidgetLabel(LBL_Inject_NP_OctRange, "-")
+      SetWidgetValue(BTN_Inject_NP_OctRangeFade, 0.0)
+      SetWidgetValue(BTN_LearnOctRangeMin, 0.0)
+      SetWidgetValue(BTN_LearnOctRangeMax, 0.0)
+
       // --- V7.4 OFFLINE STATES ---
       SetWidgetValue(BTN_Inject_NP_VelRange, 0.0)
       SetWidgetLabel(LBL_Inject_NP_VelMin, "-")
@@ -2162,7 +2166,14 @@ Function UpdateInjectionNPDisplay()
          SetWidgetLabel(LBL_Inject_NP_OctLowOffset, "Gap " + IntToString(Mem_NP_OctLowOffset[firstScopeIdx]))
          SetWidgetLabel(LBL_Inject_NP_OctHigh, IntToString(Mem_NP_OctHigh[firstScopeIdx]) + " Up")
          SetWidgetLabel(LBL_Inject_NP_OctHighOffset, "Gap " + IntToString(Mem_NP_OctHighOffset[firstScopeIdx]))
-         
+         // --- OCTAVE RANGE ---
+         if Mem_NP_OctRangeMin[firstScopeIdx] == 0 and Mem_NP_OctRangeMax[firstScopeIdx] == 127 then
+             SetWidgetLabel(LBL_Inject_NP_OctRange, "-")
+         else
+             SetWidgetLabel(LBL_Inject_NP_OctRange, GetLuxusLabel(Mem_NP_OctRangeMin[firstScopeIdx]) + " - " + GetLuxusLabel(Mem_NP_OctRangeMax[firstScopeIdx]))
+         end
+         SetWidgetValue(BTN_Inject_NP_OctRangeFade, IntToFloat(Mem_NP_OctRangeFade[firstScopeIdx]))
+
          // ---> DYNAMIC SPLIT BOUNDARIES <---
          idxMonoL = GetParamIdxByName(BLK_NoteProcessor[firstScopeIdx], "p_MonoLowest")
          idxMonoH = GetParamIdxByName(BLK_NoteProcessor[firstScopeIdx], "p_MonoHighest")
