@@ -144,21 +144,6 @@ On ParameterValueChanged matching p_SoloMute, p_UserMute
    if Round(p_SoloMute) == 1 or Round(p_UserMute) == 1 then ExecutePanic() end
 End
 
-// Auto-release latched chord root when the GR timer fires the trigger.
-// Guard is ChordMode + lastSentRoot only (not LatchMode) so the release
-// still fires if the user toggled Latch off while a root was still held.
-// Uses lastSentChannel (captured in UpdateChordLogic when the root was emitted)
-// because activeChannel is only in scope inside UpdateChordLogic itself.
-On ParameterValueChanged matching p_LatchRelease
-   if Round(p_LatchRelease) == 1 then
-       if Round(p_ChordMode) == 1 and lastSentRoot != -1 then
-           StopOutNote(lastSentRoot, lastSentChannel)
-           lastSentRoot = -1
-       end
-       p_LatchRelease = 0
-   end
-End
-
 // Hänger-Vermeidung: Wenn man aktiv am Pitch oder Quantizer schraubt
 On ParameterValueChanged matching p_Octaver, p_OctLow, p_OctLowOffset, p_OctHigh, p_OctHighOffset, p_OctaverMuteOrig, p_OctRangeMin, p_OctRangeMax, p_QuantizeActive, p_QuantKey, p_QuantScale
    ExecutePanic()
@@ -654,6 +639,25 @@ Function ProcessMonoLogic(activeChannel : Integer)
         PlayOutNote(targetNote, targetVel, activeChannel)
         lastMonoSentNote = targetNote
     end
+End
+
+// ---------------------------------------------------------
+// LATCH AUTO-RELEASE TRIGGER (from Global Rackspace timer)
+// Guard is ChordMode + lastSentRoot only (not LatchMode) so the release
+// still fires if the user toggled Latch off while a root was still held.
+// Uses lastSentChannel (captured in UpdateChordLogic when the root was
+// emitted) because activeChannel is only in scope inside UpdateChordLogic.
+// Placed here (after StopOutNote is defined) to satisfy GPScript's
+// forward-declaration rule.
+// ---------------------------------------------------------
+On ParameterValueChanged matching p_LatchRelease
+   if Round(p_LatchRelease) == 1 then
+       if Round(p_ChordMode) == 1 and lastSentRoot != -1 then
+           StopOutNote(lastSentRoot, lastSentChannel)
+           lastSentRoot = -1
+       end
+       p_LatchRelease = 0
+   end
 End
 
 // ---------------------------------------------------------
