@@ -2892,6 +2892,11 @@ Function UpdateControllerInfoDisplay()
    var isCC, isLooperDisp, isGroupedDisp : Boolean
    var typeLoop : Integer
    var hasLooperMacros, hasVelRange, hasRoot, hasOctaver, hasQuantize, hasSustain, hasHumanize : Boolean = false
+   var isSysActionSlot : Boolean = false
+   var sysActHasAny : Boolean = false
+   var sysActDispAct : Integer = 0
+   var sysActDispMac : Integer = 0
+   var sysActDispCC : Integer = 0
    
    var Grp_Count : Integer = Size(MacroGroup_Names)
    var Grp_Has : Boolean Array
@@ -2978,9 +2983,20 @@ Function UpdateControllerInfoDisplay()
                l = l + 1
            End
 
-           if isGroupedDisp then
+           // --- SYSTEM ACTION SKIP (rendered separately in the bottom block) ---
+           isSysActionSlot = false
+           if not isCC and s >= 0 and s < MAX_MACROS then
+              if SysAction_ByMacro[s] > -1 then isSysActionSlot = true end
+           elsif isCC and s >= 0 and s < 128 then
+              if SysAction_ByCC[s] > -1 then isSysActionSlot = true end
+           end
+
+           if isSysActionSlot then
+              // Intentionally empty — rendered in the System Actions block below.
+
+           elsif isGroupedDisp then
                // Intentionally left empty! The dynamic grouped entry is built below.
-               
+
            // --- CROSSFADER ---
            elsif (not isCC and s == CF_MacroIdx) or (isCC and s == CF_CCIdx) then
                CtrlInfo_Lines <-- hwStr + ": >> Global Audio/Expr Balance"
@@ -3064,14 +3080,46 @@ Function UpdateControllerInfoDisplay()
    For g = 0; g < Grp_Count; g = g + 1 Do
        if Grp_Has[g] then
            CtrlInfo_Lines <-- ""
-           if Grp_Min[g] <= Grp_Max[g] then 
+           if Grp_Min[g] <= Grp_Max[g] then
                CtrlInfo_Lines <-- ">> Macro " + (Grp_Min[g] + 1) + "-" + (Grp_Max[g] + 1) + ": " + MacroGroup_Names[g] + " (Ch 1-16) <<"
-           else 
-               CtrlInfo_Lines <-- ">> Buttons 1-16: " + MacroGroup_Names[g] + " (Ch 1-16) <<" 
+           else
+               CtrlInfo_Lines <-- ">> Buttons 1-16: " + MacroGroup_Names[g] + " (Ch 1-16) <<"
            end
        end
    End
-   
+
+   // --- SYSTEM ACTIONS DISPLAY ---
+   // Walk the reverse-lookup tables and render bindings grouped by action.
+   // Multiple macro slots or CC numbers can bind the same action (redundancy).
+   sysActHasAny = false
+   For sysActDispMac = 0; sysActDispMac < MAX_MACROS; sysActDispMac = sysActDispMac + 1 Do
+      if SysAction_ByMacro[sysActDispMac] > -1 then sysActHasAny = true end
+   End
+   if not sysActHasAny then
+      For sysActDispCC = 0; sysActDispCC < 128; sysActDispCC = sysActDispCC + 1 Do
+         if SysAction_ByCC[sysActDispCC] > -1 then sysActHasAny = true end
+      End
+   end
+
+   if sysActHasAny then
+      CtrlInfo_Lines <-- ""
+      CtrlInfo_Lines <-- ">> System Actions (Virtual Roles) <<"
+      For sysActDispAct = 0; sysActDispAct < Size(SysAction_Names); sysActDispAct = sysActDispAct + 1 Do
+         // All macro slots bound to this action
+         For sysActDispMac = 0; sysActDispMac < MAX_MACROS; sysActDispMac = sysActDispMac + 1 Do
+            if SysAction_ByMacro[sysActDispMac] == sysActDispAct then
+               CtrlInfo_Lines <-- "  Macro " + (sysActDispMac + 1) + GetAssignedHWString(sysActDispMac) + ": " + SysAction_Labels[sysActDispAct]
+            end
+         End
+         // All CC numbers bound to this action
+         For sysActDispCC = 0; sysActDispCC < 128; sysActDispCC = sysActDispCC + 1 Do
+            if SysAction_ByCC[sysActDispCC] == sysActDispAct then
+               CtrlInfo_Lines <-- "  " + GetStandardCCName(sysActDispCC) + " [CC" + sysActDispCC + "]: " + SysAction_Labels[sysActDispAct]
+            end
+         End
+      End
+   end
+
    // Update slider and render
    ScrollToCurrentCtrlScope()
 End
