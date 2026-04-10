@@ -28,8 +28,9 @@ Var
    p_FadeOut : Parameter 0 .. 127 = 10 
    
    // --- 4. Chord Detection Parameter ---
-   p_ChordMode    : Parameter 0 .. 1 = 0 
-   p_LatchMode    : Parameter 0 .. 1 = 0 
+   p_ChordMode    : Parameter 0 .. 1 = 0
+   p_LatchMode    : Parameter 0 .. 1 = 0
+   p_LatchRelease : Parameter 0 .. 1 = 0   // Trigger from GR timer: release latched chord root
    p_Engine       : Parameter 0 .. 1 = 0      // 0 = Fast Math, 1 = Heuristic
    p_MuteOriginal : Parameter 0 .. 1 = 0      // 1 = Originalnoten stummschalten
    p_MinKeys      : Parameter 1 .. 5 = 1      // Ab wie vielen Tasten Erkennung starten?
