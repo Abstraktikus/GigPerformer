@@ -94,9 +94,10 @@ Var
    lastMonoSentNote : Integer = -1
 
    // --- Interne State Machine ---
-   heldNotes       : Integer Array 
-   lastSentRoot    : Integer = -1  
-   Sustainer       : AutoSustainer 
+   heldNotes       : Integer Array
+   lastSentRoot    : Integer = -1
+   lastSentChannel : Integer = 1   // channel used when lastSentRoot was emitted (for p_LatchRelease)
+   Sustainer       : AutoSustainer
    ActiveNoteTrack : Integer Array // Verhindert Hänger beim Ändern von Transpose/Quantize!
 
 Initialization
@@ -114,6 +115,7 @@ Function ExecutePanic()
    monoHeldNotes = []
    monoHeldVels = []
    lastSentRoot = -1
+   lastSentChannel = 1
    lastMonoSentNote = -1
    For clrIdx = 0; clrIdx < 128; clrIdx = clrIdx + 1 Do ActiveNoteTrack[clrIdx] = -1 End
    AutoSustainer_Stop(Sustainer)
@@ -140,6 +142,21 @@ End
 
 On ParameterValueChanged matching p_SoloMute, p_UserMute
    if Round(p_SoloMute) == 1 or Round(p_UserMute) == 1 then ExecutePanic() end
+End
+
+// Auto-release latched chord root when the GR timer fires the trigger.
+// Guard is ChordMode + lastSentRoot only (not LatchMode) so the release
+// still fires if the user toggled Latch off while a root was still held.
+// Uses lastSentChannel (captured in UpdateChordLogic when the root was emitted)
+// because activeChannel is only in scope inside UpdateChordLogic itself.
+On ParameterValueChanged matching p_LatchRelease
+   if Round(p_LatchRelease) == 1 then
+       if Round(p_ChordMode) == 1 and lastSentRoot != -1 then
+           StopOutNote(lastSentRoot, lastSentChannel)
+           lastSentRoot = -1
+       end
+       p_LatchRelease = 0
+   end
 End
 
 // Hänger-Vermeidung: Wenn man aktiv am Pitch oder Quantizer schraubt
@@ -581,6 +598,7 @@ Function UpdateChordLogic(activeChannel : Integer)
                 if lastSentRoot != -1 then StopOutNote(lastSentRoot, activeChannel) end
                 PlayOutNote(finalRoot, 100, activeChannel)
                 lastSentRoot = finalRoot
+                lastSentChannel = activeChannel
             end
         end
     end
