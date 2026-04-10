@@ -5716,6 +5716,34 @@ End
 // SECTION 17: CONTROLLER MAP ENGINE
 // ============================================================================
 
+// ---------------------------------------------------------
+// SYSTEM ACTION HELPERS
+// (moved above LoadControllerMap so the parser can resolve calls to
+//  ResetSysActionBindings / SysActIdx from inside LoadControllerMap.)
+// ---------------------------------------------------------
+Function SysActIdx(name : String) Returns Integer
+   var i, res : Integer
+   res = -1
+   For i = 0; i < Size(SysAction_Names); i = i + 1 Do
+      if SysAction_Names[i] == name then res = i end
+   End
+   result = res
+End
+
+Function ResetSysActionBindings()
+   var i : Integer
+   For i = 0; i < MAX_MACROS; i = i + 1 Do SysAction_ByMacro[i] = -1 End
+   For i = 0; i < 128; i = i + 1 Do SysAction_ByCC[i] = -1 End
+End
+
+Function IsSystemActionMacro(paramIdx : Integer) Returns Boolean
+   var res : Boolean = false
+   if paramIdx >= 0 and paramIdx < MAX_MACROS then
+      res = SysAction_ByMacro[paramIdx] > -1
+   end
+   result = res
+End
+
 Function LoadControllerMap(mapName : String)
    var content, line, key, valuePart, header : String
    var lines, parts, groupParts, blockParts, paramParts : String Array
@@ -9731,137 +9759,13 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
    end
 End
 
-Function ProcessHardwareCC(m : ControlChangeMessage)
-   var ch, cc, i : Integer
-   var val : Double = 0.0
-   var mName : String = "" 
-   
-   ch = GetChannel(m)
-   cc = GetCCNumber(m)
-   
-   // Standard scaling (0-127) for ALL hardware controllers (pedals, knobs, etc.)
-   val = IntToFloat(GetCCValue(m)) / 127.0 
-   
-   // --- UNIVERSAL FEEDBACK ANFEUERN ---
-   TriggerMacroFeedback(cc, true, val)
-
-   // 1. LEARN MODE
-   if IsHardwareLearning then
-       Trace("HAL Learn: Received Ch" + ch + ":CC" + cc + " -> Assigned to Macro " + (CurrentEditScope + 1))
-       AssignHardware(CurrentEditScope, ch, cc, false)
-       IsHardwareLearning = false
-       SetWidgetValue(BTN_MacroLearn, 0.0) 
-       UpdateControllerInfoDisplay()
-       
-   // 2. EXECUTE MODE
-   else
-       // --- SYSTEM ACTION CC DISPATCH (hardware-CC path) ---
-       // Reverse-lookup is O(1); Isolation Rule guarantees exclusivity.
-       // Only fire on press edge (val > 0.5, matches surrounding CC dispatch style).
-       if cc >= 0 and cc < 128 and SysAction_ByCC[cc] > -1 then
-           if val > 0.5 then FireSystemAction(SysAction_ByCC[cc]) end
-       end
-
-       // --- A: GIBT ES EINEN DIREKTEN CC-LINK (Hard-Coded)? ---
-
-       // ---> HIER STECKT DEIN CROSSFADER! <---
-       if CF_CCIdx == cc then
-           SetWidgetValue(SLD_Crossfader, val)
-           
-       elsif VST_PREV_CCIdx == cc and val > 0.5 then TriggerVstPresetChange(-1)
-       elsif VST_NEXT_CCIdx == cc and val > 0.5 then TriggerVstPresetChange(1)
-       elsif VST_SCOPE_PREV_CCIdx == cc and val > 0.5 then ChangeVstScope(-1, -1)
-       elsif VST_SCOPE_NEXT_CCIdx == cc and val > 0.5 then ChangeVstScope(1, -1)
-       
-       // Drehregler: VST Browse (Direkter CC)
-       elsif VST_BROWSE_CCIdx == cc then
-           if Last_VST_Browse_Val != -1.0 then
-               if val > Last_VST_Browse_Val + 0.005 then 
-                   TriggerVstPresetChange(1)
-                   Last_VST_Browse_Val = val
-               elsif val < Last_VST_Browse_Val - 0.005 then 
-                   TriggerVstPresetChange(-1)
-                   Last_VST_Browse_Val = val
-               end
-           else
-               Last_VST_Browse_Val = val
-           end
-           
-       // Recorder: Next Song Part (Direkter CC)
-       elsif REC_SONGPART_CCIdx == cc then
-           if Last_RecPart_Val != -1.0 then
-               if val > Last_RecPart_Val + 0.05 then 
-                   TriggerNextSongPart()
-                   Last_RecPart_Val = 0.5 
-               elsif val < Last_RecPart_Val - 0.05 then 
-                   Last_RecPart_Val = val
-               end
-           else
-               Last_RecPart_Val = val
-           end
-           
-       elsif VST_SCOPE_CCIdx == cc and val > 0.5 then
-           ChangeVstScope(-1, Round(val * (MAX_VSTS - 1)))
-
-       // --- SYSMODE MACROS ---
-       elsif SYSMODE_CYCLE_CCIdx == cc and val > 0.5 then
-           if DebugMode then Trace(">>> SYSMODE-DIAG [B1] CYCLE via CC=" + cc + " (SYSMODE_CYCLE_CCIdx) in ProcessHardwareCC") end
-           CycleGlobalSystemMode()
-           SystemModeActive = true
-       elsif SYSMODE_SELECT_CCIdx == cc then
-           if DebugMode then Trace(">>> SYSMODE-DIAG [B2] SELECT via CC=" + cc + " target=" + Round(val * 4.0) + " in ProcessHardwareCC") end
-           SelectGlobalSystemMode(Round(val * 4.0))  // val 0.0-1.0 maps to mode 0-4
-
-       // SYSTEM TOGGLE FOR DIRECT CCs
-       elsif SYSTEM_TOGGLE_CCIdx == cc then
-           if val > 0.5 then
-               // SUSTAIN PRESS: Restore sticky state or enter fresh
-               SystemModeActive = true
-               if StickySystemMode >= 0 then
-                   if DebugMode then Trace(">>> SYSMODE-DIAG [C] STICKY RESTORE from " + GlobalSystemMode + " to " + StickySystemMode + " via SYSTEM_TOGGLE CC=" + cc) end
-                   GlobalSystemMode = StickySystemMode
-                   if StickySystemMode == 4 then
-                       TimelineSubMode = StickyTimelineSubMode
-                       TimelineRecState = StickyTimelineRecState
-                   end
-                   Trace("SYS-MODE: RESTORED -> " + SysModeNames[GlobalSystemMode])
-               end
-               mName = SysModeNames[GlobalSystemMode]
-               OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + mName + " <<<", Local_IP, Local_PORT)
-               MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-               MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
-           else
-               // SUSTAIN RELEASE: Save sticky state, do NOT stop Timeline recording
-               StickySystemMode = GlobalSystemMode
-               if GlobalSystemMode == 4 then
-                   StickyTimelineSubMode = TimelineSubMode
-                   StickyTimelineRecState = TimelineRecState
-               end
-               SystemModeActive = false
-               Trace("SYS-MODE: OFF (sticky=" + StickySystemMode + ")")
-           end
-       end
-       
-       // --- B: ARE THERE PARAMETER LINKS FOR THIS CC? ---
-       For i = 0; i < Link_Count; i = i + 1 Do
-           if Link_Active[i] and Link_SourceIsCC[i] and Link_SourceIdx[i] == cc then
-               ExecuteLink(i, val) 
-           end
-       End
-       
-       // --- C: HAL DATABASE (translation from CC -> Macro) ---
-       For i = 0; i < HW_Count; i = i + 1 Do
-           if not HW_IsNote[i] and HW_Channel[i] == ch and HW_CC[i] == cc then
-               if DebugMode then Trace(">>> HAL-DIAG: CC=" + cc + " Ch=" + ch + " -> MacroIdx=" + HW_MacroIdx[i] + " val=" + val) end
-               ExecuteHardwareMacro(HW_MacroIdx[i], val)
-           end
-       End
-   end
-End
-
 // ---------------------------------------------------------
 // HAL: UNIVERSAL SYSTEM NAVIGATION ROUTER
 // ---------------------------------------------------------
+// (Strip helpers + FireSystemAction must be defined above ProcessHardwareCC
+//  because ProcessHardwareCC calls FireSystemAction, which in turn calls
+//  CycleStripChannel/CycleStripTheme/ToggleStripMacro/RestoreInitialControllerMap.)
+//
 // Cycles the strip theme (X-axis in STRIP-CONTROL mode).
 // Themes are the toggle-able macro groups: Octaver, Humanizer, Quantizer, Auto Sustain, etc.
 Function CycleStripTheme(dir : Integer)
@@ -9988,32 +9892,6 @@ Function ToggleStripMacro()
    end
 End
 
-// ---------------------------------------------------------
-// SYSTEM ACTION HELPERS
-// ---------------------------------------------------------
-Function SysActIdx(name : String) Returns Integer
-   var i, res : Integer
-   res = -1
-   For i = 0; i < Size(SysAction_Names); i = i + 1 Do
-      if SysAction_Names[i] == name then res = i end
-   End
-   result = res
-End
-
-Function ResetSysActionBindings()
-   var i : Integer
-   For i = 0; i < MAX_MACROS; i = i + 1 Do SysAction_ByMacro[i] = -1 End
-   For i = 0; i < 128; i = i + 1 Do SysAction_ByCC[i] = -1 End
-End
-
-Function IsSystemActionMacro(paramIdx : Integer) Returns Boolean
-   var res : Boolean = false
-   if paramIdx >= 0 and paramIdx < MAX_MACROS then
-      res = SysAction_ByMacro[paramIdx] > -1
-   end
-   result = res
-End
-
 // Helper: restore the song-specified controller map (used by SYSACT_CTRLMAP_RESTORE
 // and by the existing joystick Y+ path in ProcessSystemNavigation).
 Function RestoreInitialControllerMap()
@@ -10060,6 +9938,134 @@ Function FireSystemAction(actionIdx : Integer)
          SysAction_Names[actionIdx] == "TL_PARTJUMP_PREV"   Do PartJumpPreview(-1)
          SysAction_Names[actionIdx] == "TL_REC_SONGPART"    Do ExecuteRecSongpart()
       End
+   end
+End
+
+Function ProcessHardwareCC(m : ControlChangeMessage)
+   var ch, cc, i : Integer
+   var val : Double = 0.0
+   var mName : String = ""
+
+   ch = GetChannel(m)
+   cc = GetCCNumber(m)
+   
+   // Standard scaling (0-127) for ALL hardware controllers (pedals, knobs, etc.)
+   val = IntToFloat(GetCCValue(m)) / 127.0 
+   
+   // --- UNIVERSAL FEEDBACK ANFEUERN ---
+   TriggerMacroFeedback(cc, true, val)
+
+   // 1. LEARN MODE
+   if IsHardwareLearning then
+       Trace("HAL Learn: Received Ch" + ch + ":CC" + cc + " -> Assigned to Macro " + (CurrentEditScope + 1))
+       AssignHardware(CurrentEditScope, ch, cc, false)
+       IsHardwareLearning = false
+       SetWidgetValue(BTN_MacroLearn, 0.0) 
+       UpdateControllerInfoDisplay()
+       
+   // 2. EXECUTE MODE
+   else
+       // --- SYSTEM ACTION CC DISPATCH (hardware-CC path) ---
+       // Reverse-lookup is O(1); Isolation Rule guarantees exclusivity.
+       // Only fire on press edge (val > 0.5, matches surrounding CC dispatch style).
+       if cc >= 0 and cc < 128 and SysAction_ByCC[cc] > -1 then
+           if val > 0.5 then FireSystemAction(SysAction_ByCC[cc]) end
+       end
+
+       // --- A: GIBT ES EINEN DIREKTEN CC-LINK (Hard-Coded)? ---
+
+       // ---> HIER STECKT DEIN CROSSFADER! <---
+       if CF_CCIdx == cc then
+           SetWidgetValue(SLD_Crossfader, val)
+           
+       elsif VST_PREV_CCIdx == cc and val > 0.5 then TriggerVstPresetChange(-1)
+       elsif VST_NEXT_CCIdx == cc and val > 0.5 then TriggerVstPresetChange(1)
+       elsif VST_SCOPE_PREV_CCIdx == cc and val > 0.5 then ChangeVstScope(-1, -1)
+       elsif VST_SCOPE_NEXT_CCIdx == cc and val > 0.5 then ChangeVstScope(1, -1)
+       
+       // Drehregler: VST Browse (Direkter CC)
+       elsif VST_BROWSE_CCIdx == cc then
+           if Last_VST_Browse_Val != -1.0 then
+               if val > Last_VST_Browse_Val + 0.005 then 
+                   TriggerVstPresetChange(1)
+                   Last_VST_Browse_Val = val
+               elsif val < Last_VST_Browse_Val - 0.005 then 
+                   TriggerVstPresetChange(-1)
+                   Last_VST_Browse_Val = val
+               end
+           else
+               Last_VST_Browse_Val = val
+           end
+           
+       // Recorder: Next Song Part (Direkter CC)
+       elsif REC_SONGPART_CCIdx == cc then
+           if Last_RecPart_Val != -1.0 then
+               if val > Last_RecPart_Val + 0.05 then 
+                   TriggerNextSongPart()
+                   Last_RecPart_Val = 0.5 
+               elsif val < Last_RecPart_Val - 0.05 then 
+                   Last_RecPart_Val = val
+               end
+           else
+               Last_RecPart_Val = val
+           end
+           
+       elsif VST_SCOPE_CCIdx == cc and val > 0.5 then
+           ChangeVstScope(-1, Round(val * (MAX_VSTS - 1)))
+
+       // --- SYSMODE MACROS ---
+       elsif SYSMODE_CYCLE_CCIdx == cc and val > 0.5 then
+           if DebugMode then Trace(">>> SYSMODE-DIAG [B1] CYCLE via CC=" + cc + " (SYSMODE_CYCLE_CCIdx) in ProcessHardwareCC") end
+           CycleGlobalSystemMode()
+           SystemModeActive = true
+       elsif SYSMODE_SELECT_CCIdx == cc then
+           if DebugMode then Trace(">>> SYSMODE-DIAG [B2] SELECT via CC=" + cc + " target=" + Round(val * 4.0) + " in ProcessHardwareCC") end
+           SelectGlobalSystemMode(Round(val * 4.0))  // val 0.0-1.0 maps to mode 0-4
+
+       // SYSTEM TOGGLE FOR DIRECT CCs
+       elsif SYSTEM_TOGGLE_CCIdx == cc then
+           if val > 0.5 then
+               // SUSTAIN PRESS: Restore sticky state or enter fresh
+               SystemModeActive = true
+               if StickySystemMode >= 0 then
+                   if DebugMode then Trace(">>> SYSMODE-DIAG [C] STICKY RESTORE from " + GlobalSystemMode + " to " + StickySystemMode + " via SYSTEM_TOGGLE CC=" + cc) end
+                   GlobalSystemMode = StickySystemMode
+                   if StickySystemMode == 4 then
+                       TimelineSubMode = StickyTimelineSubMode
+                       TimelineRecState = StickyTimelineRecState
+                   end
+                   Trace("SYS-MODE: RESTORED -> " + SysModeNames[GlobalSystemMode])
+               end
+               mName = SysModeNames[GlobalSystemMode]
+               OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + mName + " <<<", Local_IP, Local_PORT)
+               MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+               MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+           else
+               // SUSTAIN RELEASE: Save sticky state, do NOT stop Timeline recording
+               StickySystemMode = GlobalSystemMode
+               if GlobalSystemMode == 4 then
+                   StickyTimelineSubMode = TimelineSubMode
+                   StickyTimelineRecState = TimelineRecState
+               end
+               SystemModeActive = false
+               Trace("SYS-MODE: OFF (sticky=" + StickySystemMode + ")")
+           end
+       end
+       
+       // --- B: ARE THERE PARAMETER LINKS FOR THIS CC? ---
+       For i = 0; i < Link_Count; i = i + 1 Do
+           if Link_Active[i] and Link_SourceIsCC[i] and Link_SourceIdx[i] == cc then
+               ExecuteLink(i, val) 
+           end
+       End
+       
+       // --- C: HAL DATABASE (translation from CC -> Macro) ---
+       For i = 0; i < HW_Count; i = i + 1 Do
+           if not HW_IsNote[i] and HW_Channel[i] == ch and HW_CC[i] == cc then
+               if DebugMode then Trace(">>> HAL-DIAG: CC=" + cc + " Ch=" + ch + " -> MacroIdx=" + HW_MacroIdx[i] + " val=" + val) end
+               ExecuteHardwareMacro(HW_MacroIdx[i], val)
+           end
+       End
    end
 End
 
@@ -12007,6 +12013,18 @@ Initialization
    IsPerformanceActive = false
    Arr_Rec_Type = []; Arr_Rec_Val = []
 
+   // --- SYSTEM ACTION REVERSE-LOOKUP ARRAYS ---
+   // Must populate explicitly: GPScript Integer Array default is 0, not -1,
+   // and we use -1 as the "unbound" sentinel. Populated FIRST so that any
+   // later Init-time call (e.g., UpdateControllerInfoDisplay, LoadControllerMap
+   // via LoadSongSnapshot) sees sized arrays.
+   For sysActInitIdx = 0; sysActInitIdx < MAX_MACROS; sysActInitIdx = sysActInitIdx + 1 Do
+      SysAction_ByMacro <-- -1
+   End
+   For sysActInitIdx = 0; sysActInitIdx < 128; sysActInitIdx = sysActInitIdx + 1 Do
+      SysAction_ByCC <-- -1
+   End
+
    // ====================================================================================
    // PHASE 1: PATHS
    // ====================================================================================
@@ -12232,16 +12250,6 @@ Initialization
    
    OSC_SendStringSpecific("/UI/SetMacroFeedback", " ", Local_IP, Local_PORT)
    if DebugMode then Trace("SYS: Initialization complete. OSC Display cleared.") end
-
-   // --- SYSTEM ACTION REVERSE-LOOKUP ARRAYS ---
-   // Must populate explicitly: GPScript Integer Array default is 0, not -1,
-   // and we use -1 as the "unbound" sentinel.
-   For sysActInitIdx = 0; sysActInitIdx < MAX_MACROS; sysActInitIdx = sysActInitIdx + 1 Do
-      SysAction_ByMacro <-- -1
-   End
-   For sysActInitIdx = 0; sysActInitIdx < 128; sysActInitIdx = sysActInitIdx + 1 Do
-      SysAction_ByCC <-- -1
-   End
 End
 
 
