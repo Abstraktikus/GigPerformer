@@ -386,7 +386,8 @@ Var
    StateResetTime : Double = 0.0 
    FaderSafetyTimer : Double = 0.0
    HardwareSyncTimer, LastSysExSentTime, PostViewSwitchDelayTimer : Double = 0.0
-   
+   Latch_LastNoteOnTime : Double = 0.0   // TimeSinceStartup of most recent hardware note-on; 0 = disarmed
+
    LastReceivedBPM : Double = 0.0
    LastKBSplitSync, LastHardwarePulseTime, LastBarStartTime : Double = 0.0
    LastGlobalTranspose : Integer = -999
