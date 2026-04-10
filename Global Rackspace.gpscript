@@ -10173,7 +10173,11 @@ Function ProcessHardwareNote(m : NoteMessage)
     var noteNum : Integer = GetNoteNumber(m)
     var val : Double = 0.0
     var i : Integer
-    
+
+    // Stamp the global last-note-on time for the latch auto-release timer.
+    // Runs on every hardware note-on regardless of latch state — cheap.
+    if IsNoteOn(m) then Latch_LastNoteOnTime = TimeSinceStartup() end
+
     // 1. LEARN MODE FOR NOTES
     if IsHardwareLearning then
         if IsNoteOn(m) then
