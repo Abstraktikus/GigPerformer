@@ -12789,7 +12789,10 @@ End
 
 // --- CALLBACKS: VELOCITY RANGE ---
 On WidgetValueChanged(val : Double) from BTN_Inject_NP_VelRange
-   if not IsUpdatingNP then InjectNPToggle(7, "p_VelRangeActive", val) end 
+   if not IsUpdatingNP then InjectNPToggle(7, "p_VelRangeActive", val) end
+End
+On WidgetValueChanged(val : Double) from BTN_Inject_NP_VelTamper
+   if not IsUpdatingNP then InjectNPToggle(11, "p_VelRangeFade", val) end
 End
 On WidgetValueChanged(val : Double) from BTN_Inject_NP_VelMin_Down
    if val > 0.5 then InjectNPStep(6, "p_MinVel", -1); SetWidgetValue(BTN_Inject_NP_VelMin_Down, 0.0) end
