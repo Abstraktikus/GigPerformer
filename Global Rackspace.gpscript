@@ -40,23 +40,23 @@ Var
    FILTER_DEFAULT_VAL : Double = 0.0941176 // Default GP MIDI Filter value (passthrough)
    MAX_LINKS : Integer = 512
    MAX_VSTS : Integer = 10
-   MAX_MACROS : Integer = 100
+   MAX_MACROS : Integer = 256
    
    // --- Global Default Macro Assignments (start indices for 16-element blocks) ---
-   DEF_LOOPER_CH_MacroIdx   : Integer Array = [34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
-   DEF_SOLO_SMART_MacroIdx  : Integer Array = [50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65]  
-   DEF_SOLO_STRICT_MacroIdx : Integer Array = [66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81]
-   DEF_USER_MUTE_MacroIdx   : Integer Array = [82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97] 
-   DEF_VELRANGE_MacroIdx    : Integer Array = [98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113]
-   DEF_ROOT_MacroIdx        : Integer Array = [114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129]
-   DEF_OCTAVER_MacroIdx     : Integer Array = [130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145]
-   DEF_HUMANIZE_MacroIdx    : Integer Array = [146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161]
-   DEF_QUANTIZE_MacroIdx    : Integer Array = [162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177]
-   DEF_SUSTAIN_MacroIdx     : Integer Array = [178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193]
+   DEF_LOOPER_CH_MacroIdx   : Integer Array = [50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65]
+   DEF_SOLO_SMART_MacroIdx  : Integer Array = [66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81]
+   DEF_SOLO_STRICT_MacroIdx : Integer Array = [82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97]
+   DEF_USER_MUTE_MacroIdx   : Integer Array = [98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113]
+   DEF_VELRANGE_MacroIdx    : Integer Array = [114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129]
+   DEF_ROOT_MacroIdx        : Integer Array = [130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145]
+   DEF_OCTAVER_MacroIdx     : Integer Array = [146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161]
+   DEF_HUMANIZE_MacroIdx    : Integer Array = [162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177]
+   DEF_QUANTIZE_MacroIdx    : Integer Array = [178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193]
+   DEF_SUSTAIN_MacroIdx     : Integer Array = [194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209]
    
    // --- DISPLAY & NAVIGATION ORDER (display order is configurable) ---
    MacroGroup_Names   : String Array  = ["Global Scope", "Hardware Sliders", "Looper", "Smart Solo", "Strict Solo", "User Mute", "Velocity Range", "Root/Chord", "Octaver", "Humanizer", "Scale Quantizer", "Auto Sustain"]
-   MacroGroup_Anchors : Integer Array = [-1,             0,                  34,       50,           66,            82,          98,               114,          130,       146,         162,               178]
+   MacroGroup_Anchors : Integer Array = [-1,             0,                  50,       66,           82,            98,          114,              130,          146,       162,         178,               194]
 
    // --- ENGINE DATA: RAM for macro assignment (active map) ---
    VELRANGE_MacroIdx, VELRANGE_CCIdx : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
