@@ -9990,71 +9990,48 @@ End
 Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : Integer)
     
     // --- 0: VOICE SELECTOR ---
-    if GlobalSystemMode == 0 then 
-        // ARRANGER JOYSTICK
-        if actionType == "Y_AXIS" then
-            ChangeVstScope(dir, -1)
-            ApplyVstFocusBypass() // Apply focus bypass immediately
-        elsif actionType == "X_AXIS" then
-            TriggerVstPresetChange(dir)
-            
-        // MINILAB 3
-        elsif actionType == "BUTTON" then
-            ChangeVstScope(dir, -1) // BUTTON = switch VST scope
-            ApplyVstFocusBypass() 
-        elsif actionType == "ENCODER" then
-            TriggerVstPresetChange(dir) // Wheel = cycle presets
+    if GlobalSystemMode == 0 then
+        if actionType == "Y_AXIS" or actionType == "BUTTON" then
+            if dir > 0 then FireSystemAction(SysActIdx("VST_SCOPE_UP"))
+            else FireSystemAction(SysActIdx("VST_SCOPE_DOWN")) end
+        elsif actionType == "X_AXIS" or actionType == "ENCODER" then
+            if dir > 0 then FireSystemAction(SysActIdx("VST_PRESET_UP"))
+            else FireSystemAction(SysActIdx("VST_PRESET_DOWN")) end
         end
-        
+
     // --- 1: LOOPER CONTROL ---
     elsif GlobalSystemMode == 1 then
-        if actionType == "Y_AXIS" then
-            CycleChannelScope(dir)           // Y-Up = select channel (1-16)
+        if actionType == "Y_AXIS" or actionType == "ENCODER" then
+            if dir > 0 then FireSystemAction(SysActIdx("LOOPER_CH_UP"))
+            else FireSystemAction(SysActIdx("LOOPER_CH_DOWN")) end
         elsif actionType == "X_AXIS" then
-            if dir == -1 then ClickWidget(BTN_Loop_Clear)   // X-Left full = clear channel
-            elsif dir == 1 then ClickWidget(BTN_Loop_Rec)   // X-Right = Record/Play/Overdub flow
-            end
-        elsif actionType == "ENCODER" then
-            CycleChannelScope(dir)           // Wheel = switch channels
+            if dir == -1 then FireSystemAction(SysActIdx("LOOPER_CLEAR"))
+            elsif dir == 1 then FireSystemAction(SysActIdx("LOOPER_REC")) end
         elsif actionType == "BUTTON" then
-            ClickWidget(BTN_Loop_Rec)        // Button = Rec/Play/Dub
+            FireSystemAction(SysActIdx("LOOPER_REC"))
         end
 
     // --- 2: CONTROLLER MAP ---
     elsif GlobalSystemMode == 2 then
         if actionType == "Y_AXIS" then
-            if dir == 1 then
-                // Y-Up = return to initial song-loaded controller map
-                if ExpectedMapName != "" and ExpectedMapName != "-" then
-                    LoadControllerMap(ExpectedMapName)
-                    HardwareSyncTimer = TimeSinceStartup() + 2000.0
-                    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> MAP: " + ExpectedMapName + " <<<", Local_IP, Local_PORT)
-                    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-                    MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
-                end
-            end
-        elsif actionType == "X_AXIS" then
-            PreviewActiveControllerMaps(dir) // X-Left/Right = browse active VST maps
-        elsif actionType == "ENCODER" then
-            PreviewActiveControllerMaps(dir) // Wheel = browse maps
+            if dir == 1 then FireSystemAction(SysActIdx("CTRLMAP_RESTORE")) end
+        elsif actionType == "X_AXIS" or actionType == "ENCODER" then
+            if dir > 0 then FireSystemAction(SysActIdx("CTRLMAP_NEXT"))
+            else FireSystemAction(SysActIdx("CTRLMAP_PREV")) end
         elsif actionType == "BUTTON" then
-            CycleCtrlMap(dir)                // Button = cycle all maps
+            FireSystemAction(SysActIdx("CTRLMAP_CYCLE"))
         end
 
     // --- 3: STRIP-CONTROL (Grid: Channel x Theme) ---
     elsif GlobalSystemMode == 3 then
-        if actionType == "Y_AXIS" then
-            CycleStripChannel(dir)           // Y-Up/Down = select channel (like Looper)
+        if actionType == "Y_AXIS" or actionType == "ENCODER" then
+            if dir > 0 then FireSystemAction(SysActIdx("STRIP_CH_UP"))
+            else FireSystemAction(SysActIdx("STRIP_CH_DOWN")) end
         elsif actionType == "X_AXIS" then
-            if dir == -1 then
-                CycleStripTheme(-1)          // X-Left = prev theme (Octaver -> Humanizer -> ...)
-            elsif dir == 1 then
-                ToggleStripMacro()           // X-Right = toggle macro at grid position
-            end
-        elsif actionType == "ENCODER" then
-            CycleStripChannel(dir)           // Wheel = switch channels (like Looper)
+            if dir == -1 then FireSystemAction(SysActIdx("STRIP_THEME_PREV"))
+            elsif dir == 1 then FireSystemAction(SysActIdx("STRIP_MACRO_TOGGLE")) end
         elsif actionType == "BUTTON" then
-            ToggleStripMacro()               // Button = toggle macro at grid position
+            FireSystemAction(SysActIdx("STRIP_MACRO_TOGGLE"))
         end
 
     // --- 4: TIMELINE (PLAY/REC with sub-mode) ---
@@ -10077,15 +10054,16 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
 
         elsif actionType == "X_AXIS" or actionType == "ENCODER" then
             if TimelineSubMode == 0 then
-                // PLAY: Part Jump Preview
-                PartJumpPreview(dir)
+                // PLAY: Part Jump Preview — virtualized
+                if dir > 0 then FireSystemAction(SysActIdx("TL_PARTJUMP_NEXT"))
+                else FireSystemAction(SysActIdx("TL_PARTJUMP_PREV")) end
             else
-                // REC mode
+                // REC mode — meta-controls stay direct (not virtualized)
                 if dir == 1 then
-                    // Right: Execute REC_SONGPART
-                    ExecuteRecSongpart()
+                    // Right: Execute REC_SONGPART — virtualized
+                    FireSystemAction(SysActIdx("TL_REC_SONGPART"))
                 elsif dir == -1 then
-                    // Left: Cycle Replace -> Overdub -> Discard
+                    // Left: Cycle Replace -> Overdub -> Discard (meta, stays direct)
                     TimelineRecState = TimelineRecState + 1
                     if TimelineRecState > 2 then TimelineRecState = 0 end
 
