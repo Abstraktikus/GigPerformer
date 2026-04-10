@@ -58,6 +58,46 @@ Var
    MacroGroup_Names   : String Array  = ["Global Scope", "Hardware Sliders", "Looper", "Smart Solo", "Strict Solo", "User Mute", "Velocity Range", "Root/Chord", "Octaver", "Humanizer", "Scale Quantizer", "Auto Sustain"]
    MacroGroup_Anchors : Integer Array = [-1,             0,                  50,       66,           82,            98,          114,              130,          146,       162,         178,               194]
 
+   // --- SYSTEM ACTIONS (Virtual Role Dispatch) ---
+   // Central registry: add new system actions here, then add a case to FireSystemAction().
+   // These are ROLES, not reserved macro slots. They live in the user's 0-49 macro space
+   // and are assigned via ControllerMaps.txt (e.g. "Macro5 = SYSACT_VST_SCOPE_UP").
+   // Excluded from Timeline Record/Playback by the Isolation Rule.
+   SysAction_Names : String Array = [
+      "VST_SCOPE_UP",       "VST_SCOPE_DOWN",
+      "VST_PRESET_UP",      "VST_PRESET_DOWN",
+      "LOOPER_CH_UP",       "LOOPER_CH_DOWN",
+      "LOOPER_REC",         "LOOPER_CLEAR",
+      "CTRLMAP_PREV",       "CTRLMAP_NEXT",
+      "CTRLMAP_RESTORE",    "CTRLMAP_CYCLE",
+      "STRIP_CH_UP",        "STRIP_CH_DOWN",
+      "STRIP_THEME_PREV",   "STRIP_THEME_NEXT",
+      "STRIP_MACRO_TOGGLE",
+      "TL_PARTJUMP_NEXT",   "TL_PARTJUMP_PREV",
+      "TL_REC_SONGPART"
+   ]
+
+   // Human-readable labels for LBL_ControllerInfo display
+   SysAction_Labels : String Array = [
+      "VST Scope [Next]",        "VST Scope [Prev]",
+      "VST Preset [Next]",       "VST Preset [Prev]",
+      "Looper Channel [Next]",   "Looper Channel [Prev]",
+      "Looper Record",           "Looper Clear",
+      "Ctrl Map [Prev Active]",  "Ctrl Map [Next Active]",
+      "Ctrl Map Restore Initial","Ctrl Map Cycle",
+      "Strip Channel [Next]",    "Strip Channel [Prev]",
+      "Strip Theme [Prev]",      "Strip Theme [Next]",
+      "Strip Macro Toggle",
+      "Timeline Part Jump [Next]","Timeline Part Jump [Prev]",
+      "Timeline Rec Songpart"
+   ]
+
+   // Reverse lookup tables: index is the macro slot / CC number, value is the
+   // SysAction index (-1 = unbound). Sized by MAX_MACROS and 128 — NOT by the
+   // action count — so adding new actions never requires resizing these.
+   SysAction_ByMacro : Integer Array
+   SysAction_ByCC    : Integer Array
+
    // --- ENGINE DATA: RAM for macro assignment (active map) ---
    VELRANGE_MacroIdx, VELRANGE_CCIdx : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
    ROOT_MacroIdx,     ROOT_CCIdx     : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
