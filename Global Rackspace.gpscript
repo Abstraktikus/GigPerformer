@@ -5644,8 +5644,7 @@ Function LoadControllerMap(mapName : String)
    var validMap : Boolean
    var startPos, endPos : Integer
    var remainingContent, sectionContent : String
-   var chNum : Integer
-   
+
    // Temp vars for CC logic
    var isCC : Boolean
    var finalID : Integer
@@ -5779,60 +5778,7 @@ Function LoadControllerMap(mapName : String)
                                    if isSrcCC then SYSTEM_TOGGLE_CCIdx = sliderIdx else SYSTEM_TOGGLE_MacroIdx = sliderIdx end
                                elsif valuePart == "SCRUBBER" then
                                    if isSrcCC then SCRUB_CCIdx = sliderIdx else SCRUB_MacroIdx = sliderIdx end
-                                   
-                               // --- GROUP MACROS ---
-                                elsif IndexOfSubstring(valuePart, "LOOPER_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "LOOPER_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then LOOPER_CH_CCIdx[chNum] = sliderIdx else LOOPER_CH_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "SOLO_STRICT_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "SOLO_STRICT_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then SOLO_STRICT_CCIdx[chNum] = sliderIdx else SOLO_STRICT_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "SOLO_SMART_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "SOLO_SMART_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then SOLO_SMART_CCIdx[chNum] = sliderIdx else SOLO_SMART_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "USER_MUTE_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "USER_MUTE_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then USER_MUTE_CCIdx[chNum] = sliderIdx else USER_MUTE_MacroIdx[chNum] = sliderIdx end
-                                    end
 
-                                elsif IndexOfSubstring(valuePart, "VELRANGE_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "VELRANGE_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then VELRANGE_CCIdx[chNum] = sliderIdx else VELRANGE_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "ROOT_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "ROOT_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then ROOT_CCIdx[chNum] = sliderIdx else ROOT_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "OCTAVER_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "OCTAVER_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then OCTAVER_CCIdx[chNum] = sliderIdx else OCTAVER_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "HUMANIZE_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "HUMANIZE_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then HUMANIZE_CCIdx[chNum] = sliderIdx else HUMANIZE_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "QUANTIZE_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "QUANTIZE_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then QUANTIZE_CCIdx[chNum] = sliderIdx else QUANTIZE_MacroIdx[chNum] = sliderIdx end
-                                    end
-                                elsif IndexOfSubstring(valuePart, "SUSTAIN_CH", false) == 0 then
-                                    chNum = StringToInt(ReplaceString(valuePart, "SUSTAIN_CH", "", false)) - 1
-                                    if chNum >= 0 and chNum < 16 then
-                                        if isSrcCC then SUSTAIN_CCIdx[chNum] = sliderIdx else SUSTAIN_MacroIdx[chNum] = sliderIdx end
-                                    end
-                               
                                // --- NORMAL LINKS ---
                                else
                                    groupParts = SplitString(valuePart, "|")
