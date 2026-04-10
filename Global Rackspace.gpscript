@@ -9912,6 +9912,32 @@ Function ToggleStripMacro()
    end
 End
 
+// ---------------------------------------------------------
+// SYSTEM ACTION HELPERS
+// ---------------------------------------------------------
+Function SysActIdx(name : String) Returns Integer
+   var i, res : Integer
+   res = -1
+   For i = 0; i < Size(SysAction_Names); i = i + 1 Do
+      if SysAction_Names[i] == name then res = i end
+   End
+   result = res
+End
+
+Function ResetSysActionBindings()
+   var i : Integer
+   For i = 0; i < MAX_MACROS; i = i + 1 Do SysAction_ByMacro[i] = -1 End
+   For i = 0; i < 128; i = i + 1 Do SysAction_ByCC[i] = -1 End
+End
+
+Function IsSystemActionMacro(paramIdx : Integer) Returns Boolean
+   var res : Boolean = false
+   if paramIdx >= 0 and paramIdx < MAX_MACROS then
+      res = SysAction_ByMacro[paramIdx] > -1
+   end
+   result = res
+End
+
 Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : Integer)
     
     // --- 0: VOICE SELECTOR ---
@@ -11859,7 +11885,7 @@ End
 
 
 Initialization
-   var devCount, i, i_init, finishedIdx, ch, p, vIdx, vCount, rIdx, idxInit, d : Integer;
+   var devCount, i, i_init, finishedIdx, ch, p, vIdx, vCount, rIdx, idxInit, d, sysActInitIdx : Integer;
    var currentName, bootSong, finishedManual, finishedName, remainingQueue, rName, queueStr : String
    var memStr : String = GetWidgetLabel(MEM_ReplaceState)
    var jobs, parts, memParts, routeParts : String Array
@@ -12103,6 +12129,16 @@ Initialization
    
    OSC_SendStringSpecific("/UI/SetMacroFeedback", " ", Local_IP, Local_PORT)
    if DebugMode then Trace("SYS: Initialization complete. OSC Display cleared.") end
+
+   // --- SYSTEM ACTION REVERSE-LOOKUP ARRAYS ---
+   // Must populate explicitly: GPScript Integer Array default is 0, not -1,
+   // and we use -1 as the "unbound" sentinel.
+   For sysActInitIdx = 0; sysActInitIdx < MAX_MACROS; sysActInitIdx = sysActInitIdx + 1 Do
+      SysAction_ByMacro <-- -1
+   End
+   For sysActInitIdx = 0; sysActInitIdx < 128; sysActInitIdx = sysActInitIdx + 1 Do
+      SysAction_ByCC <-- -1
+   End
 End
 
 
