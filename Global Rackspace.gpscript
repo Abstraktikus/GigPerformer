@@ -234,7 +234,8 @@ Var
    BTN_Inject_NP_VelRange                                                        : Widget
    BTN_Inject_NP_VelMin_Down, LBL_Inject_NP_VelMin, BTN_Inject_NP_VelMin_Up      : Widget
    BTN_Inject_NP_VelMax_Down, LBL_Inject_NP_VelMax, BTN_Inject_NP_VelMax_Up      : Widget
-   BTN_Inject_NP_VelMinLearn, BTN_Inject_NP_VelMaxLearn                          : Widget 
+   BTN_Inject_NP_VelMinLearn, BTN_Inject_NP_VelMaxLearn                          : Widget
+   BTN_Inject_NP_VelTamper                                                       : Widget
    BTN_Inject_NP_Humanize                                                        : Widget
    BTN_Inject_NP_HumVel_Down, LBL_Inject_NP_HumVel, BTN_Inject_NP_HumVel_Up      : Widget
    BTN_Inject_NP_HumTime_Down, LBL_Inject_NP_HumTime, BTN_Inject_NP_HumTime_Up   : Widget
@@ -409,6 +410,7 @@ Var
    Mem_NP_VelRangeActive  : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_NP_MinVel          : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_NP_MaxVel          : Integer Array = [127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127]
+   Mem_NP_VelRangeFade    : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_NP_HumanizeActive  : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_NP_HumVel          : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_NP_HumTime         : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
