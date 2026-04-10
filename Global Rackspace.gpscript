@@ -9707,8 +9707,15 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
        
    // 2. EXECUTE MODE
    else
+       // --- SYSTEM ACTION CC DISPATCH (hardware-CC path) ---
+       // Reverse-lookup is O(1); Isolation Rule guarantees exclusivity.
+       // Only fire on press edge (val > 0.5, matches surrounding CC dispatch style).
+       if cc >= 0 and cc < 128 and SysAction_ByCC[cc] > -1 then
+           if val > 0.5 then FireSystemAction(SysAction_ByCC[cc]) end
+       end
+
        // --- A: GIBT ES EINEN DIREKTEN CC-LINK (Hard-Coded)? ---
-       
+
        // ---> HIER STECKT DEIN CROSSFADER! <---
        if CF_CCIdx == cc then
            SetWidgetValue(SLD_Crossfader, val)
@@ -13231,9 +13238,19 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
            end
        end 
        
+       // SYSTEM ACTION DISPATCH (hardware-macro path)
+       // Reverse-lookup is O(1); Isolation Rule guarantees exclusivity.
+       if newVal > 0.5 and paramIdx >= 0 and paramIdx < MAX_MACROS then
+           if SysAction_ByMacro[paramIdx] > -1 then
+               FireSystemAction(SysAction_ByMacro[paramIdx])
+           end
+       end
+
        // TIMELINE RECORDING FOR MACROS (SWITCHES ONLY)
+       // System-action macros are excluded by design — their behavior should not
+       // be recorded/replayed through the Timeline (see Isolation Rule).
        if (RecordMode > 0 or TimelineRecActive) and IsPerformanceActive then
-           if newVal == 1.0 then
+           if newVal == 1.0 and not IsSystemActionMacro(paramIdx) then
                RecordTimelineEvent("Macro", paramIdx)
            end
        end
