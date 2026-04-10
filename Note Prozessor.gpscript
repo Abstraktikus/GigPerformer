@@ -655,10 +655,11 @@ On MidiEvent(m : MidiMessage)
           // TÜRSTEHER 2: KEYBOARD SPLITT (Physische Tasten)
           if rawNote >= Round(p_SplitMin) and rawNote <= Round(p_SplitMax) then
              
-             // TÜRSTEHER 3: VELOCITY RANGE (Neu)
-             if Round(p_VelRangeActive) == 1 and (vel < Round(p_MinVel) or vel > Round(p_MaxVel)) then
-                 // Out of Range -> Ignorieren!
-             else
+             // TÜRSTEHER 3: VELOCITY RANGE (Neu) — now with Tamper (edge-fade)
+             if Round(p_VelRangeActive) == 1 then
+                 vel = GetVelRangeVelocity(vel)  // returns 0 outside range, scaled inside if fade active
+             end
+             if vel > 0 then
                  // PHASE 1: VELOCITY FADE
                  newVel = GetScaledVelocity(rawNote, vel) 
                  
