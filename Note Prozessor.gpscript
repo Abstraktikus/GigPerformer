@@ -173,7 +173,7 @@ On ParameterValueChanged matching p_FactoryReset
       p_SplitMin = 0; p_SplitMax = 127; p_Transpose = 0
       p_PassSustain = 0; p_PassPitchBend = 0; p_PassModWheel = 0; p_PassVolume = 0; p_PassExpression = 0; p_PassAfterTouch = 1; p_PassPC = 0
       p_MinNote = 0; p_MaxNote = 127; p_FadeIn = 0; p_FadeOut = 0
-      p_ChordMode = 0; p_LatchMode = 0; p_Engine = 0; p_MuteOriginal = 0; p_MinKeys = 1; p_OctaveOffset = 0 
+      p_ChordMode = 0; p_LatchMode = 0; p_LatchRelease = 0; p_Engine = 0; p_MuteOriginal = 0; p_MinKeys = 1; p_OctaveOffset = 0
       p_AutoSustain = 0; p_MonoLowest = 0; p_MonoHighest = 0
       p_SoloMute = 0; p_UserMute = 0
       
