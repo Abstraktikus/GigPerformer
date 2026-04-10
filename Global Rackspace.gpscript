@@ -5690,6 +5690,10 @@ Function LoadControllerMap(mapName : String)
    var finalID : Integer
    var isSrcCC : Boolean
 
+   // SYSACT parser temp vars
+   var actionName : String
+   var sysActParseIdx : Integer = 0
+
    Trace("LoadMap: Requesting '" + mapName + "'")
 
    // ---------------------------------------------------------
@@ -5726,7 +5730,10 @@ Function LoadControllerMap(mapName : String)
        QUANTIZE_MacroIdx[k] = DEF_QUANTIZE_MacroIdx[k]; QUANTIZE_CCIdx[k] = -1
        SUSTAIN_MacroIdx[k]  = DEF_SUSTAIN_MacroIdx[k];  SUSTAIN_CCIdx[k] = -1
    End
-   
+
+   // --- Reset SysAction reverse-lookup tables for this map-section load ---
+   ResetSysActionBindings()
+
    CurrentCtrlMapName = mapName
    LBL_CtrlConfig.SetWidgetLabel(mapName)
    CurrentEditScope = -1
@@ -5818,6 +5825,21 @@ Function LoadControllerMap(mapName : String)
                                    if isSrcCC then SYSTEM_TOGGLE_CCIdx = sliderIdx else SYSTEM_TOGGLE_MacroIdx = sliderIdx end
                                elsif valuePart == "SCRUBBER" then
                                    if isSrcCC then SCRUB_CCIdx = sliderIdx else SCRUB_MacroIdx = sliderIdx end
+
+                               // --- SYSTEM ACTION (Isolation Rule: single-entry valuePart only) ---
+                               elsif IndexOfSubstring(valuePart, "SYSACT_", false) == 0 then
+                                   if IndexOfSubstring(valuePart, "|", false) == -1 then
+                                       actionName = TrimString(ReplaceString(valuePart, "SYSACT_", "", false))
+                                       sysActParseIdx = SysActIdx(actionName)
+                                       if sysActParseIdx > -1 then
+                                           if isSrcCC then SysAction_ByCC[sliderIdx] = sysActParseIdx
+                                           else SysAction_ByMacro[sliderIdx] = sysActParseIdx end
+                                       elsif DebugMode then
+                                           Trace("SYSACT: Unknown action name '" + actionName + "' on slot " + sliderIdx)
+                                       end
+                                   elsif DebugMode then
+                                       Trace("SYSACT: Multi-assigned valuePart - SYSACT role ignored on slot " + sliderIdx)
+                                   end
 
                                // --- NORMAL LINKS ---
                                else
