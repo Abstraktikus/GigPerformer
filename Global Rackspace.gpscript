@@ -2889,7 +2889,7 @@ Function UpdateControllerInfoDisplay()
        isCC = (typeLoop == 1)
        
        // Search index 0 to 127 (covers Macros and CCs)
-       For s = 0; s < 128; s = s + 1 Do
+       For s = 0; s < MAX_MACROS; s = s + 1 Do
            
            // Build hardware name upfront (e.g. "Macro 16" or "CC 4")
            if isCC then hwStr = GetStandardCCName(s) + " [CC" + s + "]"
