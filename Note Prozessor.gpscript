@@ -289,6 +289,47 @@ Function GetOctRangeVelocity(cloneNote : Integer, vel : Integer) Returns Integer
    result = res
 End
 
+
+// ---------------------------------------------------------
+// VELOCITY RANGE: Velocity Gating & Edge Fade (Tamper)
+// ---------------------------------------------------------
+// Mirrors GetOctRangeVelocity but operates on incoming velocity (not clone-note
+// position). Outside [p_MinVel, p_MaxVel]: hard-gated to 0. Inside: when
+// p_VelRangeFade is active and span >= 20, velocities within VelTamperPadPct
+// (10%) of each edge are linearly scaled down with a floor of 1.
+Function GetVelRangeVelocity(vel : Integer) Returns Integer
+   var minVel, maxVel, span, pad, dist, distHigh : Integer
+   var factor : Double = 1.0
+   var res : Integer = vel
+
+   minVel = Round(p_MinVel)
+   maxVel = Round(p_MaxVel)
+   span = maxVel - minVel
+
+   // Gate: outside range -> suppress (hard gate, unchanged)
+   if vel < minVel or vel > maxVel then
+      res = 0
+   else
+      // Tamper: only active when flag set AND span is wide enough for a ramp
+      if Round(p_VelRangeFade) == 1 and span >= 20 then
+         pad = Round(IntToFloat(span) * VelTamperPadPct)
+         if pad < 1 then pad = 1 end
+
+         dist = vel - minVel
+         distHigh = maxVel - vel
+         if distHigh < dist then dist = distHigh end
+
+         if dist < pad then
+            factor = (IntToFloat(dist) + 1.0) / (IntToFloat(pad) + 1.0)
+            res = Round(IntToFloat(vel) * factor)
+            if res < 1 then res = 1 end
+         end
+      end
+   end
+
+   result = res
+End
+
 // ---------------------------------------------------------
 // THE OCTAVER ENGINE (The Note Multiplier & Timing Emitter)
 // ---------------------------------------------------------
