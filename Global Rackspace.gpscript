@@ -13940,6 +13940,9 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
    if beat == 1 and subbeat == 0 then
        if DebugMode then TraceTimeDomains() end
    end
+
+   // Latch auto-release check (once per beat). No-op if disarmed.
+   CheckLatchTimeout()
 End
 
 On SysexEvent(m : SysexMessage) From DeviceIn_0
