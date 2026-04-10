@@ -41,7 +41,11 @@ Var
    MAX_LINKS : Integer = 512
    MAX_VSTS : Integer = 10
    MAX_MACROS : Integer = 256
-   
+
+   // --- Latch auto-release tunables (see docs/superpowers/specs/2026-04-10-latch-auto-release-design.md) ---
+   LatchTimeoutBeats       : Double = 4.0      // Auto-release latched chord root after N beats of silence
+   LatchTimeoutFallbackMs  : Double = 4000.0   // Used when GetBPM() <= 1.0
+
    // --- Global Default Macro Assignments (start indices for 16-element blocks) ---
    DEF_LOOPER_CH_MacroIdx   : Integer Array = [50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65]
    DEF_SOLO_SMART_MacroIdx  : Integer Array = [66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81]
