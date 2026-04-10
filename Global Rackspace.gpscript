@@ -3573,9 +3573,7 @@ End
 // --------------------------------------------------------------------
 
 Function ExportSmartConfig()
-   var s, lnk, chIdx, typeLoop, pID : Integer
-   var looperChFound, strictSoloChFound, smartSoloChFound, userMuteChFound : Integer
-   var velRangeChFound, rootChFound, octChFound, humChFound, quantChFound, susChFound : Integer
+   var s, lnk, typeLoop, pID : Integer
    var line, newBlock, realName, valStr, finalContent, currentLine : String
    var linkFound, isCC, inTargetSection, replaced : Boolean
    var lines : String Array
@@ -3620,84 +3618,39 @@ Function ExportSmartConfig()
                    newBlock = newBlock + line + " = SYSTEM_TOGGLE" + NEW_LINE
                
                else
-                   // --- GRUPPEN-MACROS (CHANNEL BASED) ---
-                   looperChFound = -1; strictSoloChFound = -1; smartSoloChFound = -1; userMuteChFound = -1
-                   velRangeChFound = -1; rootChFound = -1; octChFound = -1; humChFound = -1; quantChFound = -1; susChFound = -1
-                   
-                   For chIdx = 0; chIdx < 16; chIdx = chIdx + 1 Do
-                       if (not isCC and s == LOOPER_CH_MacroIdx[chIdx]) or (isCC and s == LOOPER_CH_CCIdx[chIdx]) then looperChFound = chIdx end
-                       if (not isCC and s == SOLO_STRICT_MacroIdx[chIdx]) or (isCC and s == SOLO_STRICT_CCIdx[chIdx]) then strictSoloChFound = chIdx end
-                       if (not isCC and s == SOLO_SMART_MacroIdx[chIdx]) or (isCC and s == SOLO_SMART_CCIdx[chIdx]) then smartSoloChFound = chIdx end
-                       if (not isCC and s == USER_MUTE_MacroIdx[chIdx]) or (isCC and s == USER_MUTE_CCIdx[chIdx]) then userMuteChFound = chIdx end
-                       
-                       // V7.4 Features
-                       if (not isCC and s == VELRANGE_MacroIdx[chIdx]) or (isCC and s == VELRANGE_CCIdx[chIdx]) then velRangeChFound = chIdx end
-                       if (not isCC and s == ROOT_MacroIdx[chIdx]) or (isCC and s == ROOT_CCIdx[chIdx]) then rootChFound = chIdx end
-                       if (not isCC and s == OCTAVER_MacroIdx[chIdx]) or (isCC and s == OCTAVER_CCIdx[chIdx]) then octChFound = chIdx end
-                       if (not isCC and s == HUMANIZE_MacroIdx[chIdx]) or (isCC and s == HUMANIZE_CCIdx[chIdx]) then humChFound = chIdx end
-                       if (not isCC and s == QUANTIZE_MacroIdx[chIdx]) or (isCC and s == QUANTIZE_CCIdx[chIdx]) then quantChFound = chIdx end
-                       if (not isCC and s == SUSTAIN_MacroIdx[chIdx]) or (isCC and s == SUSTAIN_CCIdx[chIdx]) then susChFound = chIdx end
-                   End
-                   
-                   // Evaluate matches (only save if it is NOT a default macro, or if it is a CC)
-                   if looperChFound > -1 then
-                       if isCC or s != DEF_LOOPER_CH_MacroIdx[looperChFound] then newBlock = newBlock + line + " = LOOPER_CH" + (looperChFound + 1) + NEW_LINE end
-                   elsif strictSoloChFound > -1 then
-                       if isCC or s != DEF_SOLO_STRICT_MacroIdx[strictSoloChFound] then newBlock = newBlock + line + " = SOLO_STRICT_CH" + (strictSoloChFound + 1) + NEW_LINE end
-                   elsif smartSoloChFound > -1 then
-                       if isCC or s != DEF_SOLO_SMART_MacroIdx[smartSoloChFound] then newBlock = newBlock + line + " = SOLO_SMART_CH" + (smartSoloChFound + 1) + NEW_LINE end
-                   elsif userMuteChFound > -1 then
-                       if isCC or s != DEF_USER_MUTE_MacroIdx[userMuteChFound] then newBlock = newBlock + line + " = USER_MUTE_CH" + (userMuteChFound + 1) + NEW_LINE end
-                   
-                   // V7.4 Features evaluate
-                   elsif velRangeChFound > -1 then
-                       if isCC or s != DEF_VELRANGE_MacroIdx[velRangeChFound] then newBlock = newBlock + line + " = VELRANGE_CH" + (velRangeChFound + 1) + NEW_LINE end
-                   elsif rootChFound > -1 then
-                       if isCC or s != DEF_ROOT_MacroIdx[rootChFound] then newBlock = newBlock + line + " = ROOT_CH" + (rootChFound + 1) + NEW_LINE end
-                   elsif octChFound > -1 then
-                       if isCC or s != DEF_OCTAVER_MacroIdx[octChFound] then newBlock = newBlock + line + " = OCTAVER_CH" + (octChFound + 1) + NEW_LINE end
-                   elsif humChFound > -1 then
-                       if isCC or s != DEF_HUMANIZE_MacroIdx[humChFound] then newBlock = newBlock + line + " = HUMANIZE_CH" + (humChFound + 1) + NEW_LINE end
-                   elsif quantChFound > -1 then
-                       if isCC or s != DEF_QUANTIZE_MacroIdx[quantChFound] then newBlock = newBlock + line + " = QUANTIZE_CH" + (quantChFound + 1) + NEW_LINE end
-                   elsif susChFound > -1 then
-                       if isCC or s != DEF_SUSTAIN_MacroIdx[susChFound] then newBlock = newBlock + line + " = SUSTAIN_CH" + (susChFound + 1) + NEW_LINE end
+                   // --- CHECK NORMAL PARAMETER LINKS ---
+                   line = line + " = "
+                   For lnk = 0; lnk < Link_Count; lnk = lnk + 1 Do
+                       if Link_Active[lnk] and Link_SourceIdx[lnk] == s and Link_SourceIsCC[lnk] == isCC then
+                           if linkFound then line = line + " | " end
 
-                   else
-                       // --- CHECK NORMAL PARAMETER LINKS ---
-                       line = line + " = "
-                       For lnk = 0; lnk < Link_Count; lnk = lnk + 1 Do
-                           if Link_Active[lnk] and Link_SourceIdx[lnk] == s and Link_SourceIsCC[lnk] == isCC then
-                               if linkFound then line = line + " | " end 
-                               
-                               pID = Link_TargetParam[lnk]
-                               realName = ""
-                               
-                               // Determine name
-                               if Link_IsCC[lnk] then 
-                                   if Length(Link_ExpectedName[lnk]) > 0 then realName = Link_ExpectedName[lnk] else realName = "CC " + pID end
-                               else
-                                   if Link_Type[lnk] == 0 then realName = GetParameterName(BLK_VST[Link_BlockIdx[lnk]], pID)
-                                   elsif Link_Type[lnk] == 1 then realName = GetParameterName(BLK_NoteProcessor[Link_BlockIdx[lnk]], pID)
-                                   elsif Link_Type[lnk] == 2 then realName = GetParameterName(AudioMixer, pID)
-                                   end
+                           pID = Link_TargetParam[lnk]
+                           realName = ""
+
+                           // Determine name
+                           if Link_IsCC[lnk] then
+                               if Length(Link_ExpectedName[lnk]) > 0 then realName = Link_ExpectedName[lnk] else realName = "CC " + pID end
+                           else
+                               if Link_Type[lnk] == 0 then realName = GetParameterName(BLK_VST[Link_BlockIdx[lnk]], pID)
+                               elsif Link_Type[lnk] == 1 then realName = GetParameterName(BLK_NoteProcessor[Link_BlockIdx[lnk]], pID)
+                               elsif Link_Type[lnk] == 2 then realName = GetParameterName(AudioMixer, pID)
                                end
-                               
-                               // Assemble line (incl. Min/Max)
-                               line = line + Link_BlockName[lnk] + ":" 
-                               if Link_IsCC[lnk] then line = line + "CC" end 
-                               line = line + pID
-                               if realName != "" then line = line + ":" + realName else line = line + ":" end
-                               
-                               valStr = " {" + Round(Link_MinVal[lnk]*1000)/1000.0 + ", " + Round(Link_MaxVal[lnk]*1000)/1000.0 + "}"
-                               line = line + valStr
-                               
-                               Link_ExpectedName[lnk] = realName 
-                               linkFound = true
                            end
-                       End
-                       if linkFound then newBlock = newBlock + line + NEW_LINE end
-                   end
+
+                           // Assemble line (incl. Min/Max)
+                           line = line + Link_BlockName[lnk] + ":"
+                           if Link_IsCC[lnk] then line = line + "CC" end
+                           line = line + pID
+                           if realName != "" then line = line + ":" + realName else line = line + ":" end
+
+                           valStr = " {" + Round(Link_MinVal[lnk]*1000)/1000.0 + ", " + Round(Link_MaxVal[lnk]*1000)/1000.0 + "}"
+                           line = line + valStr
+
+                           Link_ExpectedName[lnk] = realName
+                           linkFound = true
+                       end
+                   End
+                   if linkFound then newBlock = newBlock + line + NEW_LINE end
                end
            End
        End
