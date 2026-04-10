@@ -2868,17 +2868,18 @@ Function UpdateControllerInfoDisplay()
    End
    
    // 2. Where are the groups in the current sort order?
+   // Anchor values MUST match MacroGroup_Anchors at :59 exactly.
    For g = 0; g < Grp_Count; g = g + 1 Do
-       if MacroGroup_Anchors[g] == 82  then idxLooper = g end
-       if MacroGroup_Anchors[g] == 34  then idxSmart = g end
-       if MacroGroup_Anchors[g] == 50  then idxStrict = g end
-       if MacroGroup_Anchors[g] == 66  then idxMute = g end
-       if MacroGroup_Anchors[g] == 98  then idxVel = g end
-       if MacroGroup_Anchors[g] == 114 then idxRoot = g end
-       if MacroGroup_Anchors[g] == 130 then idxOct = g end
-       if MacroGroup_Anchors[g] == 146 then idxHum = g end
-       if MacroGroup_Anchors[g] == 162 then idxQuant = g end
-       if MacroGroup_Anchors[g] == 178 then idxSus = g end
+       if MacroGroup_Anchors[g] == 50  then idxLooper = g end
+       if MacroGroup_Anchors[g] == 66  then idxSmart = g end
+       if MacroGroup_Anchors[g] == 82  then idxStrict = g end
+       if MacroGroup_Anchors[g] == 98  then idxMute = g end
+       if MacroGroup_Anchors[g] == 114 then idxVel = g end
+       if MacroGroup_Anchors[g] == 130 then idxRoot = g end
+       if MacroGroup_Anchors[g] == 146 then idxOct = g end
+       if MacroGroup_Anchors[g] == 162 then idxHum = g end
+       if MacroGroup_Anchors[g] == 178 then idxQuant = g end
+       if MacroGroup_Anchors[g] == 194 then idxSus = g end
    End
    
    CtrlInfo_Lines = [] 
