@@ -63,6 +63,11 @@ Var
    p_VelRangeActive  : Parameter 0 .. 1 = 0
    p_MinVel          : Parameter 0 .. 127 = 0
    p_MaxVel          : Parameter 0 .. 127 = 127
+   p_VelRangeFade    : Parameter 0 .. 1 = 0   // Edge-fade tamper toggle
+
+   // User-tunable pad percentage for Vel Tamper edge-fade (each side of range).
+   // Kept out of the UI (user would not adjust live). Edit this value to retune.
+   VelTamperPadPct   : Double = 0.10
 
    // --- 10. HUMANIZER (NEW) ---
    p_HumanizeActive  : Parameter 0 .. 1 = 0
