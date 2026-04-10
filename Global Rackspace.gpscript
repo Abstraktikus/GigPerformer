@@ -13728,6 +13728,42 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
     end
 End
 
+// ---------------------------------------------------------
+// LATCH AUTO-RELEASE (4-beat timeout + ms fallback)
+// Called once per beat from On BeatChanged. Fires p_LatchRelease on every
+// channel currently in Chord+Latch mode when no hardware note-on has been
+// seen for LatchTimeoutBeats at the current BPM. Disarms itself after
+// firing so subsequent beats are no-ops until the next note-on.
+// ---------------------------------------------------------
+Function CheckLatchTimeout()
+   var currentBpm, msPerBeat, timeoutMs, idleMs : Double = 0.0
+   var i, idx : Integer
+
+   if Latch_LastNoteOnTime <= 0.0 then
+       // Disarmed — nothing to check until next note-on
+   else
+       currentBpm = GetBPM()
+       if currentBpm > 1.0 then
+           msPerBeat = 60000.0 / currentBpm
+           timeoutMs = msPerBeat * LatchTimeoutBeats
+       else
+           timeoutMs = LatchTimeoutFallbackMs
+       end
+
+       idleMs = TimeSinceStartup() - Latch_LastNoteOnTime
+       if idleMs >= timeoutMs then
+           For i = 0; i < 16; i = i + 1 Do
+               if Mem_NP_ChordMode[i] == 1 and Mem_NP_LatchMode[i] == 1 then
+                   idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_LatchRelease")
+                   if idx > -1 then SetParameter(BLK_NoteProcessor[i], idx, 1.0) end
+               end
+           End
+           Latch_LastNoteOnTime = 0.0   // Disarm until next note-on
+           if DebugMode then Trace("LATCH: auto-release fired after " + Round(idleMs) + "ms idle") end
+       end
+   end
+End
+
 On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
    var e, ch, beatsPerBar : Integer
    var syncFired : Boolean = false
