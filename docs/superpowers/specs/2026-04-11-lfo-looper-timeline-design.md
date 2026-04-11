@@ -486,42 +486,45 @@ All existing `ExecuteSmartBypass()` call sites are preserved:
   Branch → minimal running state.
 - Reset clears `Mem_ManualVSTBypass` → Default Branch on the next tick.
 
-### 4.5 Open question — `BTN_Inject_Bypass_*` button semantics
+### 4.5 `BTN_Inject_Bypass_*` semantic — flipped to "VST is active"
 
-The current `HandleInjectBypassClick` writes `Mem_ManualVSTBypass[i] =
-true` when a button goes ON, meaning a lit button represents "I am
-forcing this VST off" (shown in the channel analysis as `[MAN OFF]`).
-Under the new Default Branch this creates a UX dead end: if
+The historic semantic of `BTN_Inject_Bypass_*` was "I am forcing this
+VST off" (button lit = `Mem_ManualVSTBypass[i] = true`, label
+`[MAN OFF]`). That does not compose with the new Default Branch: if
 `HumanRoutingMap[ch] = "5,6"` and the Default Branch wakes only VST 5,
-the user has no way to activate VST 6 from the Inject panel — clicking
+the user would have no way to activate VST 6 — clicking
 `BTN_Inject_Bypass_2` would force VST 6 off, which it already is.
 
-Two candidate resolutions:
+**Decision: flip the semantic.** From this spec on, the button means
+"VST is active":
 
-1. **Flip the button semantic to "VST is active"**. Lit button = VST
-   active, dark button = VST bypassed. The Default Branch would paint
-   button 1 lit and buttons 2/3 dark on entry. Clicking button 2 would
-   set `Mem_ManualVSTBypass` such that the Explicit-Override Branch
-   activates both VST 5 and VST 6. This matches the "sofern keiner der
-   Button aktiv ist [...] ansonsten gilt die Konfiguration"
-   formulation if "aktiv" is read as "user has explicitly touched it"
-   rather than literal widget lit/dark state. Visible semantic flip of
-   an existing widget — worth being deliberate about.
+- **Lit button** = VST is active (`Mem_ManualVSTBypass[i] = false` or
+  "explicitly activated" — see below).
+- **Dark button** = VST is bypassed.
 
-2. **Make the button tri-state**. States: `default` (dark, follows the
-   branch logic), `force active` (lit green), `force bypass` (lit red).
-   More expressive but adds a click dimension and needs a colour in the
-   widget library that supports three visuals.
+The underlying state model stays as a single flag per VST, but its
+meaning and its display layer are inverted. `HandleInjectBypassClick`
+is rewritten so a click toggles the active/bypassed state of the
+target VST in the `Mem_ManualVSTBypass` array with **opposite polarity**
+from today (i.e. clicking a dark button sets
+`Mem_ManualVSTBypass[i] = false` and explicitly activates the VST,
+clicking a lit button forces it off).
 
-3. **Introduce a separate `BTN_Inject_Activate_*` row** next to the
-   existing bypass row, so the two intents (activate extra / force
-   bypass) live on separate widgets. Low ambiguity, but adds three
-   widgets to an already dense panel.
+**Default Branch rendering:** on entry, button 1 (first VST of
+`HumanRoutingMap[ch]`) is painted lit, buttons 2..3 dark. The
+`HasExplicitBypassOverride()` check from §4.2 stays the same in
+concept but reads the array with the new semantics: "at least one
+button has been touched since the last Default reset" rather than
+"at least one manual bypass is set". In practice the gate collapses to
+"does any routed VST's `Mem_ManualVSTBypass` differ from the Default-
+Branch value it would have received?" — an easy pointwise comparison.
 
-**This needs to be resolved before the Smart-Bypass rewrite is
-implemented.** Recommendation: option 1 (semantic flip) — least UI
-churn, cleanest mental model, and the "[MAN OFF]" label in the analysis
-display can simply be renamed to "[MANUAL]" or removed.
+**Label rename:** `[MAN OFF]` in the channel analysis display is
+replaced with `[MANUAL]` (or dropped entirely if the Explicit-Override
+Branch is active for the line) so the label matches the new meaning.
+
+**No new widgets, no tri-state.** This is the minimum-churn option and
+the one the user explicitly approved.
 
 ### 4.6 Nested-effect check
 
@@ -557,21 +560,22 @@ display can simply be renamed to "[MANUAL]" or removed.
 Rough sequencing for the implementation plan that will follow from
 this spec:
 
-1. **Resolve the `BTN_Inject_Bypass_*` semantic question (4.5).** Must
-   happen before step 2 — the rewrite direction depends on it.
-2. **Bypass rewrite.** Enables basic usability without a Song.ini and
+1. **Bypass rewrite** including the `BTN_Inject_Bypass_*` semantic
+   flip from §4.5, the `HandleInjectBypassClick` polarity change, the
+   `[MAN OFF]` → `[MANUAL]` label rename, and the new `ExecuteSmartBypass()`
+   two-branch logic. Enables basic usability without a Song.ini and
    unblocks manual testing of everything else.
-3. **Looper `Mem_Loop_NextCh` storage + engine hook.** Adds the Song.ini
+2. **Looper `Mem_Loop_NextCh` storage + engine hook.** Adds the Song.ini
    field, the engine branch, and the basic round-trip. No UI yet.
-4. **Looper Show computation + REC panel display.** Adds the
+3. **Looper Show computation + REC panel display.** Adds the
    `ComputeShowChain` function and the indented text rendering. Still
    no OSC.
-5. **Looper OSC-UI countdown.** Wire the countdown into the tick loop
+4. **Looper OSC-UI countdown.** Wire the countdown into the tick loop
    and the `/UI/LoopNext` OSC path.
-6. **LFO parser + `LFOConfig.txt` loader.** Pure data, no runtime.
-7. **LFO runtime engine.** Hook into `On TimerTick`, implement
+5. **LFO parser + `LFOConfig.txt` loader.** Pure data, no runtime.
+6. **LFO runtime engine.** Hook into `On TimerTick`, implement
    waveforms, snap-back, meters, stop paths.
-8. **LFO inspector widgets.** The Prev/Label/Next triples, Save,
+7. **LFO inspector widgets.** The Prev/Label/Next triples, Save,
    Delete, Run, the two meters.
 
 Each step is independently testable and each adds a small vertical
