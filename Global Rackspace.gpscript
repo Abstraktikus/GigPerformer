@@ -6411,41 +6411,88 @@ Function TickLFOs()
 End
 
 // ---------------------------------------------------------
-// REFRESH LFO INSPECTOR DISPLAY
-// Synchronizes the inspector widgets to LFO_SelectedIdx.
+// REFRESH LFO INSPECTOR (v2)
+// Scope-driven state machine. The displayed LFO is a pure function
+// of CurrentEditScope and the registry / LFO_ByMacro state.
+//
+// Four states:
+//   LOCKED          — scope is -1 or >= 50 (not a user macro)
+//   EDIT            — scope has a real LFO bound (LFO_ByMacro[slot] >= 0)
+//   DRAFT_STANDARD  — scope has no LFO, [LFO:Standard] exists
+//   DRAFT_FALLBACK  — scope has no LFO, no [LFO:Standard]
 // ---------------------------------------------------------
 Function RefreshLFOInspector()
-   var typeIdx, rateIdx, cycles, boundSlot, i : Integer
-   boundSlot = -1
+   var scopeSlot, lfoIdx, standardIdx, i, boundSlot : Integer
+   var songNameForDraft : String = ""
 
-   if Size(LFO_Names) == 0 then
+   scopeSlot = CurrentEditScope
+   lfoIdx = -1
+
+   if scopeSlot < 0 or scopeSlot >= 50 then
+       // LOCKED state
        SetWidgetLabel(LBL_LFO, "-")
        SetWidgetLabel(LBL_LFO_Type, "-")
        SetWidgetLabel(LBL_LFO_Rate, "-")
        SetWidgetLabel(LBL_LFO_Cycles, "-")
-       SetWidgetLabel(LBL_LFO_BoundMacro, "Bound: -")
+       LFOBind_Lines = []
+       LFOBind_Lines <-- "Only User Macros allowed (scope 1-50)"
+       LFO_Draft_Active = false
+       SetWidgetValue(METER_LFO_H, 0.0)
+       SetWidgetValue(METER_LFO_V, 0.0)
+       if DebugMode then Trace("LFO v2: inspector LOCKED (scope=" + scopeSlot + ")") end
    else
-       if LFO_SelectedIdx < 0 then LFO_SelectedIdx = 0 end
-       if LFO_SelectedIdx >= Size(LFO_Names) then LFO_SelectedIdx = Size(LFO_Names) - 1 end
+       lfoIdx = LFO_ByMacro[scopeSlot]
 
-       typeIdx = LFO_Types[LFO_SelectedIdx]
-       rateIdx = LFO_Rates[LFO_SelectedIdx]
-       cycles = LFO_Cycles[LFO_SelectedIdx]
-
-       SetWidgetLabel(LBL_LFO, LFO_Names[LFO_SelectedIdx])
-       SetWidgetLabel(LBL_LFO_Type, LFOTypeName(typeIdx))
-       SetWidgetLabel(LBL_LFO_Rate, LFORateName(rateIdx))
-       SetWidgetLabel(LBL_LFO_Cycles, LFOCyclesName(cycles))
-
-       For i = 0; i < MAX_MACROS; i = i + 1 Do
-           if LFO_ByMacro[i] == LFO_SelectedIdx and boundSlot == -1 then boundSlot = i end
-       End
-       if boundSlot >= 0 then
-           SetWidgetLabel(LBL_LFO_BoundMacro, "Bound: Macro " + (boundSlot + 1))
+       if lfoIdx >= 0 then
+           // EDIT state
+           LFO_Draft_Active = false
+           SetWidgetLabel(LBL_LFO, LFO_Names[lfoIdx])
+           SetWidgetLabel(LBL_LFO_Type, LFOTypeName(LFO_Types[lfoIdx]))
+           SetWidgetLabel(LBL_LFO_Rate, LFORateName(LFO_Rates[lfoIdx]))
+           SetWidgetLabel(LBL_LFO_Cycles, LFOCyclesName(LFO_Cycles[lfoIdx]))
+           BuildLFOBindLines(lfoIdx)
+           if DebugMode then Trace("LFO v2: inspector EDIT (slot=" + (scopeSlot+1) + " lfo='" + LFO_Names[lfoIdx] + "')") end
        else
-           SetWidgetLabel(LBL_LFO_BoundMacro, "Bound: -")
+           // DRAFT state — look for [LFO:Standard] template
+           standardIdx = -1
+           For i = 0; i < Size(LFO_Names); i = i + 1 Do
+              if LFO_Names[i] == "Standard" then standardIdx = i end
+           End
+
+           LFO_Draft_Active = true
+
+           // Safe fallback: GetCurrentSongName() crashes outside setlist mode
+           if InSetlistMode() then
+               songNameForDraft = GetCurrentSongName()
+           else
+               songNameForDraft = "Default"
+           end
+
+           LFO_Draft_Name = songNameForDraft
+
+           if standardIdx >= 0 then
+               LFO_Draft_Type   = LFO_Types[standardIdx]
+               LFO_Draft_Rate   = LFO_Rates[standardIdx]
+               LFO_Draft_Cycles = LFO_Cycles[standardIdx]
+               if DebugMode then Trace("LFO v2: inspector DRAFT_STANDARD (slot=" + (scopeSlot+1) + " name='" + LFO_Draft_Name + "')") end
+           else
+               LFO_Draft_Type   = 0    // Triangle
+               LFO_Draft_Rate   = 5    // 1/4
+               LFO_Draft_Cycles = -1   // Infinite
+               if DebugMode then Trace("LFO v2: inspector DRAFT_FALLBACK (slot=" + (scopeSlot+1) + " name='" + LFO_Draft_Name + "')") end
+           end
+
+           SetWidgetLabel(LBL_LFO, LFO_Draft_Name)
+           SetWidgetLabel(LBL_LFO_Type, LFOTypeName(LFO_Draft_Type))
+           SetWidgetLabel(LBL_LFO_Rate, LFORateName(LFO_Draft_Rate))
+           SetWidgetLabel(LBL_LFO_Cycles, LFOCyclesName(LFO_Draft_Cycles))
+
+           LFOBind_Lines = []
+           LFOBind_Lines <-- "(draft - bind to save)"
        end
    end
+
+   RefreshLFOBoundMacroDisplay()
 End
 
 // ---------------------------------------------------------
@@ -14275,10 +14322,20 @@ End
 
 On WidgetValueChanged(val : Double) from BTN_LFO_Type_Next
    var t : Integer
-   if val > 0.5 and Size(LFO_Names) > 0 then
-       t = LFO_Types[LFO_SelectedIdx] + 1
-       if t > 5 then t = 0 end
-       LFO_Types[LFO_SelectedIdx] = t
+   var lfoIdx : Integer
+   if val > 0.5 then
+       if LFO_Draft_Active then
+           t = LFO_Draft_Type + 1
+           if t > 5 then t = 0 end
+           LFO_Draft_Type = t
+       elsif CurrentEditScope >= 0 and CurrentEditScope < 50 then
+           lfoIdx = LFO_ByMacro[CurrentEditScope]
+           if lfoIdx >= 0 then
+               t = LFO_Types[lfoIdx] + 1
+               if t > 5 then t = 0 end
+               LFO_Types[lfoIdx] = t
+           end
+       end
        RefreshLFOInspector()
        SetWidgetValue(BTN_LFO_Type_Next, 0.0)
    end
@@ -14286,10 +14343,20 @@ End
 
 On WidgetValueChanged(val : Double) from BTN_LFO_Type_Prev
    var t : Integer
-   if val > 0.5 and Size(LFO_Names) > 0 then
-       t = LFO_Types[LFO_SelectedIdx] - 1
-       if t < 0 then t = 5 end
-       LFO_Types[LFO_SelectedIdx] = t
+   var lfoIdx : Integer
+   if val > 0.5 then
+       if LFO_Draft_Active then
+           t = LFO_Draft_Type - 1
+           if t < 0 then t = 5 end
+           LFO_Draft_Type = t
+       elsif CurrentEditScope >= 0 and CurrentEditScope < 50 then
+           lfoIdx = LFO_ByMacro[CurrentEditScope]
+           if lfoIdx >= 0 then
+               t = LFO_Types[lfoIdx] - 1
+               if t < 0 then t = 5 end
+               LFO_Types[lfoIdx] = t
+           end
+       end
        RefreshLFOInspector()
        SetWidgetValue(BTN_LFO_Type_Prev, 0.0)
    end
@@ -14297,10 +14364,20 @@ End
 
 On WidgetValueChanged(val : Double) from BTN_LFO_Rate_Next
    var r : Integer
-   if val > 0.5 and Size(LFO_Names) > 0 then
-       r = LFO_Rates[LFO_SelectedIdx] + 1
-       if r > 8 then r = 0 end
-       LFO_Rates[LFO_SelectedIdx] = r
+   var lfoIdx : Integer
+   if val > 0.5 then
+       if LFO_Draft_Active then
+           r = LFO_Draft_Rate + 1
+           if r > 8 then r = 0 end
+           LFO_Draft_Rate = r
+       elsif CurrentEditScope >= 0 and CurrentEditScope < 50 then
+           lfoIdx = LFO_ByMacro[CurrentEditScope]
+           if lfoIdx >= 0 then
+               r = LFO_Rates[lfoIdx] + 1
+               if r > 8 then r = 0 end
+               LFO_Rates[lfoIdx] = r
+           end
+       end
        RefreshLFOInspector()
        SetWidgetValue(BTN_LFO_Rate_Next, 0.0)
    end
@@ -14308,10 +14385,20 @@ End
 
 On WidgetValueChanged(val : Double) from BTN_LFO_Rate_Prev
    var r : Integer
-   if val > 0.5 and Size(LFO_Names) > 0 then
-       r = LFO_Rates[LFO_SelectedIdx] - 1
-       if r < 0 then r = 8 end
-       LFO_Rates[LFO_SelectedIdx] = r
+   var lfoIdx : Integer
+   if val > 0.5 then
+       if LFO_Draft_Active then
+           r = LFO_Draft_Rate - 1
+           if r < 0 then r = 8 end
+           LFO_Draft_Rate = r
+       elsif CurrentEditScope >= 0 and CurrentEditScope < 50 then
+           lfoIdx = LFO_ByMacro[CurrentEditScope]
+           if lfoIdx >= 0 then
+               r = LFO_Rates[lfoIdx] - 1
+               if r < 0 then r = 8 end
+               LFO_Rates[lfoIdx] = r
+           end
+       end
        RefreshLFOInspector()
        SetWidgetValue(BTN_LFO_Rate_Prev, 0.0)
    end
@@ -14319,12 +14406,24 @@ End
 
 On WidgetValueChanged(val : Double) from BTN_LFO_Cycles_Next
    var c : Integer
-   if val > 0.5 and Size(LFO_Names) > 0 then
-       c = LFO_Cycles[LFO_SelectedIdx]
-       if c == -1 then c = 0
-       elsif c == 0 then c = 1
-       else c = c + 1 end
-       LFO_Cycles[LFO_SelectedIdx] = c
+   var lfoIdx : Integer
+   if val > 0.5 then
+       if LFO_Draft_Active then
+           c = LFO_Draft_Cycles
+           if c == -1 then c = 0
+           elsif c == 0 then c = 1
+           else c = c + 1 end
+           LFO_Draft_Cycles = c
+       elsif CurrentEditScope >= 0 and CurrentEditScope < 50 then
+           lfoIdx = LFO_ByMacro[CurrentEditScope]
+           if lfoIdx >= 0 then
+               c = LFO_Cycles[lfoIdx]
+               if c == -1 then c = 0
+               elsif c == 0 then c = 1
+               else c = c + 1 end
+               LFO_Cycles[lfoIdx] = c
+           end
+       end
        RefreshLFOInspector()
        SetWidgetValue(BTN_LFO_Cycles_Next, 0.0)
    end
@@ -14332,13 +14431,26 @@ End
 
 On WidgetValueChanged(val : Double) from BTN_LFO_Cycles_Prev
    var c : Integer
-   if val > 0.5 and Size(LFO_Names) > 0 then
-       c = LFO_Cycles[LFO_SelectedIdx]
-       if c == 0 then c = -1
-       elsif c == -1 then c = 16
-       elsif c == 1 then c = 0
-       else c = c - 1 end
-       LFO_Cycles[LFO_SelectedIdx] = c
+   var lfoIdx : Integer
+   if val > 0.5 then
+       if LFO_Draft_Active then
+           c = LFO_Draft_Cycles
+           if c == 0 then c = -1
+           elsif c == -1 then c = 16
+           elsif c == 1 then c = 0
+           else c = c - 1 end
+           LFO_Draft_Cycles = c
+       elsif CurrentEditScope >= 0 and CurrentEditScope < 50 then
+           lfoIdx = LFO_ByMacro[CurrentEditScope]
+           if lfoIdx >= 0 then
+               c = LFO_Cycles[lfoIdx]
+               if c == 0 then c = -1
+               elsif c == -1 then c = 16
+               elsif c == 1 then c = 0
+               else c = c - 1 end
+               LFO_Cycles[lfoIdx] = c
+           end
+       end
        RefreshLFOInspector()
        SetWidgetValue(BTN_LFO_Cycles_Prev, 0.0)
    end
