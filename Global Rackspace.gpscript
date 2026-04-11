@@ -15,7 +15,20 @@ Var
    // SECTION 1: USER CONFIGURATION
    // ========================================================================
    DebugMode : Boolean = false
-   
+
+   // --- Crash-safe trace sinks (independent of GP's in-app log) ---
+   // When CrashDebugMode = true, every call to Trace() additionally:
+   //   1. Emits an OSC packet /GP/Trace to the Geisterhand console
+   //      (SwitchGPToGlobal.py listening on CrashOSCIP:CrashOSCPort)
+   //   2. Writes the last trace to the system clipboard (survives GP crashes)
+   // Both mechanisms complement the existing infinite-loop watchdog in
+   // Trace() which already clipboards on TraceLoopCount > 250.
+   // Requires DebugMode = true at the call site (outer `if DebugMode then`
+   // guards keep the cost zero when tracing is off).
+   CrashDebugMode : Boolean = false
+   CrashOSCIP     : String  = "127.0.0.1"
+   CrashOSCPort   : Integer = 8000      // Geisterhand / SwitchGPToGlobal.py port
+
    // --- OSC & Network ---
    Local_IP : String = "127.0.0.1"
    Local_PORT : Integer = 54344 // Standard GP OSC Port
@@ -732,32 +745,48 @@ Function Wait(ms : Double)
 End
 
 Function Trace(msg : String)
-   // 1. Text output (only in DebugMode)
+   // 1. Standard text output to GP's in-app log (DebugMode-gated, as before)
    if DebugMode then
       Print("[" + DoubleToString(TimeSinceStartup(), 1) + "] GLB: " + msg)
    end
-   
-   // 2. WATCHDOG (always active, independent of DebugMode)
+
+   // 2. CRASH-SAFE SINKS — survives a GP hard-crash because the sinks
+   //    live outside the GP process. OSC packets land in the Geisterhand
+   //    Python console (SwitchGPToGlobal.py), and the clipboard holds the
+   //    last trace verbatim so a post-mortem Ctrl+V into any editor shows
+   //    the final message before GP died.
+   //    Gated by CrashDebugMode so production sessions don't flood the
+   //    network or thrash the clipboard.
+   if CrashDebugMode then
+      OSC_SendStringSpecific("/GP/Trace", msg, CrashOSCIP, CrashOSCPort)
+      SendToClipboard(msg)
+   end
+
+   // 3. WATCHDOG (always active, independent of DebugMode)
    if (TimeSinceStartup() - TraceLastTime) > 100.0 then
       TraceLoopCount = 0
    end
-   
+
    TraceLastTime = TimeSinceStartup()
    TraceLoopCount = TraceLoopCount + 1
-   
+
    // Limit raised to 250 for the fast text parser
    if TraceLoopCount > 250 then
       Print("!!! EMERGENCY: Infinite loop detected! Last trace: " + msg)
-      
-      EmergencyKillSwitch = true 
-     
+
+      EmergencyKillSwitch = true
+
       // BLACKBOX: Write the error directly to clipboard
       SendToClipboard("GP DEATH LOOP TRACE:" + NEW_LINE + msg)
-      
-      TraceLoopCount = 0 
+
+      TraceLoopCount = 0
    end
 End
 
+// DebugCrash is kept as a semantic alias for Trace. Use it at call sites
+// where the intent is "this trace is crash-critical" — the behaviour is
+// identical to Trace, but the name documents why the call exists for
+// future readers. No separate output path.
 Function DebugCrash(msg : String)
    Trace(msg)
 End

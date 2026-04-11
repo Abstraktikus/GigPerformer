@@ -67,11 +67,35 @@ try:
         client.send_message("/GP/ViewReady", 1.0)
         print("----------------------------\n")
 
+    # ==========================================
+    # 3. CRASH-TRACE RECEIVER
+    # ==========================================
+    # Ring buffer holding the last N traces so a post-crash dump shows
+    # the sequence leading up to silence. GP calls Trace(msg) which,
+    # when CrashDebugMode=true, emits /GP/Trace to this server.
+    TRACE_BUFFER_SIZE = 50
+    trace_buffer = []
+    last_trace_time = [time.time()]  # list so the closure can mutate
+
+    def on_trace(unused_addr, *args):
+        msg = args[0] if args else "(empty)"
+        ts = time.strftime("%H:%M:%S")
+        line = f"[{ts}] GP-TRACE: {msg}"
+        print(line)
+        trace_buffer.append(line)
+        if len(trace_buffer) > TRACE_BUFFER_SIZE:
+            trace_buffer.pop(0)
+        last_trace_time[0] = time.time()
+
     # OSC Server Setup
     disp = dispatcher.Dispatcher()
     disp.map("/GP/PressCtrlG", press_ctrl_g)
+    disp.map("/GP/Trace", on_trace)
     server = osc_server.ThreadingOSCUDPServer(("127.0.0.1", 8000), disp)
-    print("Geisterhand 4.0 (Laser-Klick) lauscht auf Port 8000.")
+    print("Geisterhand 4.1 (Laser-Klick + Crash-Trace) lauscht auf Port 8000.")
+    print(f"  /GP/PressCtrlG -> Weltkugel-Klick auf Gig Performer")
+    print(f"  /GP/Trace      -> Live-Trace (ring buffer size {TRACE_BUFFER_SIZE})")
+    print("-" * 40)
     server.serve_forever()
 
 except Exception as e:
