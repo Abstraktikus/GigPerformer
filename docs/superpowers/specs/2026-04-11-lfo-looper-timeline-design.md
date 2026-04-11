@@ -413,49 +413,49 @@ selecting an input for a scope should wake that scope's NoteProcessor
 and — by default — exactly the first VST listed in `HumanRoutingMap`
 for that channel.
 
-### 4.2 The rule, unified
+### 4.2 The rule, unified — per-scope decision
 
 `ExecuteSmartBypass()` is rewritten so that its behaviour is the same
-at every call site. It has two internal branches:
+at every call site. The branch decision is made **per scope channel**,
+not globally — so one scope can be in the Default Branch while another
+is Explicit.
 
-1. **Explicit-Override Branch.** If any VST, for which at least one
-   scope channel currently has active RECH input and which is listed in
-   the `HumanRoutingMap` for that channel, has a non-zero
-   `Mem_ManualVSTBypass[i]` entry, the routine respects the explicit
-   configuration: every routed VST is activated unless
-   `Mem_ManualVSTBypass[i]` vetoes it (this is today's logic).
-2. **Default Branch.** Otherwise, for every channel with an active RECH
-   input: activate its NoteProcessor, activate **only the first VST**
-   listed in `HumanRoutingMap[ch]`, leave every other routed VST
-   bypassed.
-
-Channels with no active RECH input have their NoteProcessor put back to
-sleep in both branches, as today.
-
-The branch check scans once per call:
+A new state array is introduced:
 
 ```gpscript
-Function HasExplicitBypassOverride() Returns Boolean
-    var ch, i, vstIdx, activeIn : Integer
-    var routeParts : String Array
-    result = false
-    For ch = 0; ch < 16; ch = ch + 1 Do
-        activeIn = 0
-        For i = 0; i < 16; i = i + 1 Do
-            if GetParameter(RECH, (i*16) + ch) > 0.5 then activeIn = activeIn + 1 end
-        End
-        if activeIn > 0 then
-            routeParts = SplitString(HumanRoutingMap[ch], ",")
-            For i = 0; i < Size(routeParts); i = i + 1 Do
-                vstIdx = StringToInt(TrimString(routeParts[i])) - 1
-                if vstIdx >= 0 and vstIdx < MAX_VSTS and Mem_ManualVSTBypass[vstIdx] then
-                    result = true
-                end
-            End
-        end
-    End
-End
+Mem_ScopeBypassConfigured : Boolean Array  // size 16, one per channel
 ```
+
+The flag is set to `true` the moment the user touches any
+`BTN_Inject_Bypass_*` button while that scope is the active Inject
+target. It is cleared on ResetToFactory and on any path that zeroes the
+snapshot.
+
+**Per-scope branch logic:**
+
+1. For each channel `ch` with at least one active RECH input:
+   - Activate `NoteProcessor[ch]`.
+   - **Explicit Branch** (`Mem_ScopeBypassConfigured[ch] = true`): for
+     each VST listed in `HumanRoutingMap[ch]`, set its plugin bypass
+     state from `Mem_ManualVSTBypass[vstIdx]`.
+   - **Default Branch** (`Mem_ScopeBypassConfigured[ch] = false`): the
+     first VST listed in `HumanRoutingMap[ch]` contributes "active",
+     every subsequent VST contributes "bypassed".
+2. For each channel with no active RECH input: put
+   `NoteProcessor[ch]` to sleep.
+3. **Merge across scopes** (OR of "active" contributions). A VST is
+   ultimately active iff at least one scope contributes "active" for
+   it. This mirrors the today-behaviour of
+   "any-routed-scope-needs-it → wake".
+4. Write the merged result to the plugin bypass states.
+
+**Merge rationale:** a VST may be routed from multiple scopes. If
+scope 5 (Explicit) wants VST 3 active and scope 7 (Default) would
+bypass it, the merge resolves the conflict toward active — the Default
+Branch never *forces* a bypass on a VST that another scope actively
+wants, it only provides a fallback when no scope has explicit
+preferences. This matches the pre-existing SmartBypass conflict
+resolution and avoids surprising "scope 7 silences scope 5" cases.
 
 ### 4.3 Call sites
 
@@ -498,30 +498,35 @@ the user would have no way to activate VST 6 — clicking
 **Decision: flip the semantic.** From this spec on, the button means
 "VST is active":
 
-- **Lit button** = VST is active (`Mem_ManualVSTBypass[i] = false` or
-  "explicitly activated" — see below).
-- **Dark button** = VST is bypassed.
+- **Lit button** = VST is active (`Mem_ManualVSTBypass[i] = false`).
+- **Dark button** = VST is bypassed (`Mem_ManualVSTBypass[i] = true`).
 
-The underlying state model stays as a single flag per VST, but its
-meaning and its display layer are inverted. `HandleInjectBypassClick`
-is rewritten so a click toggles the active/bypassed state of the
-target VST in the `Mem_ManualVSTBypass` array with **opposite polarity**
-from today (i.e. clicking a dark button sets
-`Mem_ManualVSTBypass[i] = false` and explicitly activates the VST,
-clicking a lit button forces it off).
+The `Mem_ManualVSTBypass` array keeps its underlying meaning — `true`
+still means "bypassed" — but the widget display layer inverts its
+polarity so a lit button shows "active". `HandleInjectBypassClick` is
+rewritten with opposite polarity: clicking a dark button writes
+`Mem_ManualVSTBypass[i] = false` (lights it up, VST goes active);
+clicking a lit button writes `true` (darkens it, VST goes bypassed).
 
-**Default Branch rendering:** on entry, button 1 (first VST of
-`HumanRoutingMap[ch]`) is painted lit, buttons 2..3 dark. The
-`HasExplicitBypassOverride()` check from §4.2 stays the same in
-concept but reads the array with the new semantics: "at least one
-button has been touched since the last Default reset" rather than
-"at least one manual bypass is set". In practice the gate collapses to
-"does any routed VST's `Mem_ManualVSTBypass` differ from the Default-
-Branch value it would have received?" — an easy pointwise comparison.
+**First-touch behaviour:** the instant any `BTN_Inject_Bypass_*` is
+clicked while a scope is the active Inject target, the handler sets
+`Mem_ScopeBypassConfigured[firstScopeIdx] = true` **before** writing
+the new `Mem_ManualVSTBypass` value. This is the atomic transition
+from Default Branch to Explicit Branch for that scope. From that point
+on, all three buttons represent the user's explicit choices for that
+scope's routed VSTs, and the Default Branch will not overwrite them on
+subsequent `ExecuteSmartBypass()` calls. A scope can only return to
+Default Branch via a Reset/Snapshot-Load path that clears
+`Mem_ScopeBypassConfigured[ch]`.
+
+**Widget sync (`UpdateUsageLabelDisplay`):** the button sync loop at
+~line 2366 is flipped — `Mem_ManualVSTBypass[vstIdx] == true` now sets
+the widget value to `0.0` (dark), `false` sets it to `1.0` (lit).
 
 **Label rename:** `[MAN OFF]` in the channel analysis display is
-replaced with `[MANUAL]` (or dropped entirely if the Explicit-Override
-Branch is active for the line) so the label matches the new meaning.
+replaced with `[MANUAL]` so the label matches the new meaning. Two
+occurrences: `UpdateUsageLabelDisplay` at ~2340 and `AnalyzeChannel`
+at ~8056.
 
 **No new widgets, no tri-state.** This is the minimum-churn option and
 the one the user explicitly approved.
