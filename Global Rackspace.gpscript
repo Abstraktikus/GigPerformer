@@ -512,6 +512,15 @@ Var
    LFOFlashMsg   : String = ""
    LFOFlashTimer : Double = 0.0
 
+   // v2: deferred LFO inspector refresh flag. Set by CycleEditScope /
+   // CycleScopeSection (SECTION 17, early in file) and consumed by
+   // On TimerTick (late in file) which calls RefreshLFOInspector. This
+   // avoids a forward-declaration crash — RefreshLFOInspector lives far
+   // below the scope cyclers in file order, so a direct call would fail
+   // to compile. Coalesces rapid successive scope changes into a single
+   // refresh per tick.
+   LFOInspectorNeedsRefresh : Boolean = false
+
    // ========================================================================
    // SECTION 7: CHANNEL MEMORY
    // ========================================================================
@@ -3358,9 +3367,11 @@ Function CycleEditScope(dir : Integer)
        UpdateEditScopeDisplay()
        ScrollToCurrentCtrlScope()
 
-       // v2: LFO inspector follows the scope — re-resolve LOCKED / EDIT /
-       // DRAFT state and repaint the bindings list for the new scope.
-       RefreshLFOInspector()
+       // v2: defer LFO inspector refresh to the next TimerTick.
+       // RefreshLFOInspector lives far below this function in file order
+       // and cannot be called directly without a forward-declaration
+       // failure. On TimerTick consumes this flag and repaints.
+       LFOInspectorNeedsRefresh = true
    end
 End
 
@@ -10462,7 +10473,7 @@ Function CycleScopeSection(direction : Integer)
     
     UpdateEditScopeDisplay()
     ScrollToCurrentCtrlScope()
-    RefreshLFOInspector()  // v2: follow scope into the new section
+    LFOInspectorNeedsRefresh = true  // v2: deferred refresh (see CycleEditScope)
 
     Trace("SCOPE-JUMP: Jumped to Section -> " + MacroGroup_Names[foundAnchor])
 End
@@ -13328,6 +13339,7 @@ Initialization
 
    LFOFlashMsg   = ""
    LFOFlashTimer = 0.0
+   LFOInspectorNeedsRefresh = false
 
    if DebugMode then Trace("LFO v2: reverse index + draft + flash state initialized") end
    LoadLFOConfig()   // v1: populate registry after arrays are zeroed
@@ -15888,6 +15900,15 @@ On TimerTick(ms : Double)
        LFOFlashTimer = 0.0
        LFOFlashMsg = ""
        RefreshLFOBoundMacroDisplay()
+   end
+
+   // 0d. Deferred LFO inspector refresh — consumed flag set by
+   // CycleEditScope / CycleScopeSection (SECTION 17, forward-decl
+   // trap). We pick it up here because RefreshLFOInspector is in
+   // file-order above us.
+   if LFOInspectorNeedsRefresh then
+       LFOInspectorNeedsRefresh = false
+       RefreshLFOInspector()
    end
 
    // 0. JOYSTICK CROSS-TALK GUARD (CC16 vs PitchBend: dominant axis wins after 120ms)
