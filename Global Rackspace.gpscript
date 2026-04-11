@@ -5937,6 +5937,116 @@ Function LoadLFOConfig()
 End
 
 // ---------------------------------------------------------
+// SAMPLE LFO WAVEFORM
+// Pure function: given a type index 0..5 and a phase 0..1, return
+// a sample in 0..1. Used by TickLFOs every tick.
+// ---------------------------------------------------------
+Function SampleLFOWaveform(typeIdx : Integer, phase : Double) Returns Double
+   var p : Double = 0.0
+   p = phase
+   if p < 0.0 then p = 0.0 end
+   if p > 1.0 then p = p - Floor(p) end
+
+   if typeIdx == 0 then
+       if p < 0.5 then result = p * 2.0
+       else result = 2.0 - (p * 2.0) end
+   elsif typeIdx == 1 then
+       result = p
+   elsif typeIdx == 2 then
+       result = 1.0 - p
+   elsif typeIdx == 3 then
+       result = (Sin(p * 2.0 * 3.14159265) + 1.0) / 2.0
+   elsif typeIdx == 4 then
+       if p < 0.5 then result = 0.0 else result = 1.0 end
+   elsif typeIdx == 5 then
+       result = Random()
+   else
+       result = 0.0
+   end
+End
+
+// ---------------------------------------------------------
+// LFO RUNTIME — start, stop, per-tick advance
+// ---------------------------------------------------------
+
+Function StartLFO(slot : Integer)
+   var lfoIdx : Integer
+   if slot < 0 or slot >= MAX_MACROS then
+       // ignore
+   else
+       lfoIdx = LFO_ByMacro[slot]
+       if lfoIdx < 0 then
+           // nothing bound
+       else
+           LFO_PreValue[slot] = GetParameter(ExternalArranger, slot)
+           LFO_StartTime[slot] = TimeSinceStartup()
+           LFO_CyclesLeftI[slot] = LFO_Cycles[lfoIdx]
+           LFO_Active[slot] = true
+           LFO_LastSample[slot] = LFO_PreValue[slot]
+           LFO_Progress[slot] = 0.0
+           if DebugMode then Trace("LFO: StartLFO slot " + slot + " (" + LFO_Names[lfoIdx] + ", preVal=" + LFO_PreValue[slot] + ")") end
+       end
+   end
+End
+
+Function StopLFO(slot : Integer)
+   if slot < 0 or slot >= MAX_MACROS then
+       // ignore
+   elsif not LFO_Active[slot] then
+       // nothing to do
+   else
+       LFO_Active[slot] = false
+       SetParameter(ExternalArranger, slot, LFO_PreValue[slot])
+       LFO_LastSample[slot] = LFO_PreValue[slot]
+       LFO_Progress[slot] = 0.0
+       if DebugMode then Trace("LFO: StopLFO slot " + slot + " (snapped back to " + LFO_PreValue[slot] + ")") end
+   end
+End
+
+Function TickLFOs()
+   var slot, lfoIdx, beatsPerBar, cyclesDone : Integer
+   var elapsedMS, cycleLenMS, phase, sample, bpm, totalBars, elapsedBars : Double = 0.0
+
+   bpm = GetBPM()
+   if bpm < 1.0 then bpm = 120.0 end
+   beatsPerBar = GetTimeSigNumerator()
+   if beatsPerBar <= 0 then beatsPerBar = 4 end
+
+   For slot = 0; slot < MAX_MACROS; slot = slot + 1 Do
+       if LFO_Active[slot] then
+           lfoIdx = LFO_ByMacro[slot]
+           if lfoIdx < 0 then
+               LFO_Active[slot] = false
+           else
+               elapsedMS = TimeSinceStartup() - LFO_StartTime[slot]
+               cycleLenMS = (60000.0 / bpm) * IntToFloat(beatsPerBar) * LFORateBars(LFO_Rates[lfoIdx])
+               if cycleLenMS < 1.0 then cycleLenMS = 1.0 end
+
+               phase = (elapsedMS / cycleLenMS) - Floor(elapsedMS / cycleLenMS)
+               sample = SampleLFOWaveform(LFO_Types[lfoIdx], phase)
+               SetParameter(ExternalArranger, slot, sample)
+               LFO_LastSample[slot] = sample
+
+               if LFO_CyclesLeftI[slot] < 0 then
+                   LFO_Progress[slot] = phase
+               else
+                   totalBars = LFORateBars(LFO_Rates[lfoIdx]) * IntToFloat(LFO_CyclesLeftI[slot])
+                   elapsedBars = (elapsedMS / cycleLenMS) * LFORateBars(LFO_Rates[lfoIdx])
+                   if totalBars > 0.0 then LFO_Progress[slot] = elapsedBars / totalBars
+                   else LFO_Progress[slot] = 0.0 end
+                   if LFO_Progress[slot] > 1.0 then LFO_Progress[slot] = 1.0 end
+
+                   cyclesDone = Floor(elapsedMS / cycleLenMS)
+                   if cyclesDone >= LFO_CyclesLeftI[slot] then
+                       StopLFO(slot)
+                   end
+               end
+           end
+       end
+   End
+End
+
+// ---------------------------------------------------------
 // ARRANGER MAPPING FILE HANDLER
 // ---------------------------------------------------------
 
@@ -14726,13 +14836,14 @@ End
 // ---------------------------------------------------------
 
 On TimerTick(ms : Double)
-   var 
+   var
      currentIsSetlist : Boolean = InSetlistMode()
      isGUI, isStillBypassed, needsBlink, anyLooperActive : Boolean
      tr : Integer = GetGlobalTranspose()
      k, a_idx, tl_idx, k_blink, k_loop, beatsPerBar, beatsPerBar_tick : Integer
      maxCountInBeats, remB, ledIndex : Integer
-     msLeft_blink : Double = 0.0; timeSinceHW : Double = 0.0; t_progress : Double = 0.0; 
+     lfoSlotStop : Integer
+     msLeft_blink : Double = 0.0; timeSinceHW : Double = 0.0; t_progress : Double = 0.0;
      a_val : Double = 0.0; msSinceBarStart : Double = 0.0; currentBPM_Tick : Double = 0.0; msPerBeat : Double = 0.0
      msSinceSongStart : Double = 0.0
      countdownBars : Double = 0.0
@@ -14749,6 +14860,9 @@ On TimerTick(ms : Double)
    // ========================================================================
    // A. SYSTEM LOGIC (PRIORITY: ALWAYS RUNS, EVEN WITH ACTIVE KILLSWITCH)
    // ========================================================================
+
+   // 0b. LFO ENGINE — advance all active LFO slots before any other logic.
+   TickLFOs()
 
    // 0a. LATCH AUTO-RELEASE — transport-independent, runs every tick.
    // Cheap no-op when disarmed (Latch_LastNoteOnTime <= 0.0).
@@ -15207,6 +15321,10 @@ On TimerTick(ms : Double)
                 if msSinceSongStart > Snap_TL_TimeMS[Size(Snap_TL_TimeMS) - 1] + 1000.0 then
                     TimelinePlaybackActive = false
                     Trace("TIMELINE: Playback finished.")
+                    // Stop all active LFOs on transport stop
+                    For lfoSlotStop = 0; lfoSlotStop < MAX_MACROS; lfoSlotStop = lfoSlotStop + 1 Do
+                        if LFO_Active[lfoSlotStop] then StopLFO(lfoSlotStop) end
+                    End
                     // Restore configured state if STRIP made live changes
                     if StripLiveDirty then
                         LoadControllerMap(CurrentCtrlMapName)
