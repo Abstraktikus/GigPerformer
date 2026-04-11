@@ -3252,7 +3252,7 @@ Function UpdateEditScopeDisplay()
        
    // Normal operation
    elsif CurrentEditScope == -1 then
-       txt = "Scope: [GLOBAL] (All Sliders)"
+       txt = "Scope: [GLOBAL] (All User Macros)"
    else
        txt = "Scope: [" + GetHardwareLabel(CurrentEditScope) + "]"
    end
@@ -12187,7 +12187,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
    var targetPresets : String Array = ["-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
    var targetVstNames : String Array = ["", "", "", "", "", "", "", "", "", ""]
    
-   var i, j, paramIdx, chIdx, vstIdx, idx, nlPos, loopGuard, p, pCount : Integer
+   var i, j, paramIdx, chIdx, vstIdx, idx, nlPos, loopGuard, p, pCount, jumpSlot : Integer
    var found : Boolean 
    var requiresReboot : Boolean
    
@@ -12595,31 +12595,47 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
             ExpectedMapName = targetCtrlMap
             
             LoadControllerMap(targetCtrlMap)
+            BuildLFOUsageIndex()  // v2: rebuild reverse index against the freshly loaded map
             HardwareSyncTimer = TimeSinceStartup() + 3500.0
             SyncInputFeedback()
             TriggerSongTextLoad(songName)
             UpdateMasterLabels(songName)
-            
+
             if scopeFound then
                 if DebugMode then Trace("SONG LOAD: Restoring Custom Scope from .ini...") end
                 For i = 0; i < 16; i = i + 1 Do OutputScope[i] = targetScope[i] End
-                
+
                 UpdateMetaColors()
                 SyncInputFeedback()
                 UpdateUsageLabelDisplay()
                 RefreshAllInjectionDisplays()
             else
                 if DebugMode then Trace("SONG LOAD: No Scope in .ini found. Using Default (Ch1).") end
-                SetDefaultChannelScope() 
+                SetDefaultChannelScope()
             end
-            
+
             RefreshSafeReplacerUI()
-            
+
             SnapshotPostLoadTimer = TimeSinceStartup() + 800.0
-            LoadSongText(songName) 
+            LoadSongText(songName)
             LoadSongTimeline(filePath)
             FocusBrowserOnCurrentSlot()
             UpdateSoloMuteState()
+
+            // v2: smart auto-jump — land on the first macro with an LFO bound
+            jumpSlot = -1
+            For j = 0; j < 50; j = j + 1 Do
+               if LFO_ByMacro[j] >= 0 and jumpSlot == -1 then jumpSlot = j end
+            End
+            if jumpSlot >= 0 then
+                CurrentEditScope = jumpSlot
+                if DebugMode then Trace("LFO v2: auto-jump CurrentEditScope to Macro " + (jumpSlot + 1)) end
+            else
+                CurrentEditScope = -1
+                if DebugMode then Trace("LFO v2: no LFO bindings in this song, scope stays GLOBAL") end
+            end
+            UpdateEditScopeDisplay()
+            RefreshLFOInspector()
         end
         
    Else 
@@ -12638,12 +12654,13 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
        For i = 0; i < 16; i = i + 1 Do DeactivateChannel(i) End
        
        LoadControllerMap("Standard")
-       HardwareSyncTimer = TimeSinceStartup() + 100.0 
-       
+       BuildLFOUsageIndex()  // v2: rebuild reverse index against the freshly loaded map
+       HardwareSyncTimer = TimeSinceStartup() + 100.0
+
        SyncInputFeedback()
        TriggerSongTextLoad(songName)
        UpdateMasterLabels(songName)
-       
+
        if scopeFound then
            if DebugMode then Trace("SONG LOAD: Restoring Custom Scope from .ini...") end
            For i = 0; i < 16; i = i + 1 Do OutputScope[i] = targetScope[i] End
@@ -12655,14 +12672,29 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
            if DebugMode then Trace("SONG LOAD: No Scope in .ini found. Using Default (Ch1).") end
            SetDefaultChannelScope()
        end
-       
+
        RefreshSafeReplacerUI()
-       
-       LoadSongText(songName) 
-       LoadSongTimeline(filePath) 
+
+       LoadSongText(songName)
+       LoadSongTimeline(filePath)
        FocusBrowserOnCurrentSlot()
        UpdateSoloMuteState()
-       
+
+       // v2: smart auto-jump — land on the first macro with an LFO bound
+       jumpSlot = -1
+       For j = 0; j < 50; j = j + 1 Do
+          if LFO_ByMacro[j] >= 0 and jumpSlot == -1 then jumpSlot = j end
+       End
+       if jumpSlot >= 0 then
+           CurrentEditScope = jumpSlot
+           if DebugMode then Trace("LFO v2: auto-jump CurrentEditScope to Macro " + (jumpSlot + 1)) end
+       else
+           CurrentEditScope = -1
+           if DebugMode then Trace("LFO v2: no LFO bindings in this song, scope stays GLOBAL") end
+       end
+       UpdateEditScopeDisplay()
+       RefreshLFOInspector()
+
        IsLoadingSnapshot = false
    End 
 End
