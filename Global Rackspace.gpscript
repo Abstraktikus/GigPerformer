@@ -499,14 +499,62 @@ Var
    LFO_Draft_StartTime : Double  = 0.0
    LFO_Draft_PreValue  : Double  = 0.0
 
-   // v2: re-entrance guard for LFO-driven macro writes. Set to true
-   // while TickLFOs is calling SetParameter(ExternalArranger, ...).
-   // On ParameterValueChanged from ExternalArranger checks this flag
-   // and skips TriggerMacroFeedback, StartLFO re-trigger, SysAction
-   // dispatch, and Timeline recording when it's set. Without this,
-   // the LFO re-triggers itself every tick and floods the OSC HUD
-   // with sample-level feedback messages until GP chokes.
-   LFO_IsDriving : Boolean = false
+   // v2: origin flag for Timeline replay writes. Set to true around
+   // every SetParameter(ExternalArranger,...) call inside FireTimelineEvent.
+   // Two readers:
+   //   1. LFO auto-start gate: bound LFOs only start when a Timeline
+   //      replay hits their slot (hardware fader jitter must NOT start
+   //      an LFO — BTN_LFO_Run and Timeline replay are the only entries)
+   //   2. Timeline recording guard: prevents replay->record feedback
+   //      loops when the Record button happens to be active during
+   //      playback.
+   Timeline_IsReplaying : Boolean = false
+
+   // v2: per-slot echo-deduplication sentinel for script-initiated
+   // ExternalArranger writes. The original LFO_IsDriving boolean flag
+   // was conceptually broken because SetParameter(ExternalArranger,...)
+   // dispatches On ParameterValueChanged asynchronously — by the time
+   // the callback fires, any flag we set right before the SetParameter
+   // call has already been cleared. Value-based deduplication works
+   // because GP echoes back the exact float we wrote.
+   //
+   // Protocol:
+   //   - Before every script-initiated SetParameter(ExternalArranger, slot, val):
+   //        ScriptWrite_Expected[slot] = val
+   //   - In On ParameterValueChanged from ExternalArranger, compare
+   //     newVal to ScriptWrite_Expected[paramIdx] with 0.005 tolerance
+   //     (wide enough for 1/127 MIDI quantization if a motorfader
+   //     round-trips the value). Match == echo == skip all side-effects
+   //     (HUD push, trace, SysAction dispatch, Timeline recording,
+   //     LFO retrigger). Link routing stays unconditional so VST
+   //     parameters still move.
+   //   - The sentinel is NOT consumed on match — it stays until the
+   //     next script write to the same slot refreshes it. This catches
+   //     duplicate callbacks (internal + hardware round-trip) for a
+   //     single write. The narrow false-suppression window (hardware
+   //     happening to land exactly on the last-written value) is
+   //     acceptable.
+   //
+   // Size MAX_MACROS so it covers the full parameter range the handler
+   // inspects (the HUD path uses 0..15, the LFO/SysAction path uses
+   // 0..MAX_MACROS-1). -1.0 is the "no pending echo" sentinel.
+   //
+   // DOUBLE SENTINEL — ScriptWrite_ExpectedPrev holds the value from
+   // the write BEFORE the current one. Required because multiple script
+   // writes to the same slot can happen between two message-loop
+   // dispatches (e.g. TickLFOs emits a sample, then StopLFO snaps back
+   // in the same call). Without the previous sentinel, the first async
+   // callback arrives after the sentinel was already overwritten by
+   // the second write, fails the match, and treats the script write
+   // as a hardware event — cascading into a death loop on finite-cycle
+   // LFO termination.
+   //
+   // Protocol change: every write site rotates before updating:
+   //   ScriptWrite_ExpectedPrev[slot] = ScriptWrite_Expected[slot]
+   //   ScriptWrite_Expected[slot]     = val
+   // Handler matches against EITHER current OR previous.
+   ScriptWrite_Expected     : Double Array
+   ScriptWrite_ExpectedPrev : Double Array
 
    // v2: flash surface for LBL_LFO_BoundMacro — 1-second transient feedback
    // from BTN_LFO_Save when clicked in LOCKED state, prompting the user
@@ -3355,8 +3403,10 @@ Function CycleEditScope(dir : Integer)
        // Send hardware slider position to morph widget (arranger faders 1-16 only)
        if CurrentEditScope > -1 and CurrentEditScope <= 15 then
            SetWidgetValue(SLD_Morph, GetParameter(ExternalArranger, CurrentEditScope))
+           if DebugMode then Trace("METER: SLD_Morph <- " + GetParameter(ExternalArranger, CurrentEditScope) + " (CycleEditScope, slot=" + CurrentEditScope + ")") end
        else
            SetWidgetValue(SLD_Morph, 0.0)
+           if DebugMode then Trace("METER: SLD_Morph <- 0.0 (CycleEditScope, scope=" + CurrentEditScope + ")") end
        end
 
        // LOCK: Cancel learn mode when switching to "Global"
@@ -3727,6 +3777,8 @@ Function SyncArrangerToCurrentMap()
            if not Link_SourceIsCC[i] then
                // ---> GUARD <---
                if hwIdx >= 0 and hwIdx <= 15 then
+                   ScriptWrite_ExpectedPrev[hwIdx] = ScriptWrite_Expected[hwIdx]
+                   ScriptWrite_Expected[hwIdx] = faderVal
                    SetParameter(ExternalArranger, hwIdx, faderVal)
                    Mem_Fader_Buffer[hwIdx] = faderVal
                    if DebugMode then Trace("     [HARDWARE] Guard PASSED! Arranger motorfader " + (hwIdx+1) + " moving to " + faderVal) end
@@ -5548,6 +5600,8 @@ Function UpdatePrompter(moveSlider : Boolean)
        ScrubberTaubTimer = TimeSinceStartup() + 1000.0 
        
        if SCRUB_MacroIdx >= 0 and SCRUB_MacroIdx <= 15 then
+           ScriptWrite_ExpectedPrev[SCRUB_MacroIdx] = ScriptWrite_Expected[SCRUB_MacroIdx]
+           ScriptWrite_Expected[SCRUB_MacroIdx] = sliderPos
            SetParameter(ExternalArranger, SCRUB_MacroIdx, sliderPos)
        end
    End
@@ -6391,18 +6445,90 @@ Function StopLFO(slot : Integer)
        // nothing to do
    else
        LFO_Active[slot] = false
-       LFO_IsDriving = true
+       ScriptWrite_ExpectedPrev[slot] = ScriptWrite_Expected[slot]
+       ScriptWrite_Expected[slot] = LFO_PreValue[slot]
        SetParameter(ExternalArranger, slot, LFO_PreValue[slot])
-       LFO_IsDriving = false
        LFO_LastSample[slot] = LFO_PreValue[slot]
        LFO_Progress[slot] = 0.0
-       if DebugMode then Trace("LFO: StopLFO slot " + slot + " (snapped back to " + LFO_PreValue[slot] + ")") end
+       // Reset meters so they don't freeze on the last-tick value
+       SetWidgetValue(METER_LFO_H, 0.0)
+       SetWidgetValue(METER_LFO_V, 0.0)
+       // Release the Run button visually. The release-callback checks
+       // LFO_Active (already false) and LFO_Draft_Running (false), so
+       // it no-ops and does not re-enter StopLFO.
+       SetWidgetValue(BTN_LFO_Run, 0.0)
+       if DebugMode then
+           Trace("METER: METER_LFO_H <- 0.0 (StopLFO slot=" + slot + ")")
+           Trace("METER: METER_LFO_V <- 0.0 (StopLFO slot=" + slot + ")")
+           Trace("LFO: StopLFO slot " + slot + " (snapped back to " + LFO_PreValue[slot] + ")")
+       end
+   end
+End
+
+// ---------------------------------------------------------
+// HARD-STOP ALL LFOs — emergency kill switch for critical
+// transitions (song change, map load, rackspace switch).
+//
+// Unlike StopLFO(slot) this does NOT do a snap-back write to
+// ExternalArranger: the caller is about to reload song state
+// anyway, so GetParameter/SetParameter of the old pre-value
+// would either conflict with the new load or write stale data.
+// We just kill the runtime flags so TickLFOs stops emitting
+// samples on its next tick.
+//
+// Call this BEFORE LoadControllerMap, BEFORE SongText loads,
+// BEFORE any mass rewrite of LFO_ByMacro[] bindings. If an
+// LFO is running on a slot whose binding is about to change
+// and we don't hard-stop, TickLFOs will keep writing samples
+// with the new lfoIdx (or no lfoIdx at all) and potentially
+// collide with the song-load sync writes.
+// ---------------------------------------------------------
+Function HardStopAllLFOs(reason : String)
+   var slot : Integer
+   var stoppedCount : Integer = 0
+
+   For slot = 0; slot < MAX_MACROS; slot = slot + 1 Do
+       if LFO_Active[slot] then
+           LFO_Active[slot]     = false
+           LFO_LastSample[slot] = 0.0
+           LFO_Progress[slot]   = 0.0
+           stoppedCount = stoppedCount + 1
+       end
+   End
+
+   if LFO_Draft_Running then
+       LFO_Draft_Running = false
+       LFO_Draft_Slot    = -1
+       stoppedCount = stoppedCount + 1
+   end
+
+   if stoppedCount > 0 then
+       // Reset UI. BTN_LFO_Run callback checks LFO_Active/Draft flags
+       // first — since we've already cleared them, the release handler
+       // will no-op gracefully.
+       SetWidgetValue(BTN_LFO_Run, 0.0)
+       SetWidgetValue(METER_LFO_H, 0.0)
+       SetWidgetValue(METER_LFO_V, 0.0)
+       if DebugMode then
+           Trace("METER: METER_LFO_H <- 0.0 (HardStop)")
+           Trace("METER: METER_LFO_V <- 0.0 (HardStop)")
+           Trace("LFO: HardStop killed " + stoppedCount + " active LFO(s) — reason: " + reason)
+       end
    end
 End
 
 Function TickLFOs()
    var slot, lfoIdx, beatsPerBar, cyclesDone : Integer
-   var elapsedMS, cycleLenMS, phase, sample, bpm, totalBars, elapsedBars : Double = 0.0
+   var elapsedMS, cycleLenMS, phase, sample, bpm, totalBars, elapsedBars, vMeter : Double = 0.0
+
+   // EMERGENCY BRAKE — if the Trace() watchdog tripped the kill switch,
+   // stop emitting LFO samples. Idempotent HardStopAllLFOs kills any
+   // still-active instances on the first pass, subsequent passes are
+   // cheap no-ops until the auto-recovery in On TimerTick clears the
+   // flag.
+   if EmergencyKillSwitch then
+       HardStopAllLFOs("emergency kill switch")
+   else
 
    bpm = GetBPM()
    if bpm < 1.0 then bpm = 120.0 end
@@ -6416,11 +6542,28 @@ Function TickLFOs()
        if cycleLenMS < 1.0 then cycleLenMS = 1.0 end
        phase = (elapsedMS / cycleLenMS) - Floor(elapsedMS / cycleLenMS)
        sample = SampleLFOWaveform(LFO_Draft_Type, phase)
-       LFO_IsDriving = true
+
+       // V meter = progress toward finite end. For Infinite draft, stay
+       // flat at 0 (no "end" to progress toward).
+       if LFO_Draft_Cycles < 0 then
+           vMeter = 0.0
+       else
+           totalBars = LFORateBars(LFO_Draft_Rate) * IntToFloat(LFO_Draft_Cycles)
+           elapsedBars = (elapsedMS / cycleLenMS) * LFORateBars(LFO_Draft_Rate)
+           if totalBars > 0.0 then vMeter = elapsedBars / totalBars
+           else vMeter = 0.0 end
+           if vMeter > 1.0 then vMeter = 1.0 end
+       end
+
+       ScriptWrite_ExpectedPrev[LFO_Draft_Slot] = ScriptWrite_Expected[LFO_Draft_Slot]
+       ScriptWrite_Expected[LFO_Draft_Slot] = sample
        SetParameter(ExternalArranger, LFO_Draft_Slot, sample)
-       LFO_IsDriving = false
        SetWidgetValue(METER_LFO_H, sample)
-       SetWidgetValue(METER_LFO_V, phase)
+       SetWidgetValue(METER_LFO_V, vMeter)
+       if DebugMode then
+           Trace("METER: METER_LFO_H <- " + sample + " (draft tick, slot=" + LFO_Draft_Slot + ")")
+           Trace("METER: METER_LFO_V <- " + vMeter + " (draft tick, cycles=" + LFO_Draft_Cycles + ")")
+       end
    end
 
    For slot = 0; slot < MAX_MACROS; slot = slot + 1 Do
@@ -6435,22 +6578,33 @@ Function TickLFOs()
 
                phase = (elapsedMS / cycleLenMS) - Floor(elapsedMS / cycleLenMS)
                sample = SampleLFOWaveform(LFO_Types[lfoIdx], phase)
-               LFO_IsDriving = true
-               SetParameter(ExternalArranger, slot, sample)
-               LFO_IsDriving = false
-               LFO_LastSample[slot] = sample
-               SetWidgetValue(METER_LFO_H, LFO_LastSample[slot])
-               SetWidgetValue(METER_LFO_V, LFO_Progress[slot])
 
+               // Compute V-meter progress for THIS tick (was lagging
+               // one tick behind before). For Infinite cycles there is
+               // no "end" to progress toward — freeze at 0.
                if LFO_CyclesLeftI[slot] < 0 then
-                   LFO_Progress[slot] = phase
+                   LFO_Progress[slot] = 0.0
                else
                    totalBars = LFORateBars(LFO_Rates[lfoIdx]) * IntToFloat(LFO_CyclesLeftI[slot])
                    elapsedBars = (elapsedMS / cycleLenMS) * LFORateBars(LFO_Rates[lfoIdx])
                    if totalBars > 0.0 then LFO_Progress[slot] = elapsedBars / totalBars
                    else LFO_Progress[slot] = 0.0 end
                    if LFO_Progress[slot] > 1.0 then LFO_Progress[slot] = 1.0 end
+               end
 
+               ScriptWrite_ExpectedPrev[slot] = ScriptWrite_Expected[slot]
+               ScriptWrite_Expected[slot] = sample
+               SetParameter(ExternalArranger, slot, sample)
+               LFO_LastSample[slot] = sample
+               SetWidgetValue(METER_LFO_H, sample)
+               SetWidgetValue(METER_LFO_V, LFO_Progress[slot])
+               if DebugMode then
+                   Trace("METER: METER_LFO_H <- " + sample + " (tick, slot=" + slot + ")")
+                   Trace("METER: METER_LFO_V <- " + LFO_Progress[slot] + " (tick, cyclesLeft=" + LFO_CyclesLeftI[slot] + ")")
+               end
+
+               // Cycle-done check for finite LFOs
+               if LFO_CyclesLeftI[slot] >= 0 then
                    cyclesDone = Floor(elapsedMS / cycleLenMS)
                    if cyclesDone >= LFO_CyclesLeftI[slot] then
                        StopLFO(slot)
@@ -6459,6 +6613,7 @@ Function TickLFOs()
            end
        end
    End
+   end // end of "if EmergencyKillSwitch then ... else ..."
 End
 
 // ---------------------------------------------------------
@@ -6496,7 +6651,11 @@ Function RefreshLFOInspector()
        LFO_Draft_Active = false
        SetWidgetValue(METER_LFO_H, 0.0)
        SetWidgetValue(METER_LFO_V, 0.0)
-       if DebugMode then Trace("LFO v2: inspector LOCKED (scope=" + scopeSlot + ")") end
+       if DebugMode then
+           Trace("METER: METER_LFO_H <- 0.0 (inspector LOCKED)")
+           Trace("METER: METER_LFO_V <- 0.0 (inspector LOCKED)")
+           Trace("LFO v2: inspector LOCKED (scope=" + scopeSlot + ")")
+       end
    else
        lfoIdx = LFO_ByMacro[scopeSlot]
 
@@ -6791,6 +6950,12 @@ Function LoadControllerMap(mapName : String)
 
    Trace("LoadMap: Requesting '" + mapName + "'")
 
+   // HARD-STOP LFOs: the LFO_ByMacro[] bindings are about to be
+   // rewritten by the new map. Any LFO still running on an old
+   // slot could continue with a stale or mismatched lfoIdx and
+   // collide with the fresh sync writes.
+   HardStopAllLFOs("controller map load")
+
    // ---------------------------------------------------------
    // 1. ENGINE RESET (clear all arrays)
    // ---------------------------------------------------------
@@ -7039,9 +7204,21 @@ Function LoadControllerMap(mapName : String)
                    MapMismatch = false
                end
                
-               if VST_SCOPE_MacroIdx >= 0 and VST_SCOPE_MacroIdx <= 15 then SetParameter(ExternalArranger, VST_SCOPE_MacroIdx, 0.5) end
-               if VST_BROWSE_MacroIdx >= 0 and VST_BROWSE_MacroIdx <= 15 then SetParameter(ExternalArranger, VST_BROWSE_MacroIdx, 0.5) end
-               if REC_SONGPART_MacroIdx >= 0 and REC_SONGPART_MacroIdx <= 15 then SetParameter(ExternalArranger, REC_SONGPART_MacroIdx, 0.5) end
+               if VST_SCOPE_MacroIdx >= 0 and VST_SCOPE_MacroIdx <= 15 then
+                   ScriptWrite_ExpectedPrev[VST_SCOPE_MacroIdx] = ScriptWrite_Expected[VST_SCOPE_MacroIdx]
+                   ScriptWrite_Expected[VST_SCOPE_MacroIdx] = 0.5
+                   SetParameter(ExternalArranger, VST_SCOPE_MacroIdx, 0.5)
+               end
+               if VST_BROWSE_MacroIdx >= 0 and VST_BROWSE_MacroIdx <= 15 then
+                   ScriptWrite_ExpectedPrev[VST_BROWSE_MacroIdx] = ScriptWrite_Expected[VST_BROWSE_MacroIdx]
+                   ScriptWrite_Expected[VST_BROWSE_MacroIdx] = 0.5
+                   SetParameter(ExternalArranger, VST_BROWSE_MacroIdx, 0.5)
+               end
+               if REC_SONGPART_MacroIdx >= 0 and REC_SONGPART_MacroIdx <= 15 then
+                   ScriptWrite_ExpectedPrev[REC_SONGPART_MacroIdx] = ScriptWrite_Expected[REC_SONGPART_MacroIdx]
+                   ScriptWrite_Expected[REC_SONGPART_MacroIdx] = 0.5
+                   SetParameter(ExternalArranger, REC_SONGPART_MacroIdx, 0.5)
+               end
                
                UpdateControllerInfoDisplay()
            end
@@ -7918,6 +8095,8 @@ Function ParkFadersForVST(vstIdx : Integer)
                 if s >= 0 and s <= 15 then
                     Trace("PARK: Found Match! Link " + i + " is on Slider " + s + ". Current Val: " + GetParameter(ExternalArranger, s))
                     Mem_Fader_Buffer[s] = GetParameter(ExternalArranger, s)
+                    ScriptWrite_ExpectedPrev[s] = ScriptWrite_Expected[s]
+                    ScriptWrite_Expected[s] = 0.0
                     SetParameter(ExternalArranger, s, 0.0)
                     count = count + 1
                 end
@@ -7962,6 +8141,8 @@ Function RestoreFadersForVST(vstIdx : Integer)
                     end
                     
                     if faderVal < 0.0 then faderVal = 0.0 elsif faderVal > 1.0 then faderVal = 1.0 end
+                    ScriptWrite_ExpectedPrev[s] = ScriptWrite_Expected[s]
+                    ScriptWrite_Expected[s] = faderVal
                     SetParameter(ExternalArranger, s, faderVal)
                     count = count + 1
                 end
@@ -8071,6 +8252,8 @@ Function ApplyEditorTest(val : Double)
     else
         // ---> GUARD <---
         if CurrentEditScope >= 0 and CurrentEditScope <= 15 then
+            ScriptWrite_ExpectedPrev[CurrentEditScope] = ScriptWrite_Expected[CurrentEditScope]
+            ScriptWrite_Expected[CurrentEditScope] = val
             SetParameter(ExternalArranger, CurrentEditScope, val)
         end
         
@@ -8155,11 +8338,13 @@ Function ResetHardwareFadersForVST(vstIdx : Integer)
                if faderVal < 0.0 then faderVal = 0.0 elsif faderVal > 1.0 then faderVal = 1.0 end
                
                if s >= 0 and s <= 15 then
+                   ScriptWrite_ExpectedPrev[s] = ScriptWrite_Expected[s]
+                   ScriptWrite_Expected[s] = faderVal
                    SetParameter(ExternalArranger, s, faderVal)
                end
            end
-       End 
-   end 
+       End
+   end
 End
 
 // ---------------------------------------------------------
@@ -8866,7 +9051,16 @@ Function PartJumpPreview(dir : Integer)
 End
 
 Function FireTimelineEvent(eventType : String, eventVal : Integer)
+    // Origin flag: marks every macro write in this function as "from
+    // Timeline replay" so On ParameterValueChanged from ExternalArranger
+    // can (a) auto-start a bound LFO and (b) skip Timeline recording.
+    Timeline_IsReplaying = true
+
     if eventType == "Macro" then
+        if eventVal >= 0 and eventVal < MAX_MACROS then
+            ScriptWrite_ExpectedPrev[eventVal] = ScriptWrite_Expected[eventVal]
+            ScriptWrite_Expected[eventVal] = 1.0
+        end
         SetParameter(ExternalArranger, eventVal, 1.0)
     elsif eventType == "Map" then
         if eventVal >= 0 and eventVal < Size(CtrlMapList) then
@@ -8881,6 +9075,10 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
     elsif eventType == "RegMem" then
         if eventVal >= 0 then
             Trace("TIMELINE: RegMem -> " + eventVal)
+            if eventVal < MAX_MACROS then
+                ScriptWrite_ExpectedPrev[eventVal] = ScriptWrite_Expected[eventVal]
+                ScriptWrite_Expected[eventVal] = 1.0
+            end
             SetParameter(ExternalArranger, eventVal, 1.0)
         end
     elsif eventType == "Marker" then
@@ -8891,6 +9089,8 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
             Trace("TIMELINE: Part -> " + Arr_SectionNames[eventVal])
         end
     end
+
+    Timeline_IsReplaying = false
 End
 
 Function StartTimelinePlayback()
@@ -9714,6 +9914,8 @@ Function ApplyCrossfade(x_val : Double)
       end
    End
    
+   ScriptWrite_ExpectedPrev[P_ARRANGER_CROSSFADER] = ScriptWrite_Expected[P_ARRANGER_CROSSFADER]
+   ScriptWrite_Expected[P_ARRANGER_CROSSFADER] = x_val
    SetParameter(ExternalArranger, P_ARRANGER_CROSSFADER, x_val)
 End
 
@@ -10477,10 +10679,12 @@ Function CycleScopeSection(direction : Integer)
     // UI Update (fetch hardware controller position)
     if CurrentEditScope > -1 and CurrentEditScope <= 15 then
         SetWidgetValue(SLD_Morph, GetParameter(ExternalArranger, CurrentEditScope))
+        if DebugMode then Trace("METER: SLD_Morph <- " + GetParameter(ExternalArranger, CurrentEditScope) + " (MacroGroup jump, slot=" + CurrentEditScope + ")") end
     else
         SetWidgetValue(SLD_Morph, 0.0)
+        if DebugMode then Trace("METER: SLD_Morph <- 0.0 (MacroGroup jump, scope=" + CurrentEditScope + ")") end
     end
-    
+
     UpdateEditScopeDisplay()
     ScrollToCurrentCtrlScope()
     LFOInspectorNeedsRefresh = true  // v2: deferred refresh (see CycleEditScope)
@@ -10688,8 +10892,10 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
            if val > Last_RecPart_Val + 0.05 then 
                TriggerNextSongPart()
                Last_RecPart_Val = val
-               
+
                // Send auto-center for knobs/faders
+               ScriptWrite_ExpectedPrev[matchedMacro] = ScriptWrite_Expected[matchedMacro]
+               ScriptWrite_Expected[matchedMacro] = 0.5
                SetParameter(ExternalArranger, matchedMacro, 0.5)
                Last_RecPart_Val = 0.5 // Remember new center position!
            elsif val < Last_RecPart_Val - 0.05 then 
@@ -10721,6 +10927,8 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
     
    // --- ARRANGER MOTORS (Macro 1-16) ---
    elsif matchedMacro >= 0 and matchedMacro <= 15 then
+       ScriptWrite_ExpectedPrev[matchedMacro] = ScriptWrite_Expected[matchedMacro]
+       ScriptWrite_Expected[matchedMacro] = val
        SetParameter(ExternalArranger, matchedMacro, val)
          
    // =========================================================
@@ -12304,9 +12512,14 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
    var t_LStp : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 
    If FileExists(filePath) Then
-       IsLoadingSnapshot = true 
+       IsLoadingSnapshot = true
        Trace("DEBUG: Opening Snapshot -> " + filePath)
-       
+
+       // Defensive: HardStopAllLFOs in case this snapshot load was not
+       // routed through On Song (e.g. manual recovery from Bootloader).
+       // Idempotent — no-op if nothing is running.
+       HardStopAllLFOs("snapshot load")
+
        // ---> GUI ZOMBIES KILLEN <---
        IsUpdatingGUI = true
        For i = 0; i < MAX_VSTS; i = i + 1 Do
@@ -13334,7 +13547,16 @@ Initialization
    LFO_Draft_Slot      = -1
    LFO_Draft_StartTime = 0.0
    LFO_Draft_PreValue  = 0.0
-   LFO_IsDriving       = false
+   Timeline_IsReplaying = false
+
+   // v2: echo-dedup sentinel arrays — one entry per macro slot,
+   // current + previous for race-safe dedup.
+   ScriptWrite_Expected     = []
+   ScriptWrite_ExpectedPrev = []
+   For i_init = 0; i_init < MAX_MACROS; i_init = i_init + 1 Do
+       ScriptWrite_Expected     <-- -1.0
+       ScriptWrite_ExpectedPrev <-- -1.0
+   End
 
    LFOFlashMsg   = ""
    LFOFlashTimer = 0.0
@@ -14579,13 +14801,17 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Run
            // Button released — stop whichever is running
            if LFO_Draft_Running then
                LFO_Draft_Running = false
-               LFO_IsDriving = true
+               ScriptWrite_ExpectedPrev[LFO_Draft_Slot] = ScriptWrite_Expected[LFO_Draft_Slot]
+               ScriptWrite_Expected[LFO_Draft_Slot] = LFO_Draft_PreValue
                SetParameter(ExternalArranger, LFO_Draft_Slot, LFO_Draft_PreValue)
-               LFO_IsDriving = false
                SetWidgetValue(METER_LFO_H, 0.0)
                SetWidgetValue(METER_LFO_V, 0.0)
                LFO_Draft_Slot = -1
-               if DebugMode then Trace("LFO v2: draft preview stopped, snapped back") end
+               if DebugMode then
+                   Trace("METER: METER_LFO_H <- 0.0 (draft preview stopped)")
+                   Trace("METER: METER_LFO_V <- 0.0 (draft preview stopped)")
+                   Trace("LFO v2: draft preview stopped, snapped back")
+               end
            elsif scopeSlot >= 0 and scopeSlot < 50 then
                lfoIdx = LFO_ByMacro[scopeSlot]
                if lfoIdx >= 0 and LFO_Active[scopeSlot] then
@@ -14876,21 +15102,49 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
    var scaledVal : Double = 0.0
    var midiVal : Integer
    var m : MidiMessage
-   
+   var isEcho : Boolean = false
+
+   // EMERGENCY BRAKE — if the Trace() watchdog tripped the kill switch,
+   // reject all arranger callbacks. Combined with TickLFOs' kill-switch
+   // guard, this cuts the primary flood source (LFO sample writes) and
+   // the secondary flood source (handler side-effects per callback).
+   if EmergencyKillSwitch then
+       // Do nothing. Callback silently consumed.
+   else
+
    // 1. GHOST-ZERO LOCK (hard guard)
+   // CRITICAL: The echo-dedup block below MUST stay inside this Else
+   // branch. It reads ScriptWrite_Expected[paramIdx], and those arrays
+   // are populated by the Init function LATE in the boot sequence.
+   // GP fires ghost-zero parameter callbacks DURING boot, before Init
+   // has run — reading the arrays then is an out-of-bounds access that
+   // hard-crashes GP. FaderSafetyTimer covers exactly this window.
    If TimeSinceStartup() < FaderSafetyTimer Then
        // Completely ignored! Protects against plugin load times
        // and physical motorfader bounce-back.
    Else
+
+       // 0. ECHO DEDUP — is this callback our own script write coming back?
+       // Match against BOTH current and previous sentinel (see comment at
+       // ScriptWrite_Expected declaration for why we need two). Tolerance
+       // 0.005 covers float round-trip + MIDI 1/127 quantization.
+       // Defensive Size() check: even inside the safety window, make sure
+       // the arrays are actually populated before indexing into them.
+       if paramIdx >= 0 and paramIdx < MAX_MACROS and Size(ScriptWrite_Expected) > paramIdx and Size(ScriptWrite_ExpectedPrev) > paramIdx then
+           if ScriptWrite_Expected[paramIdx] >= 0.0 and Abs(newVal - ScriptWrite_Expected[paramIdx]) < 0.005 then
+               isEcho = true
+           elsif ScriptWrite_ExpectedPrev[paramIdx] >= 0.0 and Abs(newVal - ScriptWrite_ExpectedPrev[paramIdx]) < 0.005 then
+               isEcho = true
+           end
+       end
        if paramIdx >= 0 and paramIdx <= 15 then
 
            // ==========================================================
-           // ---> NEU: LOG-EINTRAG & HUD FEEDBACK (Ausnahme: Scrubber)
-           // LFO self-write guard: when TickLFOs drove this parameter
-           // change, skip HUD feedback — the LFO would flood OSC with
-           // per-sample messages and crash GP via overload.
+           // ---> LOG-EINTRAG & HUD FEEDBACK (Ausnahme: Scrubber)
+           // Echo-dedup guard: when this callback is our own script
+           // write coming back (isEcho), skip trace + HUD entirely.
            // ==========================================================
-           if paramIdx != SCRUB_MacroIdx and not LFO_IsDriving then
+           if paramIdx != SCRUB_MacroIdx and not isEcho then
                if DebugMode then Trace("MACRO-IN: Arranger Slider/Knob " + (paramIdx + 1) + " -> " + Round(newVal * 127.0)) end
 
                // Send the value to the HUD (false = Macro, not a direct CC)
@@ -14900,10 +15154,15 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
            
            Mem_Fader_Buffer[paramIdx] = newVal
                
-           // 2. CROSSFADER CHECK 
-           if paramIdx == CF_MacroIdx then            
-               SetWidgetValue(SLD_Crossfader, newVal)
-               
+           // 2. CROSSFADER CHECK
+           if paramIdx == CF_MacroIdx then
+               // Same reasoning as SLD_Morph below: only update the widget
+               // on hardware moves. Script writes must not echo through a
+               // potential widget binding back to the parameter.
+               if not isEcho then
+                   SetWidgetValue(SLD_Crossfader, newVal)
+               end
+
            // ---> NEU: SCRUBBER CHECK <---
            elsif paramIdx == SCRUB_MacroIdx then
                if TimeSinceStartup() > ScrubberTaubTimer then
@@ -14912,10 +15171,23 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
                  
            // 3. STANDARD MAPPING
            else
-                if paramIdx == CurrentEditScope then
+                if paramIdx == CurrentEditScope and not isEcho then
+                    // Only reflect HARDWARE moves on SLD_Morph. Script-own
+                    // writes (LFO samples, StopLFO snap-back, ApplyEditorTest,
+                    // etc.) are isEcho=True and MUST NOT touch SLD_Morph here.
+                    // SLD_Morph has a widget-level binding back to an
+                    // ExternalArranger parameter (rackspace-layer, invisible
+                    // to the script). If we SetWidgetValue on an echo, that
+                    // binding writes a fresh SetParameter — without updating
+                    // our sentinels — which re-fires the callback and feeds
+                    // an infinite loop. Observed 2026-04-11 at 19:08:37 where
+                    // the last LFO sample (0.0025244) and the StopLFO snap-
+                    // back (0.5) alternated hundreds of times in one second
+                    // until the emergency kill switch tripped.
                     IgnoreMorphEcho = true
                     SetWidgetValue(SLD_Morph, newVal)
                     IgnoreMorphEcho = false
+                    if DebugMode then Trace("METER: SLD_Morph <- " + newVal + " (hardware write from slot=" + paramIdx + ")") end
                 end
 
                 For i = 0; i < Link_Count; i = i + 1 Do
@@ -14969,8 +15241,8 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
        
        // SYSTEM ACTION DISPATCH (hardware-macro path)
        // Reverse-lookup is O(1); Isolation Rule guarantees exclusivity.
-       // Skip when LFO drove the value — LFO samples aren't SysAction triggers.
-       if not LFO_IsDriving then
+       // Skip echoes — our own script writes aren't SysAction triggers.
+       if not isEcho then
            if newVal > 0.5 and paramIdx >= 0 and paramIdx < MAX_MACROS then
                if SysAction_ByMacro[paramIdx] > -1 then
                    FireSystemAction(SysAction_ByMacro[paramIdx])
@@ -14981,8 +15253,9 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
        // TIMELINE RECORDING FOR MACROS (SWITCHES ONLY)
        // System-action macros are excluded by design — their behavior should not
        // be recorded/replayed through the Timeline (see Isolation Rule).
-       // Skip when LFO drove the value — LFO samples aren't Timeline events.
-       if not LFO_IsDriving then
+       // Skip echoes — script writes shouldn't feed back into the recording.
+       // Skip when Timeline is replaying — prevents replay->record feedback loop.
+       if not isEcho and not Timeline_IsReplaying then
            if (RecordMode > 0 or TimelineRecActive) and IsPerformanceActive then
                if newVal == 1.0 and not IsSystemActionMacro(paramIdx) then
                    RecordTimelineEvent("Macro", paramIdx)
@@ -14990,17 +15263,21 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
            end
        end
 
-       // LFO trigger: if this macro is bound to an LFO, (re)start it.
-       // CRITICAL: skip when LFO_IsDriving — this is the re-entry that caused
-       // the death loop. TickLFOs writes a sample, the handler fires, this
-       // block restarts the LFO phase, next tick writes another sample, etc.
-       if not LFO_IsDriving then
+       // LFO auto-start: ONLY Timeline replay can start a bound LFO from
+       // the macro-write path. Hardware fader jitter must NOT auto-start
+       // an LFO (physical noise on a bound slot would continuously retrigger
+       // it). BTN_LFO_Run is the other, explicit entry point.
+       //
+       // Echo-check prevents the LFO's own sample writes from re-triggering
+       // StartLFO via the async callback path.
+       if Timeline_IsReplaying and not isEcho then
            if paramIdx >= 0 and paramIdx < MAX_MACROS and LFO_ByMacro[paramIdx] >= 0 then
                StartLFO(paramIdx)
-               if DebugMode then Trace("LFO: StartLFO triggered by macro write on slot " + paramIdx) end
+               if DebugMode then Trace("LFO: StartLFO triggered by timeline replay on slot " + paramIdx) end
            end
        end
    end
+   end // end of "if EmergencyKillSwitch then ... else ..."
 End
 
 // ---------------------------------------------------------
@@ -15235,7 +15512,14 @@ On Song(oldSongIndex : Integer, newSongIndex : Integer)
    var currentGPName : String
    var k : Integer
    var foundMap : Boolean // ---> THIS MUST BE DECLARED UP HERE! <---
-   
+
+   // 0. HARD-STOP ANY RUNNING LFO. A song switch invalidates the
+   //    current LFO_ByMacro[] bindings and is about to trigger a
+   //    HardwareSync write storm — if TickLFOs keeps emitting
+   //    samples through this, they collide on the same slot and
+   //    flood the macro callback path.
+   HardStopAllLFOs("song switch")
+
    // 1. LOCK SYSTEM
    CurrentState = 9 // LOADING
    IsSaving = false
@@ -15914,6 +16198,21 @@ On TimerTick(ms : Double)
    anyLooperActive = false
 
    // ========================================================================
+   // EMERGENCY KILL SWITCH AUTO-RECOVERY
+   // ========================================================================
+   // The Trace() watchdog at line ~845 flips EmergencyKillSwitch when it
+   // detects a flood (>250 traces within 100ms). TickLFOs and the macro
+   // handler then freeze themselves, which stops the flood. After 3s of
+   // calm (no new traces), we auto-clear the kill switch so the system
+   // resumes normal operation. TraceLastTime is updated on every Trace()
+   // call, so its age is a reliable "how long since the last script
+   // activity" measure.
+   if EmergencyKillSwitch and (TimeSinceStartup() - TraceLastTime) > 3000.0 then
+       EmergencyKillSwitch = false
+       Trace("EMERGENCY: Kill switch auto-recovered after 3s of calm")
+   end
+
+   // ========================================================================
    // A. SYSTEM LOGIC (PRIORITY: ALWAYS RUNS, EVEN WITH ACTIVE KILLSWITCH)
    // ========================================================================
 
@@ -16316,6 +16615,8 @@ On TimerTick(ms : Double)
                 end
                 
                 a_val = Anim_Start[a_idx] + ((Anim_Target[a_idx] - Anim_Start[a_idx]) * t_progress)
+                ScriptWrite_ExpectedPrev[a_idx] = ScriptWrite_Expected[a_idx]
+                ScriptWrite_Expected[a_idx] = a_val
                 SetParameter(ExternalArranger, a_idx, a_val)
                 Mem_Fader_Buffer[a_idx] = a_val
             end
