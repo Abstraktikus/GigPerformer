@@ -14697,15 +14697,16 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Save
                LFOFlashMsg = "Saved: " + lfoName + " -> Macro " + (scopeSlot + 1)
                LFOFlashTimer = TimeSinceStartup() + 1500.0
 
-               // 5. Rebuild runtime state — LoadControllerMap repopulates LFO_ByMacro
-               //    for the active map (always the same map that was active when Save
-               //    was clicked, because mapName was captured at the top of the
-               //    callback from CurrentCtrlMapName). BuildLFOUsageIndex rebuilds
-               //    the cross-map reverse index. RefreshLFOInspector transitions
-               //    DRAFT → EDIT and the new binding appears in LFOBind_Lines; the
-               //    flash message set above is rendered on top by
-               //    RefreshLFOBoundMacroDisplay.
+               // 5. Rebuild runtime state. LoadControllerMap resets CurrentEditScope
+               //    to -1 as a side effect (line ~6805); we capture and restore it so
+               //    RefreshLFOInspector below sees the same scope we were working on
+               //    and transitions DRAFT → EDIT cleanly instead of collapsing to
+               //    LOCKED. mapName is always the map active when Save was clicked
+               //    (captured at the top from CurrentCtrlMapName) so the reload is
+               //    the same-map guarantee.
                LoadControllerMap(mapName)
+               CurrentEditScope = scopeSlot
+               UpdateEditScopeDisplay()
                BuildLFOUsageIndex()
                RefreshLFOInspector()
            end
@@ -14786,8 +14787,17 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Delete
                SaveLFOConfig()
                if DebugMode then Trace("LFO v2: removed '" + lfoName + "' from registry, " + Size(LFO_Names) + " entries remain") end
 
-               // 4. Rebuild state — LoadControllerMap updates LFO_ByMacro for the active map
+               // 4. User feedback — flash that the delete landed
+               LFOFlashMsg = "Deleted: " + lfoName + " (" + unbindCount + " bindings removed)"
+               LFOFlashTimer = TimeSinceStartup() + 1500.0
+
+               // 5. Rebuild state — LoadControllerMap resets CurrentEditScope to -1
+               //    as a side effect; we capture and restore it so the scope stays
+               //    on the macro the user was viewing (which will now be in DRAFT
+               //    because the LFO binding is gone).
                LoadControllerMap(CurrentCtrlMapName)
+               CurrentEditScope = scopeSlot
+               UpdateEditScopeDisplay()
                BuildLFOUsageIndex()
                RefreshLFOInspector()
            end
