@@ -15103,15 +15103,18 @@ On TimerTick(ms : Double)
    // A. SYSTEM LOGIC (PRIORITY: ALWAYS RUNS, EVEN WITH ACTIVE KILLSWITCH)
    // ========================================================================
 
-   // 0b. LFO ENGINE — advance all active LFO slots before any other logic.
-   TickLFOs()
-
-   // 0a. LATCH AUTO-RELEASE — transport-independent, runs every tick.
-   // Cheap no-op when disarmed (Latch_LastNoteOnTime <= 0.0).
-   // Placed here instead of On BeatChanged because BeatChanged stops
-   // firing when the transport is stopped, and the "song is over" scenario
-   // is exactly when the timeout needs to fire.
-   CheckLatchTimeout()
+   // 0b. LFO ENGINE + 0a. LATCH AUTO-RELEASE
+   // Both touch plugin parameters (SetParameter on macros / NoteProcessor scriptlets)
+   // and MUST be guarded against the initial boot window and against any active
+   // snapshot load. Without this guard, a TimerTick firing during PHASE 6 of
+   // Initialization (LoadSongSnapshot closing/replacing plugins) can crash GP
+   // when CheckLatchTimeout or TickLFOs write to a transient plugin state.
+   // FaderSafetyTimer covers the 5-second cold-boot window; IsLoadingSnapshot
+   // covers every subsequent song switch.
+   if not IsLoadingSnapshot and TimeSinceStartup() > FaderSafetyTimer then
+       TickLFOs()
+       CheckLatchTimeout()
+   end
 
    // 0. JOYSTICK CROSS-TALK GUARD (CC16 vs PitchBend: dominant axis wins after 120ms)
    if Joy_CC16_ArmTime > 0.0 and not Joy_CC16_Fired then
