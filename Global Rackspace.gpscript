@@ -484,6 +484,13 @@ Var
    // LooperConfig_Lines / CtrlInfo_Lines pattern.
    LFOBind_Lines : String Array
 
+   // v2: stable cached song name — set at the start of LoadSongSnapshot,
+   // used by RefreshLFOInspector's DRAFT branch to name new drafts. This
+   // replaces the fragile InSetlistMode() + GetCurrentSongName() pair that
+   // can flip to "Default" mid-session if the user exits setlist view.
+   // Stays set across panel/view switches until the next song is loaded.
+   CurrentSongCachedName : String = ""
+
    // v2: draft state — populated when the inspector is in DRAFT_STANDARD or
    // DRAFT_FALLBACK. Lives only while a no-LFO scope is focused.
    LFO_Draft_Active : Boolean = false
@@ -6476,9 +6483,11 @@ Function RefreshLFOInspector()
            // DRAFT_FALLBACK).
            LFO_Draft_Active = true
 
-           // Safe fallback: GetCurrentSongName() crashes outside setlist mode
-           if InSetlistMode() then
-               songNameForDraft = GetCurrentSongName()
+           // Stable draft name: CurrentSongCachedName is set by LoadSongSnapshot
+           // and survives panel/view switches, so binding a second macro in the
+           // same song always uses the same LFO name (DRAFT_EXISTING path).
+           if Length(CurrentSongCachedName) > 0 then
+               songNameForDraft = CurrentSongCachedName
            else
                songNameForDraft = "Default"
            end
@@ -12258,7 +12267,12 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
    var t_LTgt : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
    var t_LOut : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    var t_LStp : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-   
+
+   // v2: cache the song name for the entire session, independent of
+   // InSetlistMode() state. Used by RefreshLFOInspector's DRAFT branch.
+   CurrentSongCachedName = songName
+   if DebugMode then Trace("LFO v2: CurrentSongCachedName = '" + songName + "'") end
+
    If FileExists(filePath) Then
        IsLoadingSnapshot = true 
        Trace("DEBUG: Opening Snapshot -> " + filePath)
@@ -14574,7 +14588,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Save
        // LOCKED state → user help flash, nothing else
        if scopeSlot < 0 or scopeSlot >= 50 then
            LFOFlashMsg = "Select a User Macro first (Scope Prev/Next)"
-           LFOFlashTimer = TimeSinceStartup() + 1000.0
+           LFOFlashTimer = TimeSinceStartup() + 1500.0
            RefreshLFOInspector()
            if DebugMode then Trace("LFO v2: BTN_LFO_Save rejected, scope " + scopeSlot + " outside user zone") end
        else
@@ -14586,6 +14600,11 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Save
                else
                    SaveLFOConfig()
                    if DebugMode then Trace("LFO v2: EDIT save, persisted registry entry '" + LFO_Names[lfoIdx] + "'") end
+
+                   // User feedback — flash that the shape save landed
+                   LFOFlashMsg = "Shape saved: " + LFO_Names[lfoIdx] + " (updates all bindings)"
+                   LFOFlashTimer = TimeSinceStartup() + 1500.0
+                   RefreshLFOInspector()
                end
            else
                // DRAFT state — materialise the draft: create-or-update
@@ -14673,9 +14692,19 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Save
                    end
                end
 
-               // 4. Rebuild runtime state — LoadControllerMap repopulates LFO_ByMacro
-               //    for the active map, BuildLFOUsageIndex rebuilds the cross-map
-               //    reverse index, RefreshLFOInspector transitions DRAFT → EDIT.
+               // 4. User feedback — flash that the bind succeeded, prepended to
+               //    the bindings list by RefreshLFOBoundMacroDisplay.
+               LFOFlashMsg = "Saved: " + lfoName + " -> Macro " + (scopeSlot + 1)
+               LFOFlashTimer = TimeSinceStartup() + 1500.0
+
+               // 5. Rebuild runtime state — LoadControllerMap repopulates LFO_ByMacro
+               //    for the active map (always the same map that was active when Save
+               //    was clicked, because mapName was captured at the top of the
+               //    callback from CurrentCtrlMapName). BuildLFOUsageIndex rebuilds
+               //    the cross-map reverse index. RefreshLFOInspector transitions
+               //    DRAFT → EDIT and the new binding appears in LFOBind_Lines; the
+               //    flash message set above is rendered on top by
+               //    RefreshLFOBoundMacroDisplay.
                LoadControllerMap(mapName)
                BuildLFOUsageIndex()
                RefreshLFOInspector()
