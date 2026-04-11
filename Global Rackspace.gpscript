@@ -27,6 +27,7 @@ Var
    HardwareMapFilePath : String
    VstDatabaseFilePath : String
    DeviceConfigFilePath : String
+   LFOConfigFilePath : String
 
    // ========================================================================
    // SECTION 2: CORE CONSTANTS
@@ -425,6 +426,30 @@ Var
    Strip_ThemeIdx   : Integer = 8   // Index into MacroGroup_Names (8=Octaver, 9=Humanizer, 10=Quantizer, 11=Sustain)
    Strip_ChannelIdx : Integer = 0   // Current channel (0-15)
    StripLiveDirty   : Boolean = false // True when STRIP made live changes not reflected in widgets
+
+   // -------------------------------------------------------------
+   // LFO ENGINE STATE
+   // -------------------------------------------------------------
+   // Registry (one entry per parsed LFO in LFOConfig.txt)
+   LFO_Names  : String Array       // e.g. "TriSlow"
+   LFO_Types  : Integer Array      // 0..5 : Triangle, TriangleUp, TriangleDown, Sinus, Square, Random
+   LFO_Rates  : Integer Array      // 0..8 : 8/1 .. 1/32 (index into rate table)
+   LFO_Cycles : Integer Array      // -1 = Infinite, 0 = '-', N > 0 = finite count
+
+   // Per-macro-slot binding (MAX_MACROS = 256 entries)
+   LFO_ByMacro : Integer Array     // -1 = no binding, else index into LFO_Names
+
+   // Per-slot runtime state (parallel to LFO_ByMacro)
+   LFO_Active      : Boolean Array
+   LFO_StartTime   : Double Array
+   LFO_PreValue    : Double Array
+   LFO_CyclesLeftI : Integer Array
+   LFO_LastSample  : Double Array
+   LFO_Progress    : Double Array
+
+   // Inspector browser cursors
+   LFO_SelectedIdx : Integer = 0
+   LFO_ManualRun   : Boolean = false
 
    // ========================================================================
    // SECTION 7: CHANNEL MEMORY
@@ -12307,11 +12332,13 @@ Initialization
        HardwareMapFilePath = UserSnapshotPath + "\\HardwareMap.txt"
        VstDatabaseFilePath = UserSnapshotPath + "\\VstDatabase.txt"
        DeviceConfigFilePath = UserSnapshotPath + "\\DeviceConfig.txt"
+       LFOConfigFilePath = UserSnapshotPath + "\\LFOConfig.txt"
    Else
        ControllerMapFilePath = UserSnapshotPath + "/ControllerMaps.txt"
        HardwareMapFilePath = UserSnapshotPath + "/HardwareMap.txt"
        VstDatabaseFilePath = UserSnapshotPath + "/VstDatabase.txt"
        DeviceConfigFilePath = UserSnapshotPath + "/DeviceConfig.txt"
+       LFOConfigFilePath = UserSnapshotPath + "/LFOConfig.txt"
    End
 
    // ====================================================================================
@@ -12385,6 +12412,30 @@ Initialization
       if vCount > 0 then ReplaceableSlots <-- vIdx end
    End
    if Size(ReplaceableSlots) == 0 then ReplaceableSlots = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] end
+
+   LFO_Names = []
+   LFO_Types = []
+   LFO_Rates = []
+   LFO_Cycles = []
+   LFO_ByMacro = []
+   For i_init = 0; i_init < MAX_MACROS; i_init = i_init + 1 Do LFO_ByMacro <-- -1 End
+   LFO_Active = []
+   LFO_StartTime = []
+   LFO_PreValue = []
+   LFO_CyclesLeftI = []
+   LFO_LastSample = []
+   LFO_Progress = []
+   For i_init = 0; i_init < MAX_MACROS; i_init = i_init + 1 Do
+       LFO_Active      <-- false
+       LFO_StartTime   <-- 0.0
+       LFO_PreValue    <-- 0.0
+       LFO_CyclesLeftI <-- 0
+       LFO_LastSample  <-- 0.0
+       LFO_Progress    <-- 0.0
+   End
+   LFO_SelectedIdx = 0
+   LFO_ManualRun = false
+   if DebugMode then Trace("LFO: state arrays initialized (MAX_MACROS=" + MAX_MACROS + ")") end
 
    // ====================================================================================
    // PHASE 5: DATABASE LOADING
