@@ -323,7 +323,7 @@ Var
    BTN_LFO_Rate_Prev, BTN_LFO_Rate_Next, LBL_LFO_Rate             : Widget
    BTN_LFO_Cycles_Prev, BTN_LFO_Cycles_Next, LBL_LFO_Cycles       : Widget
    METER_LFO_H, METER_LFO_V                                       : Widget
-   BTN_LFO_Run, BTN_LFO_Save, BTN_LFO_Delete, BTN_Bind_Macro      : Widget
+   BTN_LFO_Run, BTN_LFO_Save, BTN_LFO_Delete                      : Widget
 
    // --- Widget Arrays ---
    BTN_Ch1_In, BTN_Ch2_In, BTN_Ch3_In, BTN_Ch4_In, BTN_Ch5_In, BTN_Ch6_In, BTN_Ch7_In, BTN_Ch8_In, BTN_Ch9_In, BTN_Ch10_In, BTN_Ch11_In, BTN_Ch12_In, BTN_Ch13_In, BTN_Ch14_In, BTN_Ch15_In, BTN_Ch16_In : Widget
@@ -500,8 +500,8 @@ Var
    LFO_Draft_PreValue  : Double  = 0.0
 
    // v2: flash surface for LBL_LFO_BoundMacro — 1-second transient feedback
-   // from BTN_Bind_Macro's whitelist check and EDIT-state "already bound"
-   // diagnostic.
+   // from BTN_LFO_Save when clicked in LOCKED state, prompting the user
+   // to select a User Macro first via Scope Prev/Next.
    LFOFlashMsg   : String = ""
    LFOFlashTimer : Double = 0.0
 
@@ -6427,14 +6427,20 @@ End
 // Scope-driven state machine. The displayed LFO is a pure function
 // of CurrentEditScope and the registry / LFO_ByMacro state.
 //
-// Four states:
+// Five states:
 //   LOCKED          — scope is -1 or >= 50 (not a user macro)
 //   EDIT            — scope has a real LFO bound (LFO_ByMacro[slot] >= 0)
-//   DRAFT_STANDARD  — scope has no LFO, [LFO:Standard] exists
-//   DRAFT_FALLBACK  — scope has no LFO, no [LFO:Standard]
+//   DRAFT_EXISTING  — scope has no LFO, but draft-name already in registry
+//                     (auto-adopt that entry's Type/Rate/Cycles + show its
+//                      existing bindings; a Save click adds this scope as
+//                      an additional binding to the same LFO)
+//   DRAFT_STANDARD  — scope has no LFO, draft-name is new, [LFO:Standard]
+//                     exists (adopt the Standard template)
+//   DRAFT_FALLBACK  — scope has no LFO, draft-name is new, no
+//                     [LFO:Standard] (hardcoded Triangle / 1/4 / Infinite)
 // ---------------------------------------------------------
 Function RefreshLFOInspector()
-   var scopeSlot, lfoIdx, standardIdx, i, boundSlot : Integer
+   var scopeSlot, lfoIdx, standardIdx, existingIdx, i, boundSlot : Integer
    var songNameForDraft : String = ""
 
    scopeSlot = CurrentEditScope
@@ -6465,12 +6471,9 @@ Function RefreshLFOInspector()
            BuildLFOBindLines(lfoIdx)
            if DebugMode then Trace("LFO v2: inspector EDIT (slot=" + (scopeSlot+1) + " lfo='" + LFO_Names[lfoIdx] + "')") end
        else
-           // DRAFT state — look for [LFO:Standard] template
-           standardIdx = -1
-           For i = 0; i < Size(LFO_Names); i = i + 1 Do
-              if LFO_Names[i] == "Standard" then standardIdx = i end
-           End
-
+           // DRAFT state — resolve draft name first, then decide which
+           // sub-state applies (DRAFT_EXISTING vs DRAFT_STANDARD vs
+           // DRAFT_FALLBACK).
            LFO_Draft_Active = true
 
            // Safe fallback: GetCurrentSongName() crashes outside setlist mode
@@ -6479,28 +6482,48 @@ Function RefreshLFOInspector()
            else
                songNameForDraft = "Default"
            end
-
            LFO_Draft_Name = songNameForDraft
 
-           if standardIdx >= 0 then
-               LFO_Draft_Type   = LFO_Types[standardIdx]
-               LFO_Draft_Rate   = LFO_Rates[standardIdx]
-               LFO_Draft_Cycles = LFO_Cycles[standardIdx]
-               if DebugMode then Trace("LFO v2: inspector DRAFT_STANDARD (slot=" + (scopeSlot+1) + " name='" + LFO_Draft_Name + "')") end
+           // 1. DRAFT_EXISTING — draft name already in registry (multi-bind path)
+           existingIdx = -1
+           For i = 0; i < Size(LFO_Names); i = i + 1 Do
+              if LFO_Names[i] == LFO_Draft_Name then existingIdx = i end
+           End
+
+           if existingIdx >= 0 then
+               LFO_Draft_Type   = LFO_Types[existingIdx]
+               LFO_Draft_Rate   = LFO_Rates[existingIdx]
+               LFO_Draft_Cycles = LFO_Cycles[existingIdx]
+               BuildLFOBindLines(existingIdx)
+               if DebugMode then Trace("LFO v2: inspector DRAFT_EXISTING (slot=" + (scopeSlot+1) + " name='" + LFO_Draft_Name + "', Save adds scope as another binding)") end
            else
-               LFO_Draft_Type   = 0    // Triangle
-               LFO_Draft_Rate   = 5    // 1/4
-               LFO_Draft_Cycles = -1   // Infinite
-               if DebugMode then Trace("LFO v2: inspector DRAFT_FALLBACK (slot=" + (scopeSlot+1) + " name='" + LFO_Draft_Name + "')") end
+               // 2. DRAFT_STANDARD — no existing entry, look for [LFO:Standard] template
+               standardIdx = -1
+               For i = 0; i < Size(LFO_Names); i = i + 1 Do
+                  if LFO_Names[i] == "Standard" then standardIdx = i end
+               End
+
+               if standardIdx >= 0 then
+                   LFO_Draft_Type   = LFO_Types[standardIdx]
+                   LFO_Draft_Rate   = LFO_Rates[standardIdx]
+                   LFO_Draft_Cycles = LFO_Cycles[standardIdx]
+                   if DebugMode then Trace("LFO v2: inspector DRAFT_STANDARD (slot=" + (scopeSlot+1) + " name='" + LFO_Draft_Name + "')") end
+               else
+                   // 3. DRAFT_FALLBACK — no entry, no Standard template
+                   LFO_Draft_Type   = 0    // Triangle
+                   LFO_Draft_Rate   = 5    // 1/4
+                   LFO_Draft_Cycles = -1   // Infinite
+                   if DebugMode then Trace("LFO v2: inspector DRAFT_FALLBACK (slot=" + (scopeSlot+1) + " name='" + LFO_Draft_Name + "')") end
+               end
+
+               LFOBind_Lines = []
+               LFOBind_Lines <-- "(draft - click Save to create this LFO and bind it to Macro " + (scopeSlot + 1) + ")"
            end
 
            SetWidgetLabel(LBL_LFO, LFO_Draft_Name)
            SetWidgetLabel(LBL_LFO_Type, LFOTypeName(LFO_Draft_Type))
            SetWidgetLabel(LBL_LFO_Rate, LFORateName(LFO_Draft_Rate))
            SetWidgetLabel(LBL_LFO_Cycles, LFOCyclesName(LFO_Draft_Cycles))
-
-           LFOBind_Lines = []
-           LFOBind_Lines <-- "(draft - bind to save)"
        end
    end
 
@@ -12641,10 +12664,10 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
             End
             if jumpSlot >= 0 then
                 CurrentEditScope = jumpSlot
-                if DebugMode then Trace("LFO v2: auto-jump CurrentEditScope to Macro " + (jumpSlot + 1)) end
+                if DebugMode then Trace("LFO v2: auto-jump CurrentEditScope to Macro " + (jumpSlot + 1) + " (first bound LFO)") end
             else
-                CurrentEditScope = -1
-                if DebugMode then Trace("LFO v2: no LFO bindings in this song, scope stays GLOBAL") end
+                CurrentEditScope = 0
+                if DebugMode then Trace("LFO v2: no LFO bindings in this song, scope defaults to Macro 1 (DRAFT ready)") end
             end
             UpdateEditScopeDisplay()
             RefreshLFOInspector()
@@ -12699,10 +12722,10 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
        End
        if jumpSlot >= 0 then
            CurrentEditScope = jumpSlot
-           if DebugMode then Trace("LFO v2: auto-jump CurrentEditScope to Macro " + (jumpSlot + 1)) end
+           if DebugMode then Trace("LFO v2: auto-jump CurrentEditScope to Macro " + (jumpSlot + 1) + " (first bound LFO)") end
        else
-           CurrentEditScope = -1
-           if DebugMode then Trace("LFO v2: no LFO bindings in this song, scope stays GLOBAL") end
+           CurrentEditScope = 0
+           if DebugMode then Trace("LFO v2: no LFO bindings in this song, scope defaults to Macro 1 (DRAFT ready)") end
        end
        UpdateEditScopeDisplay()
        RefreshLFOInspector()
@@ -14525,38 +14548,52 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Run
    end
 End
 
-On WidgetValueChanged(val : Double) from BTN_Bind_Macro
-   var scopeSlot : Integer
+On WidgetValueChanged(val : Double) from BTN_LFO_Save
+   // v2 unified Save — handles three states:
+   //   LOCKED (scope < 0 or >= 50) → flash help message, no-op
+   //   DRAFT (scope has no LFO)    → create-or-update registry entry +
+   //                                  add LFO:<name> | prefix to the
+   //                                  current scope's macro line
+   //                                  (overwrites any orphan prefix but
+   //                                   never displaces a legitimate one —
+   //                                   legitimate prefixes put the scope
+   //                                   in EDIT state, not DRAFT)
+   //   EDIT  (scope has an LFO)    → persist registry shape only, do not
+   //                                  touch ControllerMaps.txt (binding
+   //                                  is already there)
+   var scopeSlot, lfoIdx, registryIdx, i : Integer
    var mapName, lfoName, content, section, newLine, oldLine : String
    var mapSectionStart, mapSectionEnd, lineStart, lineEnd, nlPos : Integer
-   var registryIdx, i : Integer
-   var saved : Boolean = false
    var searchKey, newValue : String
+   var saved : Boolean = false
 
    if val > 0.5 then
        scopeSlot = CurrentEditScope
        mapName = CurrentCtrlMapName
 
-       // 1. Whitelist check
+       // LOCKED state → user help flash, nothing else
        if scopeSlot < 0 or scopeSlot >= 50 then
-           LFOFlashMsg = "Only User Macros allowed (scope 1-50)"
+           LFOFlashMsg = "Select a User Macro first (Scope Prev/Next)"
            LFOFlashTimer = TimeSinceStartup() + 1000.0
            RefreshLFOInspector()
-           if DebugMode then Trace("LFO v2: BTN_Bind_Macro rejected, scope " + scopeSlot + " outside user zone") end
-           SetWidgetValue(BTN_Bind_Macro, 0.0)
+           if DebugMode then Trace("LFO v2: BTN_LFO_Save rejected, scope " + scopeSlot + " outside user zone") end
        else
-           // 2. Resolve LFO name
            if not LFO_Draft_Active then
-               // EDIT state — already bound
-               LFOFlashMsg = "Already bound (use Save to update)"
-               LFOFlashTimer = TimeSinceStartup() + 1000.0
-               RefreshLFOInspector()
-               if DebugMode then Trace("LFO v2: BTN_Bind_Macro rejected, scope already bound") end
-               SetWidgetValue(BTN_Bind_Macro, 0.0)
+               // EDIT state — persist registry shape, do not touch ControllerMaps.txt
+               lfoIdx = LFO_ByMacro[scopeSlot]
+               if lfoIdx < 0 then
+                   if DebugMode then Trace("LFO v2: BTN_LFO_Save ignored (EDIT flag mismatched LFO_ByMacro)") end
+               else
+                   SaveLFOConfig()
+                   if DebugMode then Trace("LFO v2: EDIT save, persisted registry entry '" + LFO_Names[lfoIdx] + "'") end
+               end
            else
+               // DRAFT state — materialise the draft: create-or-update
+               // registry entry + add LFO:<name> | prefix to the scope's
+               // macro line in the active map.
                lfoName = LFO_Draft_Name
 
-               // 3. Create-or-update registry entry
+               // 1. Create-or-update registry entry
                registryIdx = -1
                For i = 0; i < Size(LFO_Names); i = i + 1 Do
                   if LFO_Names[i] == lfoName then registryIdx = i end
@@ -14567,38 +14604,34 @@ On WidgetValueChanged(val : Double) from BTN_Bind_Macro
                    LFO_Types  <-- LFO_Draft_Type
                    LFO_Rates  <-- LFO_Draft_Rate
                    LFO_Cycles <-- LFO_Draft_Cycles
-                   if DebugMode then Trace("LFO v2: created new registry entry '" + lfoName + "'") end
+                   if DebugMode then Trace("LFO v2: DRAFT save, created registry entry '" + lfoName + "'") end
                else
                    LFO_Types[registryIdx]  = LFO_Draft_Type
                    LFO_Rates[registryIdx]  = LFO_Draft_Rate
                    LFO_Cycles[registryIdx] = LFO_Draft_Cycles
-                   if DebugMode then Trace("LFO v2: updated existing registry entry '" + lfoName + "'") end
+                   if DebugMode then Trace("LFO v2: DRAFT save, updated existing registry entry '" + lfoName + "' (shape change propagates to all existing bindings)") end
                end
 
-               // 4. Persist registry
+               // 2. Persist registry to disk
                SaveLFOConfig()
 
-               // 5. Mutate ControllerMaps.txt — prepend LFO:<name> | to the target macro line
+               // 3. Add LFO:<name> | prefix to the current scope's macro line in ControllerMaps.txt
                if FileExists(ControllerMapFilePath) then
                    content = LoadStringFromTextFile(ControllerMapFilePath)
 
-                   // Find [Map:<mapName>] section
                    searchKey = "[Map:" + mapName + "]"
                    mapSectionStart = IndexOfSubstring(content, searchKey, false)
                    if mapSectionStart < 0 then
-                       if DebugMode then Trace("LFO v2: BTN_Bind_Macro: map section '" + mapName + "' not found in ControllerMaps.txt") end
+                       if DebugMode then Trace("LFO v2: BTN_LFO_Save: map section '" + mapName + "' not found in ControllerMaps.txt") end
                    else
-                       // Find next [Map: or EOF for section end
                        mapSectionEnd = IndexOfSubstring(CopySubstring(content, mapSectionStart + Length(searchKey), Length(content) - (mapSectionStart + Length(searchKey))), "[Map:", false)
                        if mapSectionEnd < 0 then mapSectionEnd = Length(content) - (mapSectionStart + Length(searchKey)) end
 
-                       // Extract section, find Macro<N> = line, mutate, stitch back
                        section = CopySubstring(content, mapSectionStart + Length(searchKey), mapSectionEnd)
                        searchKey = "Macro" + (scopeSlot + 1) + " ="
                        lineStart = IndexOfSubstring(section, searchKey, false)
 
                        if lineStart >= 0 then
-                           // Find end of that line
                            nlPos = IndexOfSubstring(CopySubstring(section, lineStart, Length(section) - lineStart), NEW_LINE, false)
                            if nlPos >= 0 then
                                oldLine = CopySubstring(section, lineStart, nlPos)
@@ -14606,19 +14639,21 @@ On WidgetValueChanged(val : Double) from BTN_Bind_Macro
                                oldLine = CopySubstring(section, lineStart, Length(section) - lineStart)
                            end
 
-                           // Extract existing value part after "="
                            lineEnd = IndexOfSubstring(oldLine, "=", false)
                            if lineEnd >= 0 then
                                newValue = TrimString(CopySubstring(oldLine, lineEnd + 1, Length(oldLine) - (lineEnd + 1)))
-                               // Prepend LFO:<name> | (unless a prefix is already there — replace it)
+                               // Strip any leading LFO:<other> | prefix. In DRAFT state
+                               // a legitimate prefix cannot be present — if it were, the
+                               // scope would be in EDIT state. Any prefix we see here is
+                               // orphan (name not in registry), so stripping it is safe.
                                if IndexOfSubstring(newValue, "LFO:", false) == 0 then
-                                   // Strip existing LFO:<other> | prefix
                                    i = IndexOfSubstring(newValue, "|", false)
                                    if i >= 0 then
                                        newValue = TrimString(CopySubstring(newValue, i + 1, Length(newValue) - (i + 1)))
                                    else
                                        newValue = ""
                                    end
+                                   if DebugMode then Trace("LFO v2: DRAFT save, stripped orphan LFO: prefix before adding new binding") end
                                end
                                if Length(newValue) > 0 then
                                    newLine = searchKey + " LFO:" + lfoName + " | " + newValue
@@ -14626,47 +14661,24 @@ On WidgetValueChanged(val : Double) from BTN_Bind_Macro
                                    newLine = searchKey + " LFO:" + lfoName
                                end
 
-                               // Stitch: replace oldLine with newLine in section, then rebuild content
                                section = ReplaceString(section, oldLine, newLine, false)
                                content = CopySubstring(content, 0, mapSectionStart + Length("[Map:" + mapName + "]")) + section + CopySubstring(content, mapSectionStart + Length("[Map:" + mapName + "]") + mapSectionEnd, Length(content) - (mapSectionStart + Length("[Map:" + mapName + "]") + mapSectionEnd))
 
                                saved = SaveStringToTextFile(ControllerMapFilePath, content)
-                               if DebugMode then Trace("LFO v2: wrote LFO:" + lfoName + " prefix to [" + mapName + "] Macro" + (scopeSlot + 1) + " (saved=" + saved + ")") end
+                               if DebugMode then Trace("LFO v2: DRAFT save, wrote LFO:" + lfoName + " prefix to [" + mapName + "] Macro" + (scopeSlot + 1) + " (saved=" + saved + ")") end
                            end
                        else
-                           if DebugMode then Trace("LFO v2: BTN_Bind_Macro: Macro" + (scopeSlot + 1) + " not found in section [" + mapName + "]") end
+                           if DebugMode then Trace("LFO v2: BTN_LFO_Save: Macro" + (scopeSlot + 1) + " not found in section [" + mapName + "]") end
                        end
                    end
                end
 
-               // 6. Rebuild state
+               // 4. Rebuild runtime state — LoadControllerMap repopulates LFO_ByMacro
+               //    for the active map, BuildLFOUsageIndex rebuilds the cross-map
+               //    reverse index, RefreshLFOInspector transitions DRAFT → EDIT.
                LoadControllerMap(mapName)
                BuildLFOUsageIndex()
                RefreshLFOInspector()
-
-               SetWidgetValue(BTN_Bind_Macro, 0.0)
-           end
-       end
-   end
-End
-
-On WidgetValueChanged(val : Double) from BTN_LFO_Save
-   var scopeSlot, lfoIdx : Integer
-   if val > 0.5 then
-       scopeSlot = CurrentEditScope
-
-       // EDIT state only
-       if scopeSlot < 0 or scopeSlot >= 50 or LFO_Draft_Active then
-           if DebugMode then Trace("LFO v2: BTN_LFO_Save ignored (not in EDIT state)") end
-       else
-           lfoIdx = LFO_ByMacro[scopeSlot]
-           if lfoIdx < 0 then
-               if DebugMode then Trace("LFO v2: BTN_LFO_Save ignored (scope has no LFO)") end
-           else
-               // Registry already has the current Type/Rate/Cycles from the
-               // cycle-callback edits in Task 4. Just persist to disk.
-               SaveLFOConfig()
-               if DebugMode then Trace("LFO v2: saved registry entry '" + LFO_Names[lfoIdx] + "'") end
            end
        end
        SetWidgetValue(BTN_LFO_Save, 0.0)
