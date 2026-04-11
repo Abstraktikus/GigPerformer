@@ -209,53 +209,47 @@ cycle) so the cycle-browser logic from SECTION 17 / 18 can be reused.
 
 ## 3. Looper Chain — Timeline Weaving
 
-### 3.1 Chain definition — `Mem_Loop_NextCh`
+### 3.1 Chain definition — `Mem_Loop_Target` (already exists)
 
-The Looper already persists `Mem_Loop_Length[ch]` and
-`Mem_Loop_Action[ch]` per channel via the Song.ini snapshot. This spec
-adds a third parallel array:
+The chain storage the spec originally called `Mem_Loop_NextCh` already
+exists in the codebase as `Mem_Loop_Target` — a 16-element `Integer
+Array` where `-1` means "chain ends here" and `0..15` is the successor
+channel index. It is declared at `Global Rackspace.gpscript:583`,
+persisted to Song.ini as `L_Tgt_<n>` (see the save path near line
+11022 and load path near 11539), and exposed to the user through the
+existing `CycleLoopTarget()` browser triple at line 4545.
 
-```gpscript
-Mem_Loop_NextCh : Integer Array  // -1 = chain ends here, 0..15 = successor channel
-```
-
-Song.ini gains one new key per looper channel:
+Song.ini already carries the persistence:
 
 ```ini
 [Snapshot]
 Loop_Length_1 = 8
-Loop_Action_1 = Overdub
-Loop_NextCh_1 = 4
+Loop_Action_1 = 1
+L_Tgt_1 = 3           ; 0-based target channel, -1 if no successor
 Loop_Length_4 = 8
-Loop_Action_4 = Play
-Loop_NextCh_4 = -
+Loop_Action_4 = 0
 ```
 
-- `-` → no successor, chain ends
-- `<k>` (1-based) → after `LoopLengthMS[n]` elapses, trigger channel `k`
-  with **its own** `Mem_Loop_Action[k]` value. The action lives at the
-  target, never at the anchor.
+Chain semantics are as originally specified: after the source loop
+ends, the successor channel fires with **its own** `Mem_Loop_Action[k]`
+value. No new storage is required. The global cap
+`N_MAX_CHAIN_DEPTH = 32` guards the show-projection walk against
+cyclic chains.
 
-Chains may share endpoints, fork, or loop back on themselves. A global
-`N_MAX_CHAIN_DEPTH = 32` guards against runaway projection when a chain
-is cyclic.
-
-### 3.2 Engine — one additional hook
+### 3.2 Engine — already implemented
 
 The Looper state machine in SECTION 18 already auto-transitions from
-REC → PLAY when `LoopLengthMS[ch]` is reached. The change is a single
-additional branch at that exact transition point:
+REC → PLAY when `LoopLengthMS[ch]` is reached, and the auto-jump
+chain-follower already lives in `On BeatChanged` at lines 13818–13855.
+That block:
 
-```gpscript
-if Mem_Loop_NextCh[ch] >= 0 then
-    FireLooperAction(Mem_Loop_NextCh[ch])   // new, reuses existing dispatcher
-end
-```
+1. Reads `jTgt = Mem_Loop_Target[ch]`
+2. Moves the UI scope focus to the target channel
+3. Starts the target channel with its own `Mem_Loop_Action[jTgt]`
+   (REC if empty, PLAY if stopped)
 
-`FireLooperAction(targetCh)` is the same entry point that the manual
-`SYSACT_LOOPER_REC` click routes through — a single function that
-applies `Mem_Loop_Action[targetCh]` to the target channel. Manual clicks
-and projected chain transitions flow through exactly one path.
+**No engine hook needed for this spec.** The Timeline-weaving work in
+sections 3.3–3.7 builds on top of this pre-existing chain runtime.
 
 ### 3.3 Master vs. Show events — strict separation
 
