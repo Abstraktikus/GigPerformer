@@ -499,6 +499,15 @@ Var
    LFO_Draft_StartTime : Double  = 0.0
    LFO_Draft_PreValue  : Double  = 0.0
 
+   // v2: re-entrance guard for LFO-driven macro writes. Set to true
+   // while TickLFOs is calling SetParameter(ExternalArranger, ...).
+   // On ParameterValueChanged from ExternalArranger checks this flag
+   // and skips TriggerMacroFeedback, StartLFO re-trigger, SysAction
+   // dispatch, and Timeline recording when it's set. Without this,
+   // the LFO re-triggers itself every tick and floods the OSC HUD
+   // with sample-level feedback messages until GP chokes.
+   LFO_IsDriving : Boolean = false
+
    // v2: flash surface for LBL_LFO_BoundMacro — 1-second transient feedback
    // from BTN_LFO_Save when clicked in LOCKED state, prompting the user
    // to select a User Macro first via Scope Prev/Next.
@@ -6382,7 +6391,9 @@ Function StopLFO(slot : Integer)
        // nothing to do
    else
        LFO_Active[slot] = false
+       LFO_IsDriving = true
        SetParameter(ExternalArranger, slot, LFO_PreValue[slot])
+       LFO_IsDriving = false
        LFO_LastSample[slot] = LFO_PreValue[slot]
        LFO_Progress[slot] = 0.0
        if DebugMode then Trace("LFO: StopLFO slot " + slot + " (snapped back to " + LFO_PreValue[slot] + ")") end
@@ -6405,7 +6416,9 @@ Function TickLFOs()
        if cycleLenMS < 1.0 then cycleLenMS = 1.0 end
        phase = (elapsedMS / cycleLenMS) - Floor(elapsedMS / cycleLenMS)
        sample = SampleLFOWaveform(LFO_Draft_Type, phase)
+       LFO_IsDriving = true
        SetParameter(ExternalArranger, LFO_Draft_Slot, sample)
+       LFO_IsDriving = false
        SetWidgetValue(METER_LFO_H, sample)
        SetWidgetValue(METER_LFO_V, phase)
    end
@@ -6422,7 +6435,9 @@ Function TickLFOs()
 
                phase = (elapsedMS / cycleLenMS) - Floor(elapsedMS / cycleLenMS)
                sample = SampleLFOWaveform(LFO_Types[lfoIdx], phase)
+               LFO_IsDriving = true
                SetParameter(ExternalArranger, slot, sample)
+               LFO_IsDriving = false
                LFO_LastSample[slot] = sample
                SetWidgetValue(METER_LFO_H, LFO_LastSample[slot])
                SetWidgetValue(METER_LFO_V, LFO_Progress[slot])
@@ -13319,6 +13334,7 @@ Initialization
    LFO_Draft_Slot      = -1
    LFO_Draft_StartTime = 0.0
    LFO_Draft_PreValue  = 0.0
+   LFO_IsDriving       = false
 
    LFOFlashMsg   = ""
    LFOFlashTimer = 0.0
@@ -14563,7 +14579,9 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Run
            // Button released — stop whichever is running
            if LFO_Draft_Running then
                LFO_Draft_Running = false
+               LFO_IsDriving = true
                SetParameter(ExternalArranger, LFO_Draft_Slot, LFO_Draft_PreValue)
+               LFO_IsDriving = false
                SetWidgetValue(METER_LFO_H, 0.0)
                SetWidgetValue(METER_LFO_V, 0.0)
                LFO_Draft_Slot = -1
@@ -14865,15 +14883,18 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
        // and physical motorfader bounce-back.
    Else
        if paramIdx >= 0 and paramIdx <= 15 then
-           
+
            // ==========================================================
            // ---> NEU: LOG-EINTRAG & HUD FEEDBACK (Ausnahme: Scrubber)
+           // LFO self-write guard: when TickLFOs drove this parameter
+           // change, skip HUD feedback — the LFO would flood OSC with
+           // per-sample messages and crash GP via overload.
            // ==========================================================
-           if paramIdx != SCRUB_MacroIdx then
+           if paramIdx != SCRUB_MacroIdx and not LFO_IsDriving then
                if DebugMode then Trace("MACRO-IN: Arranger Slider/Knob " + (paramIdx + 1) + " -> " + Round(newVal * 127.0)) end
-               
+
                // Send the value to the HUD (false = Macro, not a direct CC)
-               TriggerMacroFeedback(paramIdx, false, newVal) 
+               TriggerMacroFeedback(paramIdx, false, newVal)
            end
            // ==========================================================
            
@@ -14948,25 +14969,36 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
        
        // SYSTEM ACTION DISPATCH (hardware-macro path)
        // Reverse-lookup is O(1); Isolation Rule guarantees exclusivity.
-       if newVal > 0.5 and paramIdx >= 0 and paramIdx < MAX_MACROS then
-           if SysAction_ByMacro[paramIdx] > -1 then
-               FireSystemAction(SysAction_ByMacro[paramIdx])
+       // Skip when LFO drove the value — LFO samples aren't SysAction triggers.
+       if not LFO_IsDriving then
+           if newVal > 0.5 and paramIdx >= 0 and paramIdx < MAX_MACROS then
+               if SysAction_ByMacro[paramIdx] > -1 then
+                   FireSystemAction(SysAction_ByMacro[paramIdx])
+               end
            end
        end
 
        // TIMELINE RECORDING FOR MACROS (SWITCHES ONLY)
        // System-action macros are excluded by design — their behavior should not
        // be recorded/replayed through the Timeline (see Isolation Rule).
-       if (RecordMode > 0 or TimelineRecActive) and IsPerformanceActive then
-           if newVal == 1.0 and not IsSystemActionMacro(paramIdx) then
-               RecordTimelineEvent("Macro", paramIdx)
+       // Skip when LFO drove the value — LFO samples aren't Timeline events.
+       if not LFO_IsDriving then
+           if (RecordMode > 0 or TimelineRecActive) and IsPerformanceActive then
+               if newVal == 1.0 and not IsSystemActionMacro(paramIdx) then
+                   RecordTimelineEvent("Macro", paramIdx)
+               end
            end
        end
 
-       // LFO trigger: if this macro is bound to an LFO, (re)start it
-       if paramIdx >= 0 and paramIdx < MAX_MACROS and LFO_ByMacro[paramIdx] >= 0 then
-           StartLFO(paramIdx)
-           if DebugMode then Trace("LFO: StartLFO triggered by macro write on slot " + paramIdx) end
+       // LFO trigger: if this macro is bound to an LFO, (re)start it.
+       // CRITICAL: skip when LFO_IsDriving — this is the re-entry that caused
+       // the death loop. TickLFOs writes a sample, the handler fires, this
+       // block restarts the LFO phase, next tick writes another sample, etc.
+       if not LFO_IsDriving then
+           if paramIdx >= 0 and paramIdx < MAX_MACROS and LFO_ByMacro[paramIdx] >= 0 then
+               StartLFO(paramIdx)
+               if DebugMode then Trace("LFO: StartLFO triggered by macro write on slot " + paramIdx) end
+           end
        end
    end
 End
