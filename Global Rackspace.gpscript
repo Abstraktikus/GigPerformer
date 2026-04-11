@@ -6120,6 +6120,164 @@ Function BuildLFOUsageIndex()
 End
 
 // ---------------------------------------------------------
+// BUILD LFO BIND LINES (v2)
+// Populates LFOBind_Lines with the head-line-only display of every
+// binding for a given LFO, grouped by map. Called from
+// RefreshLFOInspector() in EDIT state.
+//
+// For active-map bindings, the head line uses Link_* arrays (the
+// same pattern as CtrlInfo_Lines at ~line 3154). For inactive-map
+// bindings, the raw Macro<N> = ... line is re-parsed verbatim to
+// extract the first target without touching plugin state.
+// ---------------------------------------------------------
+Function BuildLFOBindLines(lfoIdx : Integer)
+   var i, j, mapIdx, macroSlot, firstTargetLink : Integer
+   var currentMapIdx : Integer = -1
+   var hwStr, headLine, rawLine, valuePart, firstEntry, realName, valStr : String
+   var vMin, vMax : Integer
+   var eqPos, pipePos, lfoPipePos : Integer
+   var sortedBinding : Integer Array
+   var b, b2, tmp : Integer
+
+   LFOBind_Lines = []
+
+   if lfoIdx < 0 or lfoIdx >= Size(LFO_Names) then
+       // Defensive — caller should not pass invalid index
+       if DebugMode then Trace("LFO v2: BuildLFOBindLines called with invalid lfoIdx=" + lfoIdx) end
+   else
+       LFOBind_Lines <-- "--- LFO BINDINGS: " + LFO_Names[lfoIdx] + " ---"
+
+       // Collect bindings for this LFO, sorted by (mapIdx, macroSlot)
+       sortedBinding = []
+       For i = 0; i < Size(LFO_Usage_LfoIdx); i = i + 1 Do
+          if LFO_Usage_LfoIdx[i] == lfoIdx then sortedBinding <-- i end
+       End
+
+       // Bubble-sort by (mapIdx, macroSlot) — binding counts are tiny
+       For b = 0; b < Size(sortedBinding); b = b + 1 Do
+          For b2 = b + 1; b2 < Size(sortedBinding); b2 = b2 + 1 Do
+             if LFO_Usage_MapIdx[sortedBinding[b]] > LFO_Usage_MapIdx[sortedBinding[b2]] then
+                 tmp = sortedBinding[b]; sortedBinding[b] = sortedBinding[b2]; sortedBinding[b2] = tmp
+             elsif LFO_Usage_MapIdx[sortedBinding[b]] == LFO_Usage_MapIdx[sortedBinding[b2]] then
+                 if LFO_Usage_MacroIdx[sortedBinding[b]] > LFO_Usage_MacroIdx[sortedBinding[b2]] then
+                     tmp = sortedBinding[b]; sortedBinding[b] = sortedBinding[b2]; sortedBinding[b2] = tmp
+                 end
+             end
+          End
+       End
+
+       // Emit grouped head lines
+       For i = 0; i < Size(sortedBinding); i = i + 1 Do
+          j = sortedBinding[i]
+          mapIdx = LFO_Usage_MapIdx[j]
+          macroSlot = LFO_Usage_MacroIdx[j]
+
+          if mapIdx != currentMapIdx then
+              LFOBind_Lines <-- "[Map: " + CtrlMapList[mapIdx] + "]"
+              currentMapIdx = mapIdx
+          end
+
+          hwStr = GetAssignedHWString(macroSlot)
+
+          // Active-map vs inactive-map
+          if CtrlMapList[mapIdx] == CurrentCtrlMapName then
+              // Active map: look up first Link_* for this macro slot
+              firstTargetLink = -1
+              For b = 0; b < Link_Count; b = b + 1 Do
+                 if Link_Active[b] and Link_SourceIdx[b] == macroSlot and firstTargetLink == -1 then
+                     firstTargetLink = b
+                 end
+              End
+
+              if firstTargetLink >= 0 then
+                  realName = Link_ExpectedName[firstTargetLink]
+                  if realName == "" then realName = "Param " + Link_TargetParam[firstTargetLink] end
+                  vMin = Round(Link_MinVal[firstTargetLink] * 100.0)
+                  vMax = Round(Link_MaxVal[firstTargetLink] * 100.0)
+                  if vMin != 0 or vMax != 100 then valStr = " {" + vMin + "%-" + vMax + "%}" else valStr = "" end
+                  headLine = "  Macro " + (macroSlot + 1) + hwStr + ": " + Link_BlockName[firstTargetLink] + ":" + realName + valStr
+              else
+                  headLine = "  Macro " + (macroSlot + 1) + hwStr + ": (no target)"
+              end
+          else
+              // Inactive map: re-parse raw line, extract first non-LFO |-entry
+              rawLine = LFO_Usage_RawLine[j]
+              eqPos = IndexOfSubstring(rawLine, "=", false)
+              valuePart = ""
+              if eqPos >= 0 then
+                  valuePart = TrimString(CopySubstring(rawLine, eqPos + 1, Length(rawLine) - (eqPos + 1)))
+              end
+
+              // Strip leading LFO:<Name> | prefix
+              lfoPipePos = IndexOfSubstring(valuePart, "|", false)
+              if lfoPipePos >= 0 then
+                  valuePart = TrimString(CopySubstring(valuePart, lfoPipePos + 1, Length(valuePart) - (lfoPipePos + 1)))
+              else
+                  valuePart = ""
+              end
+
+              // Take first |-entry after the LFO prefix
+              pipePos = IndexOfSubstring(valuePart, "|", false)
+              if pipePos >= 0 then
+                  firstEntry = TrimString(CopySubstring(valuePart, 0, pipePos))
+              else
+                  firstEntry = valuePart
+              end
+
+              if firstEntry == "" then
+                  headLine = "  Macro " + (macroSlot + 1) + hwStr + ": (no target)"
+              else
+                  headLine = "  Macro " + (macroSlot + 1) + hwStr + ": " + firstEntry
+              end
+          end
+
+          LFOBind_Lines <-- headLine
+       End
+
+       if DebugMode then Trace("LFO v2: BuildLFOBindLines built " + Size(LFOBind_Lines) + " lines for '" + LFO_Names[lfoIdx] + "'") end
+   end
+End
+
+// ---------------------------------------------------------
+// REFRESH LFO BOUND MACRO DISPLAY (v2)
+// Paginates LFOBind_Lines through SLD_LFOBoundMacro into
+// LBL_LFO_BoundMacro. Mirrors RefreshLooperConfigDisplay at ~4043.
+// Honors the LFOFlashTimer surface: while the timer is active, the
+// LFOFlashMsg is prepended as the first line and the body follows.
+// ---------------------------------------------------------
+Function RefreshLFOBoundMacroDisplay()
+   var scrollVal : Double = 0.0
+   var totalLines, displayLines, maxStart, startIdx, i : Integer
+   var finalText : String = ""
+
+   displayLines = 10   // Adjust to the LBL_LFO_BoundMacro widget's line capacity
+
+   scrollVal = GetWidgetValue(SLD_LFOBoundMacro)
+
+   // Flash message takes priority
+   if LFOFlashTimer > 0.0 and TimeSinceStartup() < LFOFlashTimer then
+       finalText = "[" + LFOFlashMsg + "]" + NEW_LINE + NEW_LINE
+   elsif LFOFlashTimer > 0.0 then
+       // Timer expired — clear the stale state
+       LFOFlashTimer = 0.0
+       LFOFlashMsg = ""
+   end
+
+   totalLines = Size(LFOBind_Lines)
+   maxStart = totalLines - displayLines
+   if maxStart < 0 then maxStart = 0 end
+   startIdx = Round((1.0 - scrollVal) * IntToFloat(maxStart))
+
+   For i = 0; i < displayLines; i = i + 1 Do
+      if (startIdx + i) < totalLines then
+          finalText = finalText + LFOBind_Lines[startIdx + i] + NEW_LINE
+      end
+   End
+
+   SetWidgetLabel(LBL_LFO_BoundMacro, finalText)
+End
+
+// ---------------------------------------------------------
 // SAVE LFO CONFIG
 // Writes the in-memory registry back to LFOConfig.txt. Called from
 // BTN_LFO_Save and BTN_LFO_Delete.
