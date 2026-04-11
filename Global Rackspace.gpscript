@@ -10289,6 +10289,8 @@ Function PerformSystemReset()
    For i = 0; i < 16; i = i + 1 Do SetWidgetValue(W_CF_Arranger[i], 1.0) End
    
    For i=0; i<MAX_VSTS; i=i+1 Do Mem_ManualVSTBypass[i] = false End
+   For i = 0; i < 16; i = i + 1 Do Mem_ScopeBypassConfigured[i] = false End
+   if DebugMode then Trace("BYPASS: Mem_ScopeBypassConfigured cleared on reset path") end
 
    // (Step 6 was removed; step 2 now handles this)
    
@@ -11426,8 +11428,10 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
         For i = 0; i < MAX_VSTS; i = i + 1 Do
             Mem_ManualVSTBypass[i] = targetManualBypass[i]
         End
-        
-        For i = 0; i < 16; i = i + 1 Do 
+        For i = 0; i < 16; i = i + 1 Do Mem_ScopeBypassConfigured[i] = false End
+        if DebugMode then Trace("BYPASS: Mem_ScopeBypassConfigured cleared on reset path") end
+
+        For i = 0; i < 16; i = i + 1 Do
             idx = 0
             For j = 0; j < 16; j = j + 1 Do
                if GetParameter(RECH, (j * 16) + i) > 0.5 then idx = idx + 1 end
