@@ -301,6 +301,15 @@ Var
    LBL_Subbar_1, LBL_Subbar_2, LBL_Subbar_3, LBL_Subbar_4         : Widget
    LBL_TL_Subbar_1, LBL_TL_Subbar_2, LBL_TL_Subbar_3, LBL_TL_Subbar_4 : Widget
    
+   // --- LFO Inspector (new) ---
+   BTN_LFO_Prev, BTN_LFO_Next                                     : Widget
+   LBL_LFO, LBL_LFO_BoundMacro                                    : Widget
+   BTN_LFO_Type_Prev, BTN_LFO_Type_Next, LBL_LFO_Type             : Widget
+   BTN_LFO_Rate_Prev, BTN_LFO_Rate_Next, LBL_LFO_Rate             : Widget
+   BTN_LFO_Cycles_Prev, BTN_LFO_Cycles_Next, LBL_LFO_Cycles       : Widget
+   METER_LFO_H, METER_LFO_V                                       : Widget
+   BTN_LFO_Run, BTN_LFO_Save, BTN_LFO_Delete                      : Widget
+
    // --- Widget Arrays ---
    BTN_Ch1_In, BTN_Ch2_In, BTN_Ch3_In, BTN_Ch4_In, BTN_Ch5_In, BTN_Ch6_In, BTN_Ch7_In, BTN_Ch8_In, BTN_Ch9_In, BTN_Ch10_In, BTN_Ch11_In, BTN_Ch12_In, BTN_Ch13_In, BTN_Ch14_In, BTN_Ch15_In, BTN_Ch16_In : Widget
    W_Btn_Input : Widget Array
