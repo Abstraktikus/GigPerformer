@@ -37,6 +37,9 @@ Var
    DefaultPreset : String = "Standard"
    NEW_LINE : String = <<<
 >>>
+   LOOP_SHOW_ARROW : String = <<<
+↳
+>>>
    ASCII_LOOKUP : String = " !_#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[_]^_`abcdefghijklmnopqrstuvwxyz{|}~"
    FILTER_DEFAULT_VAL : Double = 0.0941176 // Default GP MIDI Filter value (passthrough)
    MAX_LINKS : Integer = 512
@@ -5174,7 +5177,7 @@ Function BuildRecDisplayLines()
                 for k = 0; k < Size(showChain_OffsetMS); k = k + 1 do
                     showMS = Round(IntToFloat(tms) + showChain_OffsetMS[k])
                     barStr = "+" + IntToString(Round(showChain_OffsetMS[k] / ((60000.0 / RecordedBPM) * IntToFloat(GetTimeSigNumerator())))) + "b"
-                    showLine = "    -> " + barStr + "  " + LoopMasterActionName(showChain_ActionCode[k]) + " Ch" + (showChain_ChIdx[k] + 1) + "  (" + IntToString(showMS) + "ms)"
+                    showLine = "    " + TrimString(LOOP_SHOW_ARROW) + " " + barStr + "  " + LoopMasterActionName(showChain_ActionCode[k]) + " Ch" + (showChain_ChIdx[k] + 1) + "  (" + IntToString(showMS) + "ms)"
                     RecDisplayLines <-- showLine
                 end
             end
@@ -5216,7 +5219,7 @@ Function BuildRecDisplayLines()
                     for k = 0; k < Size(showChain_OffsetMS); k = k + 1 do
                         showMS = Round(IntToFloat(tms) + showChain_OffsetMS[k])
                         barStr = "+" + IntToString(Round(showChain_OffsetMS[k] / ((60000.0 / RecordedBPM) * IntToFloat(GetTimeSigNumerator())))) + "b"
-                        showLine = "    -> " + barStr + "  " + LoopMasterActionName(showChain_ActionCode[k]) + " Ch" + (showChain_ChIdx[k] + 1) + "  (" + IntToString(showMS) + "ms)"
+                        showLine = "    " + TrimString(LOOP_SHOW_ARROW) + " " + barStr + "  " + LoopMasterActionName(showChain_ActionCode[k]) + " Ch" + (showChain_ChIdx[k] + 1) + "  (" + IntToString(showMS) + "ms)"
                         RecDisplayLines <-- showLine
                     end
                 end
