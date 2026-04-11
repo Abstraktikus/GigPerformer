@@ -2337,12 +2337,12 @@ Function UpdateUsageLabelDisplay()
                       assignedVSTs[count] = vstIdx
                       
                       // Build status string
-                      if Mem_ManualVSTBypass[vstIdx] then 
-                          bypassStr = " [MAN OFF]" // Manual override indicator
-                      elsif IsPluginBypassed(BLK_VST[vstIdx]) then 
-                          bypassStr = " [Bypassed]" 
-                      else 
-                          bypassStr = " [Active]" 
+                      if Mem_ManualVSTBypass[vstIdx] then
+                          bypassStr = " [MANUAL]" // Explicit user-set bypass
+                      elsif IsPluginBypassed(BLK_VST[vstIdx]) then
+                          bypassStr = " [Bypassed]"
+                      else
+                          bypassStr = " [Active]"
                       end
 
                       if count > 0 then routingText = routingText + " | " end
@@ -2364,10 +2364,11 @@ Function UpdateUsageLabelDisplay()
           if assignedVSTs[i] != -1 then
               SetWidgetHideOnPresentation(W_Inject_Bypass[i], false)
 
+              // NEW POLARITY: lit (1.0) = VST active, dark (0.0) = VST bypassed
               if Mem_ManualVSTBypass[assignedVSTs[i]] == true then
-                  SetWidgetValue(W_Inject_Bypass[i], 1.0) 
+                  SetWidgetValue(W_Inject_Bypass[i], 0.0)  // bypassed -> dark
               else
-                  SetWidgetValue(W_Inject_Bypass[i], 0.0) 
+                  SetWidgetValue(W_Inject_Bypass[i], 1.0)  // active -> lit
               end
           else
               SetWidgetHideOnPresentation(W_Inject_Bypass[i], true)
@@ -8081,7 +8082,7 @@ Function AnalyzeChannel(chIdx : Integer) Returns Integer
            if RoutingMatrix[(vstIdx * 16) + chIdx] == true then
                if count < 3 then
                    // Priority 1: Manual Bypass, Priority 2: CPU Bypass
-                   if Mem_ManualVSTBypass[vstIdx] then bypassStr = " [MAN OFF]"
+                   if Mem_ManualVSTBypass[vstIdx] then bypassStr = " [MANUAL]"
                    elsif IsPluginBypassed(BLK_VST[vstIdx]) then bypassStr = " [Bypassed]"
                    else bypassStr = " [Active]" end
                    
