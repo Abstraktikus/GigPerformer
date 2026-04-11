@@ -3357,6 +3357,10 @@ Function CycleEditScope(dir : Integer)
        // Update labels & auto-scroll
        UpdateEditScopeDisplay()
        ScrollToCurrentCtrlScope()
+
+       // v2: LFO inspector follows the scope — re-resolve LOCKED / EDIT /
+       // DRAFT state and repaint the bindings list for the new scope.
+       RefreshLFOInspector()
    end
 End
 
@@ -6249,8 +6253,13 @@ End
 // REFRESH LFO BOUND MACRO DISPLAY (v2)
 // Paginates LFOBind_Lines through SLD_LFOBoundMacro into
 // LBL_LFO_BoundMacro. Mirrors RefreshLooperConfigDisplay at ~4043.
-// Honors the LFOFlashTimer surface: while the timer is active, the
-// LFOFlashMsg is prepended as the first line and the body follows.
+//
+// Two-phase display:
+//   Phase 1 (flash active):   show ONLY the flash message, no list.
+//   Phase 2 (flash expired):  show the bindings list, no flash.
+//
+// Transition from phase 1 to phase 2 is driven by On TimerTick which
+// polls LFOFlashTimer and calls this function once the timer expires.
 // ---------------------------------------------------------
 Function RefreshLFOBoundMacroDisplay()
    var scrollVal : Double = 0.0
@@ -6259,29 +6268,33 @@ Function RefreshLFOBoundMacroDisplay()
 
    displayLines = 10   // Adjust to the LBL_LFO_BoundMacro widget's line capacity
 
-   scrollVal = GetWidgetValue(SLD_LFOBoundMacro)
-
-   // Flash message takes priority
+   // Phase 1: flash message exclusive
    if LFOFlashTimer > 0.0 and TimeSinceStartup() < LFOFlashTimer then
-       finalText = "[" + LFOFlashMsg + "]" + NEW_LINE + NEW_LINE
-   elsif LFOFlashTimer > 0.0 then
-       // Timer expired — clear the stale state
-       LFOFlashTimer = 0.0
-       LFOFlashMsg = ""
+       finalText = NEW_LINE + NEW_LINE + "    *** " + LFOFlashMsg + " ***"
+       SetWidgetLabel(LBL_LFO_BoundMacro, finalText)
+   else
+       // Timer expired — clear stale flash state (safe to run even when
+       // already cleared; the On TimerTick poller may have cleared it).
+       if LFOFlashTimer > 0.0 then
+           LFOFlashTimer = 0.0
+           LFOFlashMsg = ""
+       end
+
+       // Phase 2: bindings list
+       scrollVal = GetWidgetValue(SLD_LFOBoundMacro)
+       totalLines = Size(LFOBind_Lines)
+       maxStart = totalLines - displayLines
+       if maxStart < 0 then maxStart = 0 end
+       startIdx = Round((1.0 - scrollVal) * IntToFloat(maxStart))
+
+       For i = 0; i < displayLines; i = i + 1 Do
+          if (startIdx + i) < totalLines then
+              finalText = finalText + LFOBind_Lines[startIdx + i] + NEW_LINE
+          end
+       End
+
+       SetWidgetLabel(LBL_LFO_BoundMacro, finalText)
    end
-
-   totalLines = Size(LFOBind_Lines)
-   maxStart = totalLines - displayLines
-   if maxStart < 0 then maxStart = 0 end
-   startIdx = Round((1.0 - scrollVal) * IntToFloat(maxStart))
-
-   For i = 0; i < displayLines; i = i + 1 Do
-      if (startIdx + i) < totalLines then
-          finalText = finalText + LFOBind_Lines[startIdx + i] + NEW_LINE
-      end
-   End
-
-   SetWidgetLabel(LBL_LFO_BoundMacro, finalText)
 End
 
 // ---------------------------------------------------------
@@ -10449,7 +10462,8 @@ Function CycleScopeSection(direction : Integer)
     
     UpdateEditScopeDisplay()
     ScrollToCurrentCtrlScope()
-    
+    RefreshLFOInspector()  // v2: follow scope into the new section
+
     Trace("SCOPE-JUMP: Jumped to Section -> " + MacroGroup_Names[foundAnchor])
 End
 
@@ -12270,8 +12284,15 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
 
    // v2: cache the song name for the entire session, independent of
    // InSetlistMode() state. Used by RefreshLFOInspector's DRAFT branch.
-   CurrentSongCachedName = songName
-   if DebugMode then Trace("LFO v2: CurrentSongCachedName = '" + songName + "'") end
+   // Strip any `.ini` extension because callers may pass filenames
+   // (e.g. "SlowHip80erDream.ini") and the LFO name must match the
+   // clean song identifier (no extension).
+   if IndexOfSubstring(songName, ".ini", false) > -1 then
+       CurrentSongCachedName = CopySubstring(songName, 0, IndexOfSubstring(songName, ".ini", false))
+   else
+       CurrentSongCachedName = songName
+   end
+   if DebugMode then Trace("LFO v2: CurrentSongCachedName = '" + CurrentSongCachedName + "' (raw input was '" + songName + "')") end
 
    If FileExists(filePath) Then
        IsLoadingSnapshot = true 
@@ -15857,6 +15878,16 @@ On TimerTick(ms : Double)
    if not IsLoadingSnapshot and TimeSinceStartup() > FaderSafetyTimer then
        TickLFOs()
        CheckLatchTimeout()
+   end
+
+   // 0c. LFO flash auto-clear — when the 1.5s flash window expires,
+   // transition the LBL_LFO_BoundMacro display from the flash message
+   // (phase 1) to the bindings list (phase 2). Cheap no-op when
+   // LFOFlashTimer is 0 (inactive).
+   if LFOFlashTimer > 0.0 and TimeSinceStartup() >= LFOFlashTimer then
+       LFOFlashTimer = 0.0
+       LFOFlashMsg = ""
+       RefreshLFOBoundMacroDisplay()
    end
 
    // 0. JOYSTICK CROSS-TALK GUARD (CC16 vs PitchBend: dominant axis wins after 120ms)
