@@ -54,6 +54,13 @@ TRACE_BUFFER_SIZE = 50
 
 PID_FILE = os.path.join(tempfile.gettempdir(), "geisterhand.pid")
 
+# Trace log file — written directly into the Claude project folder so
+# Claude can read it via its own tools without the user copy-pasting
+# console output. Truncated at every Geisterhand startup (one run = one
+# log). Flushed after every write so crashes still leave readable tails.
+TRACE_LOG_DIR  = r"C:\Users\marti\OneDrive\Claude\GigPerformer\logs"
+TRACE_LOG_FILE = os.path.join(TRACE_LOG_DIR, "gp-trace-latest.log")
+
 
 # ============================================================
 # SINGLETON — kill old Geisterhand Python (NOT Gig Performer)
@@ -216,7 +223,27 @@ def make_press_ctrl_g_handler(gp_window_title: str):
     return press_ctrl_g
 
 
-def make_on_trace_handler(trace_buffer: list, last_trace_time: list):
+def open_trace_log():
+    """Create the log directory if missing and open gp-trace-latest.log
+    in write mode (truncates any previous session's log). Returns the
+    open file handle, or None if the file can't be opened (caller then
+    logs to console only)."""
+    try:
+        os.makedirs(TRACE_LOG_DIR, exist_ok=True)
+        f = open(TRACE_LOG_FILE, "w", encoding="utf-8")
+        f.write(f"# Geisterhand trace log\n")
+        f.write(f"# Session start: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"# File: {TRACE_LOG_FILE}\n")
+        f.write("# " + "-" * 60 + "\n")
+        f.flush()
+        return f
+    except OSError as e:
+        print(f"[WARN] could not open trace log file {TRACE_LOG_FILE}: {e}")
+        print(f"[WARN] traces will go to console only")
+        return None
+
+
+def make_on_trace_handler(trace_buffer: list, last_trace_time: list, log_file):
     def on_trace(unused_addr, *args):
         msg = args[0] if args else "(empty)"
         ts = time.strftime("%H:%M:%S")
@@ -226,6 +253,15 @@ def make_on_trace_handler(trace_buffer: list, last_trace_time: list):
         if len(trace_buffer) > TRACE_BUFFER_SIZE:
             trace_buffer.pop(0)
         last_trace_time[0] = time.time()
+
+        # Persist to file for Claude to read later. Flush per line so
+        # a crash leaves a readable tail right up to the last message.
+        if log_file is not None:
+            try:
+                log_file.write(line + "\n")
+                log_file.flush()
+            except OSError as e:
+                print(f"[WARN] trace log write failed: {e}")
     return on_trace
 
 
@@ -264,12 +300,16 @@ def main() -> None:
 
     print("-" * 50)
 
-    # --- 4. OSC handlers ---
+    # --- 4. OSC handlers + trace log file ---
     press_ctrl_g = make_press_ctrl_g_handler(gp_window_title)
+
+    trace_log = open_trace_log()
+    if trace_log is not None:
+        print(f"[log] trace log: {TRACE_LOG_FILE}")
 
     trace_buffer: list = []
     last_trace_time = [time.time()]
-    on_trace = make_on_trace_handler(trace_buffer, last_trace_time)
+    on_trace = make_on_trace_handler(trace_buffer, last_trace_time, trace_log)
 
     disp = dispatcher.Dispatcher()
     disp.map("/GP/PressCtrlG", press_ctrl_g)
@@ -297,6 +337,14 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n[exit] Ctrl+C — shutting down Geisterhand. GP stays alive.")
     finally:
+        if trace_log is not None:
+            try:
+                trace_log.write(f"# " + "-" * 60 + "\n")
+                trace_log.write(f"# Session end: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                trace_log.flush()
+                trace_log.close()
+            except OSError:
+                pass
         remove_pid_file()
 
 
