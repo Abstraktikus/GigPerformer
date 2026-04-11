@@ -5570,6 +5570,33 @@ Function SanitizeAndSlugify(rawName : String) Returns String
 End
 
 // ---------------------------------------------------------
+// LOOP MASTER EVENT ENCODING
+// Timeline stores a looper trigger event as a single Integer val.
+// Upper nibble = channel index (0..15), lower nibble = action code:
+//   0 = Rec, 1 = Play, 2 = Overdub, 3 = Clear
+// Encoding: val = chIdx * 16 + actionCode
+// ---------------------------------------------------------
+Function EncodeLoopMasterVal(chIdx : Integer, actionCode : Integer) Returns Integer
+   result = (chIdx * 16) + actionCode
+End
+
+Function DecodeLoopMasterChIdx(val : Integer) Returns Integer
+   result = val / 16
+End
+
+Function DecodeLoopMasterActionCode(val : Integer) Returns Integer
+   result = val % 16
+End
+
+Function LoopMasterActionName(actionCode : Integer) Returns String
+   if actionCode == 0 then result = "REC"
+   elsif actionCode == 1 then result = "PLAY"
+   elsif actionCode == 2 then result = "OVR"
+   elsif actionCode == 3 then result = "CLR"
+   else result = "?" end
+End
+
+// ---------------------------------------------------------
 // ARRANGER MAPPING FILE HANDLER
 // ---------------------------------------------------------
 
@@ -9130,6 +9157,23 @@ Function TriggerFocusLooperTransport(isRecAction : Boolean)
           UpdateSoloMuteState()
           BuildLooperConfigLines()
           UpdateInjectionLooperTransportUI()
+
+          // Timeline integration: record a LoopMaster for every scope channel
+          // that actually changed state, so the Show-projection path can anchor
+          // the chain at replay time. Only records during active Timeline REC.
+          if TimelineRecActive then
+             For i = 0; i < 16; i = i + 1 Do
+                if OutputScope[i] and IsChannelActiveForLooper(i) then
+                   if isRecAction then
+                      RecordTimelineEvent("LoopMaster", EncodeLoopMasterVal(i, 0))   // 0 = Rec
+                      if DebugMode then Trace("LOOPER-TL: LoopMaster REC Ch" + (i+1) + " encoded") end
+                   else
+                      RecordTimelineEvent("LoopMaster", EncodeLoopMasterVal(i, 1))   // 1 = Play
+                      if DebugMode then Trace("LOOPER-TL: LoopMaster PLAY Ch" + (i+1) + " encoded") end
+                   end
+                end
+             End
+          end
        end
    end // End of scopeIsValid check
 End
