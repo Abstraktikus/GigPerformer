@@ -1,0 +1,17 @@
+; LFO Configurations
+; Same style as ControllerMaps.txt: named sections, ; comments, key = value
+; Type: Triangle, TriangleUp, TriangleDown, Sinus, Square, Random
+; Rate: 8/1, 4/1, 2/1, 1/1, 1/2, 1/4, 1/8, 1/16, 1/32
+; Cycles: -, Infinite, or a positive integer
+
+[LFO:TriSlow]
+; Slow triangle sweep, four cycles
+Type   = Triangle
+Rate   = 1/4
+Cycles = 4
+
+[LFO:PadBreath]
+; Sinus modulation for pad layers, runs forever
+Type   = Sinus
+Rate   = 1/1
+Cycles = Infinite
