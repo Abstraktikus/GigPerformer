@@ -5946,6 +5946,13 @@ Function LoadLFOConfig()
 End
 
 // ---------------------------------------------------------
+// SAVE LFO CONFIG (stub, implemented in Task 9)
+// ---------------------------------------------------------
+Function SaveLFOConfig()
+   if DebugMode then Trace("LFO: SaveLFOConfig stub (Task 9 will implement)") end
+End
+
+// ---------------------------------------------------------
 // SAMPLE LFO WAVEFORM
 // Pure function: given a type index 0..5 and a phase 0..1, return
 // a sample in 0..1. Used by TickLFOs every tick.
@@ -6053,6 +6060,44 @@ Function TickLFOs()
            end
        end
    End
+End
+
+// ---------------------------------------------------------
+// REFRESH LFO INSPECTOR DISPLAY
+// Synchronizes the inspector widgets to LFO_SelectedIdx.
+// ---------------------------------------------------------
+Function RefreshLFOInspector()
+   var typeIdx, rateIdx, cycles, boundSlot, i : Integer
+   boundSlot = -1
+
+   if Size(LFO_Names) == 0 then
+       SetWidgetLabel(LBL_LFO, "-")
+       SetWidgetLabel(LBL_LFO_Type, "-")
+       SetWidgetLabel(LBL_LFO_Rate, "-")
+       SetWidgetLabel(LBL_LFO_Cycles, "-")
+       SetWidgetLabel(LBL_LFO_BoundMacro, "Bound: -")
+   else
+       if LFO_SelectedIdx < 0 then LFO_SelectedIdx = 0 end
+       if LFO_SelectedIdx >= Size(LFO_Names) then LFO_SelectedIdx = Size(LFO_Names) - 1 end
+
+       typeIdx = LFO_Types[LFO_SelectedIdx]
+       rateIdx = LFO_Rates[LFO_SelectedIdx]
+       cycles = LFO_Cycles[LFO_SelectedIdx]
+
+       SetWidgetLabel(LBL_LFO, LFO_Names[LFO_SelectedIdx])
+       SetWidgetLabel(LBL_LFO_Type, LFOTypeName(typeIdx))
+       SetWidgetLabel(LBL_LFO_Rate, LFORateName(rateIdx))
+       SetWidgetLabel(LBL_LFO_Cycles, LFOCyclesName(cycles))
+
+       For i = 0; i < MAX_MACROS; i = i + 1 Do
+           if LFO_ByMacro[i] == LFO_SelectedIdx and boundSlot == -1 then boundSlot = i end
+       End
+       if boundSlot >= 0 then
+           SetWidgetLabel(LBL_LFO_BoundMacro, "Bound: Macro " + (boundSlot + 1))
+       else
+           SetWidgetLabel(LBL_LFO_BoundMacro, "Bound: -")
+       end
+   end
 End
 
 // ---------------------------------------------------------
@@ -13832,7 +13877,166 @@ On WidgetValueChanged(val : Double) from BTN_Loop_Clear
             BuildLooperConfigLines(); UpdateInjectionLooperTransportUI()
          end
       end
-      SetWidgetValue(BTN_Loop_Clear, 0.0) 
+      SetWidgetValue(BTN_Loop_Clear, 0.0)
+   end
+End
+
+// =========================================================
+// 10. LFO ENGINE
+// =========================================================
+
+On WidgetValueChanged(val : Double) from BTN_LFO_Next
+   if val > 0.5 then
+       LFO_SelectedIdx = LFO_SelectedIdx + 1
+       if LFO_SelectedIdx >= Size(LFO_Names) then LFO_SelectedIdx = 0 end
+       RefreshLFOInspector()
+       SetWidgetValue(BTN_LFO_Next, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_LFO_Prev
+   if val > 0.5 then
+       LFO_SelectedIdx = LFO_SelectedIdx - 1
+       if LFO_SelectedIdx < 0 then LFO_SelectedIdx = Size(LFO_Names) - 1 end
+       if LFO_SelectedIdx < 0 then LFO_SelectedIdx = 0 end
+       RefreshLFOInspector()
+       SetWidgetValue(BTN_LFO_Prev, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_LFO_Type_Next
+   var t : Integer
+   if val > 0.5 and Size(LFO_Names) > 0 then
+       t = LFO_Types[LFO_SelectedIdx] + 1
+       if t > 5 then t = 0 end
+       LFO_Types[LFO_SelectedIdx] = t
+       RefreshLFOInspector()
+       SetWidgetValue(BTN_LFO_Type_Next, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_LFO_Type_Prev
+   var t : Integer
+   if val > 0.5 and Size(LFO_Names) > 0 then
+       t = LFO_Types[LFO_SelectedIdx] - 1
+       if t < 0 then t = 5 end
+       LFO_Types[LFO_SelectedIdx] = t
+       RefreshLFOInspector()
+       SetWidgetValue(BTN_LFO_Type_Prev, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_LFO_Rate_Next
+   var r : Integer
+   if val > 0.5 and Size(LFO_Names) > 0 then
+       r = LFO_Rates[LFO_SelectedIdx] + 1
+       if r > 8 then r = 0 end
+       LFO_Rates[LFO_SelectedIdx] = r
+       RefreshLFOInspector()
+       SetWidgetValue(BTN_LFO_Rate_Next, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_LFO_Rate_Prev
+   var r : Integer
+   if val > 0.5 and Size(LFO_Names) > 0 then
+       r = LFO_Rates[LFO_SelectedIdx] - 1
+       if r < 0 then r = 8 end
+       LFO_Rates[LFO_SelectedIdx] = r
+       RefreshLFOInspector()
+       SetWidgetValue(BTN_LFO_Rate_Prev, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_LFO_Cycles_Next
+   var c : Integer
+   if val > 0.5 and Size(LFO_Names) > 0 then
+       c = LFO_Cycles[LFO_SelectedIdx]
+       if c == -1 then c = 0
+       elsif c == 0 then c = 1
+       else c = c + 1 end
+       LFO_Cycles[LFO_SelectedIdx] = c
+       RefreshLFOInspector()
+       SetWidgetValue(BTN_LFO_Cycles_Next, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_LFO_Cycles_Prev
+   var c : Integer
+   if val > 0.5 and Size(LFO_Names) > 0 then
+       c = LFO_Cycles[LFO_SelectedIdx]
+       if c == 0 then c = -1
+       elsif c == -1 then c = 16
+       elsif c == 1 then c = 0
+       else c = c - 1 end
+       LFO_Cycles[LFO_SelectedIdx] = c
+       RefreshLFOInspector()
+       SetWidgetValue(BTN_LFO_Cycles_Prev, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_LFO_Run
+   var i, boundSlot : Integer
+   boundSlot = -1
+   if val > 0.5 then
+       For i = 0; i < MAX_MACROS; i = i + 1 Do
+           if LFO_ByMacro[i] == LFO_SelectedIdx and boundSlot == -1 then boundSlot = i end
+       End
+       if boundSlot >= 0 then
+           StartLFO(boundSlot)
+           if DebugMode then Trace("LFO: manual Run start on slot " + boundSlot) end
+       else
+           if DebugMode then Trace("LFO: manual Run ignored (no macro bound to LFO " + LFO_Names[LFO_SelectedIdx] + ")") end
+       end
+   else
+       For i = 0; i < MAX_MACROS; i = i + 1 Do
+           if LFO_ByMacro[i] == LFO_SelectedIdx and LFO_Active[i] then StopLFO(i) end
+       End
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_LFO_Save
+   if val > 0.5 then
+       SaveLFOConfig()
+       if DebugMode then Trace("LFO: SaveLFOConfig triggered") end
+       SetWidgetValue(BTN_LFO_Save, 0.0)
+   end
+End
+
+On WidgetValueChanged(val : Double) from BTN_LFO_Delete
+   var i : Integer
+   var newNames : String Array
+   var newTypes, newRates, newCycles : Integer Array
+   if val > 0.5 and Size(LFO_Names) > 0 then
+       For i = 0; i < MAX_MACROS; i = i + 1 Do
+           if LFO_ByMacro[i] == LFO_SelectedIdx then
+               if LFO_Active[i] then StopLFO(i) end
+               LFO_ByMacro[i] = -1
+           end
+       End
+       newNames = []
+       newTypes = []
+       newRates = []
+       newCycles = []
+       For i = 0; i < Size(LFO_Names); i = i + 1 Do
+           if i != LFO_SelectedIdx then
+               newNames <-- LFO_Names[i]
+               newTypes <-- LFO_Types[i]
+               newRates <-- LFO_Rates[i]
+               newCycles <-- LFO_Cycles[i]
+           end
+       End
+       LFO_Names = newNames
+       LFO_Types = newTypes
+       LFO_Rates = newRates
+       LFO_Cycles = newCycles
+
+       if LFO_SelectedIdx >= Size(LFO_Names) then LFO_SelectedIdx = Size(LFO_Names) - 1 end
+       if LFO_SelectedIdx < 0 then LFO_SelectedIdx = 0 end
+       SaveLFOConfig()
+       RefreshLFOInspector()
+       if DebugMode then Trace("LFO: Delete completed, registry size now " + Size(LFO_Names)) end
+       SetWidgetValue(BTN_LFO_Delete, 0.0)
    end
 End
 
