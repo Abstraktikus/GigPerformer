@@ -5013,8 +5013,8 @@ End
 // =========================================================
 
 Function BuildRecDisplayLines()
-    var i, partIdx, tms : Integer
-    var line, eType, valStr : String
+    var i, partIdx, tms, masterChIdx, k, showMS : Integer
+    var line, eType, valStr, showLine, barStr : String
 
     RecDisplayLines = []
 
@@ -5040,11 +5040,25 @@ Function BuildRecDisplayLines()
                 partIdx = Snap_TL_Val[i]
                 if partIdx >= 0 and partIdx < Size(Arr_SectionNames) then valStr = "Set: " + Arr_SectionNames[partIdx]
                 else valStr = "Set: Unknown Part" end
+            elsif eType == "LoopMaster" then
+                valStr = LoopMasterActionName(DecodeLoopMasterActionCode(Snap_TL_Val[i])) + " Ch" + (DecodeLoopMasterChIdx(Snap_TL_Val[i]) + 1)
             else valStr = "Value: " + Snap_TL_Val[i] end
 
             line = IntToString(tms) + "ms | " + valStr
 
             RecDisplayLines <-- line
+
+            // If this is a LoopMaster event, expand its show chain
+            if eType == "LoopMaster" then
+                masterChIdx = DecodeLoopMasterChIdx(Snap_TL_Val[i])
+                ComputeShowChain(masterChIdx)
+                for k = 0; k < Size(showChain_OffsetMS); k = k + 1 do
+                    showMS = Round(IntToFloat(tms) + showChain_OffsetMS[k])
+                    barStr = "+" + IntToString(Round(showChain_OffsetMS[k] / ((60000.0 / RecordedBPM) * IntToFloat(GetTimeSigNumerator())))) + "b"
+                    showLine = "  \u21b3 " + barStr + "  " + LoopMasterActionName(showChain_ActionCode[k]) + " Ch" + (showChain_ChIdx[k] + 1) + "  (" + IntToString(showMS) + "ms)"
+                    RecDisplayLines <-- showLine
+                end
+            end
         end
 
         // 2. APPEND NEW RECORDINGS AT BOTTOM (live feedback during active recording)
@@ -5068,11 +5082,25 @@ Function BuildRecDisplayLines()
                     partIdx = Arr_Rec_Val[i]
                     if partIdx >= 0 and partIdx < Size(Arr_SectionNames) then valStr = "Set: " + Arr_SectionNames[partIdx]
                     else valStr = "Set: Unknown Part" end
+                elsif eType == "LoopMaster" then
+                    valStr = LoopMasterActionName(DecodeLoopMasterActionCode(Arr_Rec_Val[i])) + " Ch" + (DecodeLoopMasterChIdx(Arr_Rec_Val[i]) + 1)
                 else valStr = "Value: " + Arr_Rec_Val[i] end
 
                 line = IntToString(tms) + "ms | " + valStr + " [NEW]"
 
                 RecDisplayLines <-- line
+
+                // If this is a LoopMaster event, expand its show chain
+                if eType == "LoopMaster" then
+                    masterChIdx = DecodeLoopMasterChIdx(Arr_Rec_Val[i])
+                    ComputeShowChain(masterChIdx)
+                    for k = 0; k < Size(showChain_OffsetMS); k = k + 1 do
+                        showMS = Round(IntToFloat(tms) + showChain_OffsetMS[k])
+                        barStr = "+" + IntToString(Round(showChain_OffsetMS[k] / ((60000.0 / RecordedBPM) * IntToFloat(GetTimeSigNumerator())))) + "b"
+                        showLine = "  \u21b3 " + barStr + "  " + LoopMasterActionName(showChain_ActionCode[k]) + " Ch" + (showChain_ChIdx[k] + 1) + "  (" + IntToString(showMS) + "ms)"
+                        RecDisplayLines <-- showLine
+                    end
+                end
             end
         end
     end
