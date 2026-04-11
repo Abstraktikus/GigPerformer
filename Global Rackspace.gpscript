@@ -317,14 +317,13 @@ Var
    LBL_Subbar_1, LBL_Subbar_2, LBL_Subbar_3, LBL_Subbar_4         : Widget
    LBL_TL_Subbar_1, LBL_TL_Subbar_2, LBL_TL_Subbar_3, LBL_TL_Subbar_4 : Widget
    
-   // --- LFO Inspector (new) ---
-   BTN_LFO_Prev, BTN_LFO_Next                                     : Widget
-   LBL_LFO, LBL_LFO_BoundMacro                                    : Widget
+   // --- LFO Inspector (v2 — scope-driven) ---
+   LBL_LFO, LBL_LFO_BoundMacro, SLD_LFOBoundMacro                 : Widget
    BTN_LFO_Type_Prev, BTN_LFO_Type_Next, LBL_LFO_Type             : Widget
    BTN_LFO_Rate_Prev, BTN_LFO_Rate_Next, LBL_LFO_Rate             : Widget
    BTN_LFO_Cycles_Prev, BTN_LFO_Cycles_Next, LBL_LFO_Cycles       : Widget
    METER_LFO_H, METER_LFO_V                                       : Widget
-   BTN_LFO_Run, BTN_LFO_Save, BTN_LFO_Delete                      : Widget
+   BTN_LFO_Run, BTN_LFO_Save, BTN_LFO_Delete, BTN_Bind_Macro      : Widget
 
    // --- Widget Arrays ---
    BTN_Ch1_In, BTN_Ch2_In, BTN_Ch3_In, BTN_Ch4_In, BTN_Ch5_In, BTN_Ch6_In, BTN_Ch7_In, BTN_Ch8_In, BTN_Ch9_In, BTN_Ch10_In, BTN_Ch11_In, BTN_Ch12_In, BTN_Ch13_In, BTN_Ch14_In, BTN_Ch15_In, BTN_Ch16_In : Widget
@@ -472,9 +471,39 @@ Var
    LFO_LastSample  : Double Array
    LFO_Progress    : Double Array
 
-   // Inspector browser cursors
-   LFO_SelectedIdx : Integer = 0
-   LFO_ManualRun   : Boolean = false
+   // v2: cross-map reverse index — four parallel arrays, all indexed 0..N
+   // by binding number. Rebuilt by BuildLFOUsageIndex() at bootstrap and
+   // after every mutation path that rewrites ControllerMaps.txt.
+   LFO_Usage_LfoIdx    : Integer Array   // which LFO_Names[] entry
+   LFO_Usage_MapIdx    : Integer Array   // which CtrlMapList[] entry
+   LFO_Usage_MacroIdx  : Integer Array   // which macro slot (0..49)
+   LFO_Usage_RawLine   : String Array    // cached raw `Macro<N> = <value>` line
+
+   // v2: display pipeline — LBL_LFO_BoundMacro is a scrollable list backed
+   // by this array and paginated via SLD_LFOBoundMacro. Matches the
+   // LooperConfig_Lines / CtrlInfo_Lines pattern.
+   LFOBind_Lines : String Array
+
+   // v2: draft state — populated when the inspector is in DRAFT_STANDARD or
+   // DRAFT_FALLBACK. Lives only while a no-LFO scope is focused.
+   LFO_Draft_Active : Boolean = false
+   LFO_Draft_Name   : String  = ""
+   LFO_Draft_Type   : Integer = 0   // Triangle
+   LFO_Draft_Rate   : Integer = 5   // 1/4
+   LFO_Draft_Cycles : Integer = -1  // Infinite
+
+   // v2: draft preview — one global slot for BTN_LFO_Run in DRAFT state.
+   // TickLFOs() services this via a dedicated branch. Never persisted.
+   LFO_Draft_Running   : Boolean = false
+   LFO_Draft_Slot      : Integer = -1
+   LFO_Draft_StartTime : Double  = 0.0
+   LFO_Draft_PreValue  : Double  = 0.0
+
+   // v2: flash surface for LBL_LFO_BoundMacro — 1-second transient feedback
+   // from BTN_Bind_Macro's whitelist check and EDIT-state "already bound"
+   // diagnostic.
+   LFOFlashMsg   : String = ""
+   LFOFlashTimer : Double = 0.0
 
    // ========================================================================
    // SECTION 7: CHANNEL MEMORY
@@ -12862,9 +12891,29 @@ Initialization
        LFO_LastSample  <-- 0.0
        LFO_Progress    <-- 0.0
    End
-   LFO_SelectedIdx = 0
-   LFO_ManualRun = false
    if DebugMode then Trace("LFO: state arrays initialized (MAX_MACROS=" + MAX_MACROS + ")") end
+
+   // v2: reverse index and display state
+   LFO_Usage_LfoIdx    = []
+   LFO_Usage_MapIdx    = []
+   LFO_Usage_MacroIdx  = []
+   LFO_Usage_RawLine   = []
+   LFOBind_Lines       = []
+
+   LFO_Draft_Active    = false
+   LFO_Draft_Name      = ""
+   LFO_Draft_Type      = 0
+   LFO_Draft_Rate      = 5
+   LFO_Draft_Cycles    = -1
+   LFO_Draft_Running   = false
+   LFO_Draft_Slot      = -1
+   LFO_Draft_StartTime = 0.0
+   LFO_Draft_PreValue  = 0.0
+
+   LFOFlashMsg   = ""
+   LFOFlashTimer = 0.0
+
+   if DebugMode then Trace("LFO v2: reverse index + draft + flash state initialized") end
    LoadLFOConfig()   // <- NEW: populate registry after arrays are zeroed
 
    // ====================================================================================
