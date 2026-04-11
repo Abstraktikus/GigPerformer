@@ -626,6 +626,14 @@ Var
    Snap_TL_Val : Integer Array
    Snap_TL_Fired : Boolean Array
 
+   // LoopMaster show-projection scratch arrays (rebuilt per call)
+   showChain_OffsetMS : Double Array
+   showChain_ChIdx    : Integer Array
+   showChain_ActionCode : Integer Array
+
+   // Chain projection cap
+   N_MAX_CHAIN_DEPTH : Integer = 32
+
    // --- ANCHOR ROOT SEQUENCE (parsed from .gpchord) ---
    Arr_PartRootSeq   : Integer Array   // All roots concatenated (pitch classes 0-11)
    Arr_PartRootStart : Integer Array   // Start index in Arr_PartRootSeq per part
@@ -4934,6 +4942,70 @@ Function TraceTimeDomains()
     
     // Output
     Trace("TIME SYNC | " + gpStr + " | " + songStr + " | " + loopStr)
+End
+
+// ---------------------------------------------------------
+// SHOW PROJECTION GATE
+// Show-events are computed only when the ms <-> bars conversion is
+// reliable — i.e. after a song has been stored (RecordedBPM > 0 and
+// SongDurationBars > 0). During live REC we deliberately suppress
+// projections so the user never sees a future that tempo-drift could
+// invalidate.
+// ---------------------------------------------------------
+Function ShowProjectionsAllowed() Returns Boolean
+   result = (RecordedBPM > 0.0) and (SongDurationBars > 0)
+End
+
+// ---------------------------------------------------------
+// COMPUTE SHOW CHAIN
+// Given a master event's starting channel, walk Mem_Loop_Target and
+// accumulate offsets in bars (converted to ms on the fly via
+// RecordedBPM + GetTimeSigNumerator). Returns three parallel arrays:
+// showChain_OffsetMS, showChain_ChIdx, showChain_ActionCode.
+// These are module-level arrays rebuilt on every call — callers that
+// need them persistently must copy them out before the next call.
+//
+// N_MAX_CHAIN_DEPTH = 32 caps runaway projection for cyclic chains.
+// ---------------------------------------------------------
+Function ComputeShowChain(startChIdx : Integer)
+   var cursor, next, depth, beatsPerBar : Integer
+   var accumMS, msPerBar : Double = 0.0
+
+   showChain_OffsetMS = []
+   showChain_ChIdx = []
+   showChain_ActionCode = []
+
+   if not ShowProjectionsAllowed() then
+       if DebugMode then Trace("LOOPER-TL: ComputeShowChain skipped (projections not allowed)") end
+   else
+       beatsPerBar = GetTimeSigNumerator()
+       if beatsPerBar <= 0 then beatsPerBar = 4 end
+       msPerBar = (60000.0 / RecordedBPM) * IntToFloat(beatsPerBar)
+
+       cursor = startChIdx
+       accumMS = 0.0
+       depth = 0
+
+       While cursor >= 0 and cursor < 16 and depth < N_MAX_CHAIN_DEPTH Do
+          // Add the length of the current channel to the accumulator
+          if Mem_Loop_Length[cursor] > 0 then
+              accumMS = accumMS + (msPerBar * IntToFloat(Mem_Loop_Length[cursor]))
+          end
+
+          next = Mem_Loop_Target[cursor]
+          if next < 0 or next >= 16 then
+              cursor = -1   // chain ends
+          else
+              showChain_OffsetMS <-- accumMS
+              showChain_ChIdx <-- next
+              showChain_ActionCode <-- Mem_Loop_Action[next]
+              cursor = next
+              depth = depth + 1
+          end
+       End
+
+       if DebugMode then Trace("LOOPER-TL: ComputeShowChain from Ch" + (startChIdx+1) + " produced " + Size(showChain_OffsetMS) + " entries") end
+   end
 End
 
 // =========================================================
