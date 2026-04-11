@@ -6374,6 +6374,18 @@ Function TickLFOs()
    beatsPerBar = GetTimeSigNumerator()
    if beatsPerBar <= 0 then beatsPerBar = 4 end
 
+   // v2: DRAFT PREVIEW — single global slot driven by BTN_LFO_Run in DRAFT
+   if LFO_Draft_Running and LFO_Draft_Slot >= 0 and LFO_Draft_Slot < MAX_MACROS then
+       elapsedMS = TimeSinceStartup() - LFO_Draft_StartTime
+       cycleLenMS = (60000.0 / bpm) * IntToFloat(beatsPerBar) * LFORateBars(LFO_Draft_Rate)
+       if cycleLenMS < 1.0 then cycleLenMS = 1.0 end
+       phase = (elapsedMS / cycleLenMS) - Floor(elapsedMS / cycleLenMS)
+       sample = SampleLFOWaveform(LFO_Draft_Type, phase)
+       SetParameter(ExternalArranger, LFO_Draft_Slot, sample)
+       SetWidgetValue(METER_LFO_H, sample)
+       SetWidgetValue(METER_LFO_V, phase)
+   end
+
    For slot = 0; slot < MAX_MACROS; slot = slot + 1 Do
        if LFO_Active[slot] then
            lfoIdx = LFO_ByMacro[slot]
@@ -14489,22 +14501,45 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Cycles_Prev
 End
 
 On WidgetValueChanged(val : Double) from BTN_LFO_Run
-   var i, boundSlot : Integer
-   boundSlot = -1
-   if val > 0.5 then
-       For i = 0; i < MAX_MACROS; i = i + 1 Do
-           if LFO_ByMacro[i] == LFO_SelectedIdx and boundSlot == -1 then boundSlot = i end
-       End
-       if boundSlot >= 0 then
-           StartLFO(boundSlot)
-           if DebugMode then Trace("LFO: manual Run start on slot " + boundSlot) end
-       else
-           if DebugMode then Trace("LFO: manual Run ignored (no macro bound to LFO " + LFO_Names[LFO_SelectedIdx] + ")") end
-       end
+   var scopeSlot, lfoIdx : Integer
+
+   scopeSlot = CurrentEditScope
+
+   if scopeSlot < 0 or scopeSlot >= 50 then
+       // LOCKED — ignore
+       SetWidgetValue(BTN_LFO_Run, 0.0)
    else
-       For i = 0; i < MAX_MACROS; i = i + 1 Do
-           if LFO_ByMacro[i] == LFO_SelectedIdx and LFO_Active[i] then StopLFO(i) end
-       End
+       if val > 0.5 then
+           if LFO_Draft_Active then
+               // DRAFT state — start the preview LFO
+               LFO_Draft_Slot      = scopeSlot
+               LFO_Draft_StartTime = TimeSinceStartup()
+               LFO_Draft_PreValue  = GetParameter(ExternalArranger, scopeSlot)
+               LFO_Draft_Running   = true
+               if DebugMode then Trace("LFO v2: draft preview started on slot " + (scopeSlot + 1)) end
+           else
+               lfoIdx = LFO_ByMacro[scopeSlot]
+               if lfoIdx >= 0 then
+                   StartLFO(scopeSlot)
+                   if DebugMode then Trace("LFO v2: manual Run on EDIT slot " + (scopeSlot + 1)) end
+               end
+           end
+       else
+           // Button released — stop whichever is running
+           if LFO_Draft_Running then
+               LFO_Draft_Running = false
+               SetParameter(ExternalArranger, LFO_Draft_Slot, LFO_Draft_PreValue)
+               SetWidgetValue(METER_LFO_H, 0.0)
+               SetWidgetValue(METER_LFO_V, 0.0)
+               LFO_Draft_Slot = -1
+               if DebugMode then Trace("LFO v2: draft preview stopped, snapped back") end
+           elsif scopeSlot >= 0 and scopeSlot < 50 then
+               lfoIdx = LFO_ByMacro[scopeSlot]
+               if lfoIdx >= 0 and LFO_Active[scopeSlot] then
+                   StopLFO(scopeSlot)
+               end
+           end
+       end
    end
 End
 
