@@ -11,3 +11,6 @@ tools/
 .txt
 __pycache__/
 *.pyc
+
+# Geisterhand trace logs (written by SwitchGPToGlobal.py at runtime)
+logs/
