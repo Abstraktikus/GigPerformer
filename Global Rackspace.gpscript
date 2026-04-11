@@ -14345,24 +14345,6 @@ End
 // 10. LFO ENGINE
 // =========================================================
 
-On WidgetValueChanged(val : Double) from BTN_LFO_Next
-   if val > 0.5 then
-       LFO_SelectedIdx = LFO_SelectedIdx + 1
-       if LFO_SelectedIdx >= Size(LFO_Names) then LFO_SelectedIdx = 0 end
-       RefreshLFOInspector()
-       SetWidgetValue(BTN_LFO_Next, 0.0)
-   end
-End
-
-On WidgetValueChanged(val : Double) from BTN_LFO_Prev
-   if val > 0.5 then
-       LFO_SelectedIdx = LFO_SelectedIdx - 1
-       if LFO_SelectedIdx < 0 then LFO_SelectedIdx = Size(LFO_Names) - 1 end
-       if LFO_SelectedIdx < 0 then LFO_SelectedIdx = 0 end
-       RefreshLFOInspector()
-       SetWidgetValue(BTN_LFO_Prev, 0.0)
-   end
-End
 
 On WidgetValueChanged(val : Double) from BTN_LFO_Type_Next
    var t : Integer
