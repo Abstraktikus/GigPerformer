@@ -6144,6 +6144,14 @@ Function LoadControllerMap(mapName : String)
    var actionName : String
    var sysActParseIdx : Integer = 0
 
+   // LFO prefix parser temp vars
+   var lfoReset : Integer
+   var lfoFirstEntry : String
+   var lfoName : String
+   var lfoIdx : Integer
+   var lfoRemaining : String Array
+   var jj : Integer
+
    Trace("LoadMap: Requesting '" + mapName + "'")
 
    // ---------------------------------------------------------
@@ -6183,6 +6191,11 @@ Function LoadControllerMap(mapName : String)
 
    // --- Reset SysAction reverse-lookup tables for this map-section load ---
    ResetSysActionBindings()
+
+   // --- Reset LFO bindings for this map-section load ---
+   For lfoReset = 0; lfoReset < MAX_MACROS; lfoReset = lfoReset + 1 Do
+       LFO_ByMacro[lfoReset] = -1
+   End
 
    CurrentCtrlMapName = mapName
    LBL_CtrlConfig.SetWidgetLabel(mapName)
@@ -6293,6 +6306,45 @@ Function LoadControllerMap(mapName : String)
                                // --- NORMAL LINKS ---
                                else
                                    groupParts = SplitString(valuePart, "|")
+
+                                   // --- LFO PREFIX EXTRACTION ---
+                                   // If the first |-entry is "LFO:<Name>", consume it and
+                                   // register LFO_ByMacro[sliderIdx]. Whitelist: user-zone
+                                   // slot (1..50), Macro source (not CC), at least one
+                                   // VST/CC target must follow.
+                                   if Size(groupParts) > 0 then
+                                       lfoFirstEntry = TrimString(groupParts[0])
+                                       if IndexOfSubstring(lfoFirstEntry, "LFO:", false) == 0 then
+                                           lfoName = TrimString(ReplaceString(lfoFirstEntry, "LFO:", "", false))
+
+                                           if isSrcCC then
+                                               if DebugMode then Trace("LFO: rejected on CC source slot " + sliderIdx) end
+                                           elsif sliderIdx < 0 or sliderIdx >= 50 then
+                                               if DebugMode then Trace("LFO: rejected outside user zone (slot " + sliderIdx + ")") end
+                                           elsif Size(groupParts) < 2 then
+                                               if DebugMode then Trace("LFO: rejected, no VST/CC target follows LFO:" + lfoName) end
+                                           else
+                                               lfoIdx = -1
+                                               For jj = 0; jj < Size(LFO_Names); jj = jj + 1 Do
+                                                   if LFO_Names[jj] == lfoName then lfoIdx = jj end
+                                               End
+                                               if lfoIdx < 0 then
+                                                   if DebugMode then Trace("LFO: unknown name '" + lfoName + "' on slot " + sliderIdx) end
+                                               else
+                                                   LFO_ByMacro[sliderIdx] = lfoIdx
+                                                   if DebugMode then Trace("LFO: bound slot " + sliderIdx + " to LFO " + lfoName + " (idx " + lfoIdx + ")") end
+                                               end
+                                           end
+
+                                           // Strip the LFO entry from groupParts regardless of accept/reject
+                                           lfoRemaining = []
+                                           For jj = 1; jj < Size(groupParts); jj = jj + 1 Do
+                                               lfoRemaining <-- groupParts[jj]
+                                           End
+                                           groupParts = lfoRemaining
+                                       end
+                                   end
+
                                    For j = 0; j < Size(groupParts); j = j + 1 Do
                                        entryStr = TrimString(groupParts[j])
                                        minV = 0.0; maxV = 1.0
