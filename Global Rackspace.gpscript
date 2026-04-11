@@ -444,7 +444,8 @@ Var
    Mem_UserMute           : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_Manual             : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_ManualVSTBypass    : Boolean Array = [false, false, false, false, false, false, false, false, false, false]
-   
+   Mem_ScopeBypassConfigured : Boolean Array = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
+
    Mem_NP_ChordMode       : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_NP_LatchMode       : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_NP_Engine          : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -12178,6 +12179,11 @@ Initialization
       Mem_NP_OctHigh <-- 0
       Mem_NP_OctHighOffset <-- 0
    End
+
+   For i = 0; i < 16; i = i + 1 Do
+      Mem_ScopeBypassConfigured[i] = false
+   End
+   if DebugMode then Trace("BYPASS: Mem_ScopeBypassConfigured initialized (all 16 channels = false)") end
 
    LoadedPresets = ["-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
    SetTimersRunning(true)
