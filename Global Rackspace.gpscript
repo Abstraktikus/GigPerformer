@@ -14508,6 +14508,131 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Run
    end
 End
 
+On WidgetValueChanged(val : Double) from BTN_Bind_Macro
+   var scopeSlot : Integer
+   var mapName, lfoName, content, section, newLine, oldLine : String
+   var mapSectionStart, mapSectionEnd, lineStart, lineEnd, nlPos : Integer
+   var registryIdx, i : Integer
+   var saved : Boolean = false
+   var searchKey, newValue : String
+
+   if val > 0.5 then
+       scopeSlot = CurrentEditScope
+       mapName = CurrentCtrlMapName
+
+       // 1. Whitelist check
+       if scopeSlot < 0 or scopeSlot >= 50 then
+           LFOFlashMsg = "Only User Macros allowed (scope 1-50)"
+           LFOFlashTimer = TimeSinceStartup() + 1000.0
+           RefreshLFOInspector()
+           if DebugMode then Trace("LFO v2: BTN_Bind_Macro rejected, scope " + scopeSlot + " outside user zone") end
+           SetWidgetValue(BTN_Bind_Macro, 0.0)
+       else
+           // 2. Resolve LFO name
+           if not LFO_Draft_Active then
+               // EDIT state — already bound
+               LFOFlashMsg = "Already bound (use Save to update)"
+               LFOFlashTimer = TimeSinceStartup() + 1000.0
+               RefreshLFOInspector()
+               if DebugMode then Trace("LFO v2: BTN_Bind_Macro rejected, scope already bound") end
+               SetWidgetValue(BTN_Bind_Macro, 0.0)
+           else
+               lfoName = LFO_Draft_Name
+
+               // 3. Create-or-update registry entry
+               registryIdx = -1
+               For i = 0; i < Size(LFO_Names); i = i + 1 Do
+                  if LFO_Names[i] == lfoName then registryIdx = i end
+               End
+
+               if registryIdx < 0 then
+                   LFO_Names  <-- lfoName
+                   LFO_Types  <-- LFO_Draft_Type
+                   LFO_Rates  <-- LFO_Draft_Rate
+                   LFO_Cycles <-- LFO_Draft_Cycles
+                   if DebugMode then Trace("LFO v2: created new registry entry '" + lfoName + "'") end
+               else
+                   LFO_Types[registryIdx]  = LFO_Draft_Type
+                   LFO_Rates[registryIdx]  = LFO_Draft_Rate
+                   LFO_Cycles[registryIdx] = LFO_Draft_Cycles
+                   if DebugMode then Trace("LFO v2: updated existing registry entry '" + lfoName + "'") end
+               end
+
+               // 4. Persist registry
+               SaveLFOConfig()
+
+               // 5. Mutate ControllerMaps.txt — prepend LFO:<name> | to the target macro line
+               if FileExists(ControllerMapFilePath) then
+                   content = LoadStringFromTextFile(ControllerMapFilePath)
+
+                   // Find [Map:<mapName>] section
+                   searchKey = "[Map:" + mapName + "]"
+                   mapSectionStart = IndexOfSubstring(content, searchKey, false)
+                   if mapSectionStart < 0 then
+                       if DebugMode then Trace("LFO v2: BTN_Bind_Macro: map section '" + mapName + "' not found in ControllerMaps.txt") end
+                   else
+                       // Find next [Map: or EOF for section end
+                       mapSectionEnd = IndexOfSubstring(CopySubstring(content, mapSectionStart + Length(searchKey), Length(content) - (mapSectionStart + Length(searchKey))), "[Map:", false)
+                       if mapSectionEnd < 0 then mapSectionEnd = Length(content) - (mapSectionStart + Length(searchKey)) end
+
+                       // Extract section, find Macro<N> = line, mutate, stitch back
+                       section = CopySubstring(content, mapSectionStart + Length(searchKey), mapSectionEnd)
+                       searchKey = "Macro" + (scopeSlot + 1) + " ="
+                       lineStart = IndexOfSubstring(section, searchKey, false)
+
+                       if lineStart >= 0 then
+                           // Find end of that line
+                           nlPos = IndexOfSubstring(CopySubstring(section, lineStart, Length(section) - lineStart), NEW_LINE, false)
+                           if nlPos >= 0 then
+                               oldLine = CopySubstring(section, lineStart, nlPos)
+                           else
+                               oldLine = CopySubstring(section, lineStart, Length(section) - lineStart)
+                           end
+
+                           // Extract existing value part after "="
+                           lineEnd = IndexOfSubstring(oldLine, "=", false)
+                           if lineEnd >= 0 then
+                               newValue = TrimString(CopySubstring(oldLine, lineEnd + 1, Length(oldLine) - (lineEnd + 1)))
+                               // Prepend LFO:<name> | (unless a prefix is already there — replace it)
+                               if IndexOfSubstring(newValue, "LFO:", false) == 0 then
+                                   // Strip existing LFO:<other> | prefix
+                                   i = IndexOfSubstring(newValue, "|", false)
+                                   if i >= 0 then
+                                       newValue = TrimString(CopySubstring(newValue, i + 1, Length(newValue) - (i + 1)))
+                                   else
+                                       newValue = ""
+                                   end
+                               end
+                               if Length(newValue) > 0 then
+                                   newLine = searchKey + " LFO:" + lfoName + " | " + newValue
+                               else
+                                   newLine = searchKey + " LFO:" + lfoName
+                               end
+
+                               // Stitch: replace oldLine with newLine in section, then rebuild content
+                               section = ReplaceString(section, oldLine, newLine, false)
+                               content = CopySubstring(content, 0, mapSectionStart + Length("[Map:" + mapName + "]")) + section + CopySubstring(content, mapSectionStart + Length("[Map:" + mapName + "]") + mapSectionEnd, Length(content) - (mapSectionStart + Length("[Map:" + mapName + "]") + mapSectionEnd))
+
+                               saved = SaveStringToTextFile(ControllerMapFilePath, content)
+                               if DebugMode then Trace("LFO v2: wrote LFO:" + lfoName + " prefix to [" + mapName + "] Macro" + (scopeSlot + 1) + " (saved=" + saved + ")") end
+                           end
+                       else
+                           if DebugMode then Trace("LFO v2: BTN_Bind_Macro: Macro" + (scopeSlot + 1) + " not found in section [" + mapName + "]") end
+                       end
+                   end
+               end
+
+               // 6. Rebuild state
+               LoadControllerMap(mapName)
+               BuildLFOUsageIndex()
+               RefreshLFOInspector()
+
+               SetWidgetValue(BTN_Bind_Macro, 0.0)
+           end
+       end
+   end
+End
+
 On WidgetValueChanged(val : Double) from BTN_LFO_Save
    if val > 0.5 then
        SaveLFOConfig()
