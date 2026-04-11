@@ -12695,11 +12695,13 @@ On WidgetValueChanged(w : Widget, inputIdx : Integer, val : Double) from BTN_Ch1
               end
            End
            UpdateMidiConfigLabel(); UpdateMetaColors(); SyncInputFeedback()
+           if DebugMode then Trace("BYPASS: BTN_ChX_In click -> ExecuteSmartBypass (inputIdx=" + (inputIdx+1) + " val=" + val + ")") end
+           ExecuteSmartBypass()
        end
    end
 End
 
-On WidgetValueChanged(w : Widget, index : Integer, val : Double) from 
+On WidgetValueChanged(w : Widget, index : Integer, val : Double) from
    BTN_Ch1_Out_Bl, BTN_Ch2_Out_Bl, BTN_Ch3_Out_Bl, BTN_Ch4_Out_Bl, BTN_Ch5_Out_Bl, BTN_Ch6_Out_Bl, BTN_Ch7_Out_Bl, BTN_Ch8_Out_Bl, BTN_Ch9_Out_Bl, BTN_Ch10_Out_Bl, BTN_Ch11_Out_Bl, BTN_Ch12_Out_Bl, BTN_Ch13_Out_Bl, BTN_Ch14_Out_Bl, BTN_Ch15_Out_Bl, BTN_Ch16_Out_Bl,
    BTN_Ch1_Out_Or, BTN_Ch2_Out_Or, BTN_Ch3_Out_Or, BTN_Ch4_Out_Or, BTN_Ch5_Out_Or, BTN_Ch6_Out_Or, BTN_Ch7_Out_Or, BTN_Ch8_Out_Or, BTN_Ch9_Out_Or, BTN_Ch10_Out_Or, BTN_Ch11_Out_Or, BTN_Ch12_Out_Or, BTN_Ch13_Out_Or, BTN_Ch14_Out_Or, BTN_Ch15_Out_Or, BTN_Ch16_Out_Or,
    BTN_Ch1_Out_Ye, BTN_Ch2_Out_Ye, BTN_Ch3_Out_Ye, BTN_Ch4_Out_Ye, BTN_Ch5_Out_Ye, BTN_Ch6_Out_Ye, BTN_Ch7_Out_Ye, BTN_Ch8_Out_Ye, BTN_Ch9_Out_Ye, BTN_Ch10_Out_Ye, BTN_Ch11_Out_Ye, BTN_Ch12_Out_Ye, BTN_Ch13_Out_Ye, BTN_Ch14_Out_Ye, BTN_Ch15_Out_Ye, BTN_Ch16_Out_Ye,
@@ -12713,6 +12715,8 @@ On WidgetValueChanged(w : Widget, index : Integer, val : Double) from
        if val > 0.5 then OutputScope[chIdx] = true else OutputScope[chIdx] = false end
        UpdateMetaColors(); SyncInputFeedback(); UpdateUsageLabelDisplay()
        RefreshAllInjectionDisplays(); ScrollToCurrentChannel()
+       if DebugMode then Trace("BYPASS: BTN_ChX_Out_* click -> ExecuteSmartBypass (chIdx=" + (chIdx+1) + " val=" + val + ")") end
+       ExecuteSmartBypass()
    end
 End
 
