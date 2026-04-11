@@ -634,6 +634,11 @@ Var
    // Chain projection cap
    N_MAX_CHAIN_DEPTH : Integer = 32
 
+   // Scratch for the next upcoming show action (OSC countdown)
+   nextLoopShow_CountdownMS : Double = -1.0
+   nextLoopShow_ChIdx : Integer = -1
+   nextLoopShow_ActionCode : Integer = -1
+
    // --- ANCHOR ROOT SEQUENCE (parsed from .gpchord) ---
    Arr_PartRootSeq   : Integer Array   // All roots concatenated (pitch classes 0-11)
    Arr_PartRootStart : Integer Array   // Start index in Arr_PartRootSeq per part
@@ -5005,6 +5010,55 @@ Function ComputeShowChain(startChIdx : Integer)
        End
 
        if DebugMode then Trace("LOOPER-TL: ComputeShowChain from Ch" + (startChIdx+1) + " produced " + Size(showChain_OffsetMS) + " entries") end
+   end
+End
+
+// ---------------------------------------------------------
+// COMPUTE NEXT LOOP SHOW ACTION
+// Walks Snap_TL_* (committed timeline) for the last LoopMaster event
+// whose chain has not yet fully elapsed relative to the current
+// playhead, runs ComputeShowChain, and selects the earliest future
+// show entry. Result triple exposed via module-level scratch
+// variables. countdownMS = -1 means "no active chain".
+// ---------------------------------------------------------
+Function ComputeNextLoopShowAction(playheadMS : Double)
+   var i, k, masterChIdx, latestMasterIdx : Integer
+   var masterTimeMS, eventAbsMS : Double = 0.0
+   var foundNext : Boolean = false
+
+   nextLoopShow_CountdownMS = -1.0
+   nextLoopShow_ChIdx = -1
+   nextLoopShow_ActionCode = -1
+
+   if not ShowProjectionsAllowed() then
+       // leave the -1 sentinels in place
+   else
+       // Find the latest LoopMaster event whose timestamp is <= playheadMS
+       latestMasterIdx = -1
+       For i = 0; i < Size(Snap_TL_TimeMS); i = i + 1 Do
+          if Snap_TL_Type[i] == "LoopMaster" and Snap_TL_TimeMS[i] <= playheadMS then
+              latestMasterIdx = i
+          end
+       End
+
+       if latestMasterIdx >= 0 then
+          masterChIdx = DecodeLoopMasterChIdx(Snap_TL_Val[latestMasterIdx])
+          masterTimeMS = Snap_TL_TimeMS[latestMasterIdx]
+          ComputeShowChain(masterChIdx)
+
+          // Find the earliest show entry whose absolute time is > playheadMS
+          k = 0
+          While k < Size(showChain_OffsetMS) and not foundNext Do
+             eventAbsMS = masterTimeMS + showChain_OffsetMS[k]
+             if eventAbsMS > playheadMS then
+                 nextLoopShow_CountdownMS = eventAbsMS - playheadMS
+                 nextLoopShow_ChIdx = showChain_ChIdx[k]
+                 nextLoopShow_ActionCode = showChain_ActionCode[k]
+                 foundNext = true
+             end
+             k = k + 1
+          End
+       end
    end
 End
 
@@ -14406,7 +14460,9 @@ On TimerTick(ms : Double)
      msLeft_blink : Double = 0.0; timeSinceHW : Double = 0.0; t_progress : Double = 0.0; 
      a_val : Double = 0.0; msSinceBarStart : Double = 0.0; currentBPM_Tick : Double = 0.0; msPerBeat : Double = 0.0
      msSinceSongStart : Double = 0.0
-     
+     countdownBars : Double = 0.0
+     countdownText : String = ""
+
    // ========================================================================
    // --- INITIALIZATION FOR THIS TICK ---
    // ========================================================================
@@ -14884,6 +14940,19 @@ On TimerTick(ms : Double)
                         OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> STRIP RESTORED <<<", Local_IP, Local_PORT)
                         MacroFeedbackTimer = TimeSinceStartup() + 2000.0
                     end
+                end
+            end
+
+            // OSC-UI: next upcoming loop show action
+            if TimelinePlaybackActive then
+                ComputeNextLoopShowAction(msSinceSongStart)
+                if nextLoopShow_CountdownMS >= 0.0 then
+                    countdownBars = nextLoopShow_CountdownMS / ((60000.0 / RecordedBPM) * IntToFloat(GetTimeSigNumerator()))
+                    countdownText = "-> " + LoopMasterActionName(nextLoopShow_ActionCode) + " Ch" + (nextLoopShow_ChIdx + 1) + " in " + IntToString(Round(countdownBars)) + "b (" + IntToString(Round(nextLoopShow_CountdownMS / 1000.0)) + "s)"
+                    OSC_SendStringSpecific("/UI/LoopNext", countdownText, Local_IP, Local_PORT)
+                    if DebugMode then Trace("LOOPER-TL: /UI/LoopNext = " + countdownText) end
+                else
+                    OSC_SendStringSpecific("/UI/LoopNext", "", Local_IP, Local_PORT)
                 end
             end
         end
