@@ -243,7 +243,7 @@ def open_trace_log():
         return None
 
 
-def make_on_trace_handler(trace_buffer: list, last_trace_time: list, log_file):
+def make_on_trace_handler(trace_buffer: list, last_trace_time: list, log_file_holder: list):
     def on_trace(unused_addr, *args):
         msg = args[0] if args else "(empty)"
         ts = time.strftime("%H:%M:%S")
@@ -256,13 +256,38 @@ def make_on_trace_handler(trace_buffer: list, last_trace_time: list, log_file):
 
         # Persist to file for Claude to read later. Flush per line so
         # a crash leaves a readable tail right up to the last message.
-        if log_file is not None:
+        # log_file_holder is a 1-element mutable list so that the
+        # /GP/TraceReset handler can swap the file underneath us
+        # without rebuilding this closure.
+        current = log_file_holder[0]
+        if current is not None:
             try:
-                log_file.write(line + "\n")
-                log_file.flush()
+                current.write(line + "\n")
+                current.flush()
             except OSError as e:
                 print(f"[WARN] trace log write failed: {e}")
     return on_trace
+
+
+def make_on_trace_reset_handler(log_file_holder: list):
+    """Close and re-open the trace log file. Sent by GP at the start of
+    every Initialization block, so each GP boot produces a fresh log
+    instead of appending to previous sessions' traces. Keeps the log
+    file small even when Geisterhand runs across many GP restarts."""
+    def on_trace_reset(unused_addr, *args):
+        old = log_file_holder[0]
+        if old is not None:
+            try:
+                old.write("# " + "-" * 60 + "\n")
+                old.write(f"# Log closed by GP Initialization reset: "
+                          f"{time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                old.flush()
+                old.close()
+            except OSError:
+                pass
+        log_file_holder[0] = open_trace_log()
+        print(f"[trace-reset] log recreated on /GP/TraceReset from GP init")
+    return on_trace_reset
 
 
 # ============================================================
@@ -303,17 +328,21 @@ def main() -> None:
     # --- 4. OSC handlers + trace log file ---
     press_ctrl_g = make_press_ctrl_g_handler(gp_window_title)
 
-    trace_log = open_trace_log()
-    if trace_log is not None:
+    # log_file_holder is a 1-element mutable list so the /GP/TraceReset
+    # handler can swap the file underneath the trace handler closure.
+    log_file_holder: list = [open_trace_log()]
+    if log_file_holder[0] is not None:
         print(f"[log] trace log: {TRACE_LOG_FILE}")
 
     trace_buffer: list = []
     last_trace_time = [time.time()]
-    on_trace = make_on_trace_handler(trace_buffer, last_trace_time, trace_log)
+    on_trace       = make_on_trace_handler(trace_buffer, last_trace_time, log_file_holder)
+    on_trace_reset = make_on_trace_reset_handler(log_file_holder)
 
     disp = dispatcher.Dispatcher()
     disp.map("/GP/PressCtrlG", press_ctrl_g)
-    disp.map("/GP/Trace", on_trace)
+    disp.map("/GP/Trace",      on_trace)
+    disp.map("/GP/TraceReset", on_trace_reset)
 
     # --- 5. Bind OSC server ---
     try:
@@ -328,6 +357,7 @@ def main() -> None:
     print(f"Geisterhand listening on {OSC_IP}:{OSC_PORT}")
     print(f"  /GP/PressCtrlG -> laser-click GP globe button")
     print(f"  /GP/Trace      -> live trace (ring buffer size {TRACE_BUFFER_SIZE})")
+    print(f"  /GP/TraceReset -> truncate trace log (fired by GP Initialization)")
     print("-" * 50)
     print("Press Ctrl+C or close this window to stop. GP will keep running.")
     print("-" * 50)
@@ -337,12 +367,13 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n[exit] Ctrl+C — shutting down Geisterhand. GP stays alive.")
     finally:
-        if trace_log is not None:
+        current_log = log_file_holder[0]
+        if current_log is not None:
             try:
-                trace_log.write(f"# " + "-" * 60 + "\n")
-                trace_log.write(f"# Session end: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-                trace_log.flush()
-                trace_log.close()
+                current_log.write("# " + "-" * 60 + "\n")
+                current_log.write(f"# Session end: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                current_log.flush()
+                current_log.close()
             except OSError:
                 pass
         remove_pid_file()

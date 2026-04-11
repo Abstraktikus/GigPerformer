@@ -14,6 +14,27 @@ Var
    // ========================================================================
    // SECTION 1: USER CONFIGURATION
    // ========================================================================
+
+   // ====================================================================
+   // SCRIPT VERSION — MUST BE BUMPED ON EVERY EDIT
+   // ====================================================================
+   // Format: "YYYY-MM-DD.NNN" where NNN is a 3-digit daily counter.
+   // Same day → increment NNN. New day → reset to NNN=001 with today's date.
+   //
+   // Why this exists: Gig Performer caches the compiled script inside the
+   // .gig file. When you paste a new script into the editor, GP may or may
+   // not actually be running the version you see in the text file — the
+   // .gig cache, a skipped paste, or a crash recovery can leave GP running
+   // a STALE version while the .gpscript file on disk shows the new one.
+   // Trace()ing this version at Initialization makes it impossible for us
+   // to debug a phantom state: the first line of the trace log tells us
+   // EXACTLY which build is running.
+   //
+   // Enforcement: every assistant edit to this file MUST increment
+   // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
+   // note for the enforcement rule.
+   SCRIPT_VERSION : String = "2026-04-11.002"
+
    DebugMode : Boolean = false
 
    // --- Crash-safe trace sinks (independent of GP's in-app log) ---
@@ -6640,6 +6661,18 @@ Function RefreshLFOInspector()
    scopeSlot = CurrentEditScope
    lfoIdx = -1
 
+   // Meter reset on every inspector refresh. If an LFO is actively
+   // running, the next TickLFOs pass (max 100ms) will overwrite the
+   // meters with fresh sample/progress values. If nothing is running,
+   // the meters stay flat at 0 — which is exactly what the user wants
+   // ("when no LFO is running, meters should show 0").
+   SetWidgetValue(METER_LFO_H, 0.0)
+   SetWidgetValue(METER_LFO_V, 0.0)
+   if DebugMode then
+       Trace("METER: METER_LFO_H <- 0.0 (inspector refresh)")
+       Trace("METER: METER_LFO_V <- 0.0 (inspector refresh)")
+   end
+
    if scopeSlot < 0 or scopeSlot >= 50 then
        // LOCKED state
        SetWidgetLabel(LBL_LFO, "-")
@@ -6649,11 +6682,7 @@ Function RefreshLFOInspector()
        LFOBind_Lines = []
        LFOBind_Lines <-- "Only User Macros allowed (scope 1-50)"
        LFO_Draft_Active = false
-       SetWidgetValue(METER_LFO_H, 0.0)
-       SetWidgetValue(METER_LFO_V, 0.0)
        if DebugMode then
-           Trace("METER: METER_LFO_H <- 0.0 (inspector LOCKED)")
-           Trace("METER: METER_LFO_V <- 0.0 (inspector LOCKED)")
            Trace("LFO v2: inspector LOCKED (scope=" + scopeSlot + ")")
        end
    else
@@ -13376,8 +13405,44 @@ Initialization
    // ====================================================================================
    // PHASE 0: SAFETY LOCK
    // ====================================================================================
-   
+
+   // ABSOLUTE FIRST: arm the FaderSafetyTimer. This is the boot safety
+   // window (5 seconds) during which ExternalArranger callbacks and
+   // widget callbacks silent-ignore. Must be set before ANY widget
+   // reset or parameter write below, so every subsequent action in
+   // Init is covered by the guard from time t=0.
    FaderSafetyTimer = TimeSinceStartup() + 5000.0
+
+   // Tell Geisterhand to truncate the trace log file. Each GP boot then
+   // produces a fresh log instead of appending across many sessions,
+   // keeping the file small and each session self-contained. Gated by
+   // CrashDebugMode because that is the flag that routes Trace() output
+   // to OSC in the first place — if it is off, Geisterhand is receiving
+   // nothing anyway and a reset is pointless.
+   if CrashDebugMode then
+       OSC_SendStringSpecific("/GP/TraceReset", "init", CrashOSCIP, CrashOSCPort)
+   end
+
+   // PROOF OF LIFE — the very first trace announces which build is
+   // actually running. If the log shows an older SCRIPT_VERSION than
+   // what the .gpscript file on disk says, GP is running a cached
+   // compile and you need to re-paste the script into the editor.
+   // Routed through Trace() so it lands in BOTH the GP in-app log
+   // (when DebugMode on) AND the Geisterhand file log (when
+   // CrashDebugMode on). For a diagnostic session, make sure at least
+   // CrashDebugMode is on so the version shows up in gp-trace-latest.log.
+   Trace("===== SCRIPT VERSION " + SCRIPT_VERSION + " booting =====")
+
+   // STALE BUTTON CLEANUP — if BTN_LFO_Run was "on" when the last gig
+   // was saved or at the moment of a crash, it would boot in pressed
+   // state and could auto-trigger an LFO before our state is fully
+   // initialized. Reset it immediately. The BTN_LFO_Run callback
+   // silent-ignores while FaderSafetyTimer is still in the future,
+   // so this SetWidgetValue does not cascade into StopLFO or array
+   // reads on uninitialized LFO_Active[].
+   SetWidgetValue(BTN_LFO_Run, 0.0)
+   Trace("BOOT: BTN_LFO_Run reset to 0.0 (stale-state cleanup)")
+
    RecordMode = 0
    SetWidgetValue(BTN_Record_Overdub, 0.0)
    SetWidgetValue(BTN_Record_Replace, 0.0)
@@ -13561,6 +13626,14 @@ Initialization
    LFOFlashMsg   = ""
    LFOFlashTimer = 0.0
    LFOInspectorNeedsRefresh = false
+
+   // v2: Init-time meter reset. Clears stale values from the previous
+   // session so boot starts with clean meters.
+   SetWidgetValue(METER_LFO_H, 0.0)
+   SetWidgetValue(METER_LFO_V, 0.0)
+   if DebugMode then
+       Trace("LFO v2 init: METER_LFO_H/V reset to 0.0")
+   end
 
    if DebugMode then Trace("LFO v2: reverse index + draft + flash state initialized") end
    LoadLFOConfig()   // v1: populate registry after arrays are zeroed
@@ -14776,6 +14849,15 @@ End
 On WidgetValueChanged(val : Double) from BTN_LFO_Run
    var scopeSlot, lfoIdx : Integer
 
+   // BOOT SAFETY — silent-ignore during the 5-second boot window.
+   // Init resets this widget to 0.0 as part of stale-state cleanup;
+   // that SetWidgetValue fires this callback and must NOT cascade
+   // into LFO_Active[scopeSlot] array reads (arrays may not be
+   // populated yet at that point in Init) or StopLFO chains.
+   if TimeSinceStartup() < FaderSafetyTimer then
+       // Silent-ignore. No further processing.
+   else
+
    scopeSlot = CurrentEditScope
 
    if scopeSlot < 0 or scopeSlot >= 50 then
@@ -14820,6 +14902,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Run
            end
        end
    end
+   end // close boot-safety FaderSafetyTimer else branch
 End
 
 On WidgetValueChanged(val : Double) from BTN_LFO_Save
