@@ -6011,6 +6011,115 @@ Function LoadLFOConfig()
 End
 
 // ---------------------------------------------------------
+// BUILD LFO USAGE INDEX (v2)
+// Scans ControllerMaps.txt for every `Macro<N> = LFO:<Name> | ...`
+// line across every [Map:...] section and populates the four
+// parallel LFO_Usage_* arrays with (lfoIdx, mapIdx, macroIdx,
+// rawLine) tuples. Orphan prefixes (LFO name not in registry) are
+// DebugMode-traced and skipped.
+//
+// Called from bootstrap PHASE 5 after LoadLFOConfig, and from every
+// BTN_* callback that mutates ControllerMaps.txt.
+// ---------------------------------------------------------
+Function BuildLFOUsageIndex()
+   var content, section, line, mapName, valuePart : String
+   var rawLine, lfoName, firstEntry : String
+   var sectionStart, sectionEnd, lineStart, lineEnd, eqPos, pipePos : Integer
+   var macroSlot, lfoIdx, mapIdx, i, n, bindingCount : Integer
+   var lines : String Array
+
+   LFO_Usage_LfoIdx   = []
+   LFO_Usage_MapIdx   = []
+   LFO_Usage_MacroIdx = []
+   LFO_Usage_RawLine  = []
+   bindingCount = 0
+
+   if not FileExists(ControllerMapFilePath) then
+       if DebugMode then Trace("LFO v2: BuildLFOUsageIndex skipped, ControllerMaps.txt not found") end
+   else
+       content = LoadStringFromTextFile(ControllerMapFilePath)
+
+       // Walk every [Map:...] header
+       sectionStart = IndexOfSubstring(content, "[Map:", false)
+       While sectionStart > -1 Do
+          // Extract map name from "[Map:<name>]"
+          lineEnd = IndexOfSubstring(CopySubstring(content, sectionStart, Length(content) - sectionStart), "]", false)
+          if lineEnd < 0 then
+              sectionStart = -1
+          else
+              mapName = CopySubstring(content, sectionStart + 5, lineEnd - 5)
+
+              // Look up mapName in CtrlMapList
+              mapIdx = -1
+              For i = 0; i < Size(CtrlMapList); i = i + 1 Do
+                 if CtrlMapList[i] == mapName then mapIdx = i end
+              End
+
+              // Find section body bounds: from end of header line to next [Map: or EOF
+              sectionEnd = IndexOfSubstring(CopySubstring(content, sectionStart + lineEnd + 1, Length(content) - (sectionStart + lineEnd + 1)), "[Map:", false)
+              if sectionEnd > -1 then
+                  section = CopySubstring(content, sectionStart + lineEnd + 1, sectionEnd)
+              else
+                  section = CopySubstring(content, sectionStart + lineEnd + 1, Length(content) - (sectionStart + lineEnd + 1))
+              end
+
+              // Scan every non-comment Macro<N> = line for LFO: prefix
+              lines = SplitString(section, NEW_LINE)
+              For n = 0; n < Size(lines); n = n + 1 Do
+                 line = TrimString(lines[n])
+                 if Length(line) > 0 and IndexOfSubstring(line, ";", false) != 0 and IndexOfSubstring(line, "Macro", false) == 0 then
+                     eqPos = IndexOfSubstring(line, "=", false)
+                     if eqPos > 0 then
+                         // Extract macro slot number
+                         macroSlot = StringToInt(TrimString(ReplaceString(CopySubstring(line, 0, eqPos), "Macro", "", false))) - 1
+                         valuePart = TrimString(CopySubstring(line, eqPos + 1, Length(line) - (eqPos + 1)))
+
+                         // Check if first |-entry starts with LFO:
+                         pipePos = IndexOfSubstring(valuePart, "|", false)
+                         if pipePos >= 0 then
+                             firstEntry = TrimString(CopySubstring(valuePart, 0, pipePos))
+                         else
+                             firstEntry = valuePart
+                         end
+
+                         if IndexOfSubstring(firstEntry, "LFO:", false) == 0 then
+                             lfoName = TrimString(ReplaceString(firstEntry, "LFO:", "", false))
+
+                             // Registry lookup
+                             lfoIdx = -1
+                             For i = 0; i < Size(LFO_Names); i = i + 1 Do
+                                if LFO_Names[i] == lfoName then lfoIdx = i end
+                             End
+
+                             if lfoIdx < 0 then
+                                 if DebugMode then Trace("LFO v2: orphan binding '" + lfoName + "' in [" + mapName + "] Macro" + (macroSlot + 1) + ", not in registry") end
+                             elsif macroSlot < 0 or macroSlot >= 50 then
+                                 if DebugMode then Trace("LFO v2: binding '" + lfoName + "' in [" + mapName + "] Macro" + (macroSlot + 1) + " outside user zone, skipped") end
+                             elsif mapIdx < 0 then
+                                 if DebugMode then Trace("LFO v2: binding '" + lfoName + "' in unknown map '" + mapName + "', skipped") end
+                             else
+                                 LFO_Usage_LfoIdx   <-- lfoIdx
+                                 LFO_Usage_MapIdx   <-- mapIdx
+                                 LFO_Usage_MacroIdx <-- macroSlot
+                                 LFO_Usage_RawLine  <-- line
+                                 bindingCount = bindingCount + 1
+                             end
+                         end
+                     end
+                 end
+              End
+
+              // Advance to next section by chopping the prefix we just consumed
+              content = CopySubstring(content, sectionStart + 1, Length(content) - (sectionStart + 1))
+              sectionStart = IndexOfSubstring(content, "[Map:", false)
+          end
+       End
+   end
+
+   if DebugMode then Trace("LFO v2: BuildLFOUsageIndex complete, " + bindingCount + " bindings across all maps") end
+End
+
+// ---------------------------------------------------------
 // SAVE LFO CONFIG
 // Writes the in-memory registry back to LFOConfig.txt. Called from
 // BTN_LFO_Save and BTN_LFO_Delete.
@@ -12914,7 +13023,8 @@ Initialization
    LFOFlashTimer = 0.0
 
    if DebugMode then Trace("LFO v2: reverse index + draft + flash state initialized") end
-   LoadLFOConfig()   // <- NEW: populate registry after arrays are zeroed
+   LoadLFOConfig()   // v1: populate registry after arrays are zeroed
+   BuildLFOUsageIndex()  // v2: scan ControllerMaps.txt for bindings
 
    // ====================================================================================
    // PHASE 5: DATABASE LOADING
