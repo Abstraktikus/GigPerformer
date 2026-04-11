@@ -7957,21 +7957,19 @@ End
 
 Function HandleInjectBypassClick(btnIdx : Integer, val : Double)
     var i, count, firstScopeIdx, targetVstIdx : Integer
-    
+
     // GPScript-compliant guard:
     if not IsUpdatingBypassUI then
-        
-        // ---> UNSER SAUBERER SCOPE-HELPER <---
+
         firstScopeIdx = GetFirstActiveScope()
 
         if firstScopeIdx > -1 then
             count = 0
             targetVstIdx = -1
-            
+
             // Which VST belongs to this button?
             if Size(RoutingMatrix) == 160 then
                 i = 0
-                // ---> SAFE WHILE-LOOP <---
                 While i < MAX_VSTS and targetVstIdx == -1 Do
                     if RoutingMatrix[(i * 16) + firstScopeIdx] == true then
                         if count == btnIdx then
@@ -7979,23 +7977,33 @@ Function HandleInjectBypassClick(btnIdx : Integer, val : Double)
                         end
                         count = count + 1
                     end
-                    i = i + 1 // Always increment
+                    i = i + 1
                 End
             end
 
             // Write value to RAM and execute
             if targetVstIdx > -1 then
-                if val > 0.5 then
-                    Mem_ManualVSTBypass[targetVstIdx] = true  // Bypass AN (Button leuchtet)
-                else
-                    Mem_ManualVSTBypass[targetVstIdx] = false // Bypass AUS (Button dunkel)
+
+                // FLIP TO EXPLICIT BRANCH for this scope on the very first click
+                if not Mem_ScopeBypassConfigured[firstScopeIdx] then
+                    Mem_ScopeBypassConfigured[firstScopeIdx] = true
+                    if DebugMode then Trace("BYPASS: scope ch" + (firstScopeIdx+1) + " switched to Explicit Branch (first click)") end
                 end
-                
+
+                // NEW POLARITY: lit button (val > 0.5) = VST active = Mem_ManualVSTBypass = false
+                if val > 0.5 then
+                    Mem_ManualVSTBypass[targetVstIdx] = false  // Button LIT = VST active
+                    if DebugMode then Trace("BYPASS: VST " + (targetVstIdx+1) + " set ACTIVE via button " + (btnIdx+1)) end
+                else
+                    Mem_ManualVSTBypass[targetVstIdx] = true   // Button DARK = VST bypassed
+                    if DebugMode then Trace("BYPASS: VST " + (targetVstIdx+1) + " set BYPASSED via button " + (btnIdx+1)) end
+                end
+
                 // Force immediate re-evaluation
                 ExecuteSmartBypass()
             end
         end
-        
+
     end // End of guard block
 End
 
