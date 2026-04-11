@@ -4988,6 +4988,33 @@ Function TraceTimeDomains()
 End
 
 // ---------------------------------------------------------
+// LOOP MASTER EVENT ENCODING
+// Timeline stores a looper trigger event as a single Integer val.
+// Upper nibble = channel index (0..15), lower nibble = action code:
+//   0 = Rec, 1 = Play, 2 = Overdub, 3 = Clear
+// Encoding: val = chIdx * 16 + actionCode
+// ---------------------------------------------------------
+Function EncodeLoopMasterVal(chIdx : Integer, actionCode : Integer) Returns Integer
+   result = (chIdx * 16) + actionCode
+End
+
+Function DecodeLoopMasterChIdx(val : Integer) Returns Integer
+   result = val / 16
+End
+
+Function DecodeLoopMasterActionCode(val : Integer) Returns Integer
+   result = val % 16
+End
+
+Function LoopMasterActionName(actionCode : Integer) Returns String
+   if actionCode == 0 then result = "REC"
+   elsif actionCode == 1 then result = "PLAY"
+   elsif actionCode == 2 then result = "OVR"
+   elsif actionCode == 3 then result = "CLR"
+   else result = "?" end
+End
+
+// ---------------------------------------------------------
 // SHOW PROJECTION GATE
 // Show-events are computed only when the ms <-> bars conversion is
 // reliable — i.e. after a song has been stored (RecordedBPM > 0 and
@@ -5759,33 +5786,6 @@ Function SanitizeAndSlugify(rawName : String) Returns String
        end
     end
     result = finalSlug
-End
-
-// ---------------------------------------------------------
-// LOOP MASTER EVENT ENCODING
-// Timeline stores a looper trigger event as a single Integer val.
-// Upper nibble = channel index (0..15), lower nibble = action code:
-//   0 = Rec, 1 = Play, 2 = Overdub, 3 = Clear
-// Encoding: val = chIdx * 16 + actionCode
-// ---------------------------------------------------------
-Function EncodeLoopMasterVal(chIdx : Integer, actionCode : Integer) Returns Integer
-   result = (chIdx * 16) + actionCode
-End
-
-Function DecodeLoopMasterChIdx(val : Integer) Returns Integer
-   result = val / 16
-End
-
-Function DecodeLoopMasterActionCode(val : Integer) Returns Integer
-   result = val % 16
-End
-
-Function LoopMasterActionName(actionCode : Integer) Returns String
-   if actionCode == 0 then result = "REC"
-   elsif actionCode == 1 then result = "PLAY"
-   elsif actionCode == 2 then result = "OVR"
-   elsif actionCode == 3 then result = "CLR"
-   else result = "?" end
 End
 
 // ---------------------------------------------------------
