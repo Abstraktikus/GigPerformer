@@ -20,6 +20,10 @@ Load songs from a setlist, display chord sheets with section markers (Intro, Ver
 
 Browse and swap VST plugins per layer with a publisher/sound/preset hierarchy. Resident layers (1-2) are protected from accidental replacement. The system reads from a `VstDatabase.txt` to offer organized sound browsing by manufacturer.
 
+Every VST on an inactive channel is automatically bypassed. The Smart Bypass engine watches the RECH routing matrix per scope and wakes a plugin only when at least one active input actually routes through it; any plugin that isn't contributing audio goes to sleep. This cuts real-time CPU load dramatically during a live set — typical songs use 2-4 layers out of 10 possible VST slots, so 6-8 plugins are idle at any moment.
+
+The same mechanism enables **Delta-Load**: Gig Performer can keep the full VST library loaded in memory while only the active subset is processing audio. Switching songs becomes a matter of flipping bypass flags rather than loading and unloading plugins, which means sub-100ms song transitions even for large sound libraries. The engine honors explicit per-scope overrides — if you deliberately want a plugin active or bypassed for a specific channel, that wins over the routing-based default.
+
 ![Preset Configuration — Layer browser with publisher, sound, and preset](images/Preset%20Configuration.png)
 
 ### Channel Selector & Injection
@@ -28,17 +32,11 @@ Select and configure up to 16 MIDI channels individually. The Injection panel co
 
 ![Channel Selector & Injection — Full channel config with all injection parameters](images/Channel%20Selector%20&%20Injection.png)
 
-![Channel Selector — Compact view with channel analysis](images/Channel%20Selector.png)
-
-![Channel Injection — Detail view of all per-channel parameters](images/Channel%20Injection.png)
-
 ### MIDI Looper
 
 A per-channel MIDI looper with configurable action (Play/Overdub/Mute), loop length, target channel routing, output mode (Channel/Global), and stop behavior (Instant/End of Bar/End of Loop). Supports host sync and count-in.
 
 ![MIDI Looper with Channel Selector — Loop configuration per channel](images/Channel%20Selector%20&%20Looper.png)
-
-![MIDI Looper — Compact view with all loop parameters](images/Looper.png)
 
 ### Crossfade Configuration
 
@@ -60,15 +58,7 @@ Scriptable low-frequency oscillators that automate any Controller Map macro — 
 
 The LFO Inspector is scope-driven: select a macro, see its bound LFO (or draft a new one named after the current song); the `Run` button previews a draft while held, or starts a committed LFO permanently. Tempo-synced via `GetBPM()`, so the LFO rides the song's tempo changes. Echo-deduplication and an emergency kill switch protect against async callback feedback loops that would otherwise choke Gig Performer.
 
-![Controller Map with LFO Inspector — Bound LFOs visible per macro slot](images/ControllerMap%20&%20LFO.png)
-
 ![LFO Inspector — Type, rate, cycles, and bound macro overview](images/LFO.png)
-
-### Auto-Bypass Engine — CPU & Delta-Load Savings
-
-Every VST on an inactive channel is automatically bypassed. The Smart Bypass engine watches the RECH routing matrix per scope and wakes a plugin only when at least one active input actually routes through it; any plugin that isn't contributing audio goes to sleep. This cuts real-time CPU load dramatically during a live set — typical songs use 2-4 layers out of 10 possible VST slots, so 6-8 plugins are idle at any moment.
-
-The same mechanism enables **Delta-Load**: Gig Performer can keep the full VST library loaded in memory while only the active subset is processing audio. Switching songs becomes a matter of flipping bypass flags rather than loading and unloading plugins, which means sub-100ms song transitions even for large sound libraries. The engine honors explicit per-scope overrides — if you deliberately want a plugin active or bypassed for a specific channel, that wins over the routing-based default.
 
 ### Hardware Abstraction Layer (HAL)
 
