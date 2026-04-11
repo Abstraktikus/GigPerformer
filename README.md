@@ -58,7 +58,7 @@ Scriptable low-frequency oscillators that automate any Controller Map macro — 
 
 The LFO Inspector is scope-driven: select a macro, see its bound LFO (or draft a new one named after the current song); the `Run` button previews a draft while held, or starts a committed LFO permanently. Tempo-synced via `GetBPM()`, so the LFO rides the song's tempo changes. Echo-deduplication and an emergency kill switch protect against async callback feedback loops that would otherwise choke Gig Performer.
 
-![LFO Inspector — Type, rate, cycles, and bound macro overview](images/LFO.png)
+![LFO Inspector — Type, rate, cycles, and bound macro overview](images/Looper.png)
 
 ### Hardware Abstraction Layer (HAL)
 
