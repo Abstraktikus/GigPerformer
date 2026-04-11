@@ -54,6 +54,22 @@ Define named controller maps per song that assign hardware knobs/sliders to VST 
 
 ![Controller Map Sections — Macro ranges for Looper, Solo, Mute, Velocity, and Root](images/Controller%20Map%20Sections.png)
 
+### LFO Engine
+
+Scriptable low-frequency oscillators that automate any Controller Map macro — filter sweeps, tremolo, panning, slow pad evolutions, tempo-synced fades. Each LFO is defined once by name (Triangle / Sine / Saw / Square / Random, rate in bars or beats, cycles finite or infinite) and can be bound to any number of macros across any number of controller maps. Bindings are persisted inside `ControllerMaps.txt` via an `LFO:<name> |` prefix on the macro line — the same macro keeps its hardware routing and just gains an LFO modulator on top.
+
+The LFO Inspector is scope-driven: select a macro, see its bound LFO (or draft a new one named after the current song); the `Run` button previews a draft while held, or starts a committed LFO permanently. Tempo-synced via `GetBPM()`, so the LFO rides the song's tempo changes. Echo-deduplication and an emergency kill switch protect against async callback feedback loops that would otherwise choke Gig Performer.
+
+![Controller Map with LFO Inspector — Bound LFOs visible per macro slot](images/ControllerMap%20&%20LFO.png)
+
+![LFO Inspector — Type, rate, cycles, and bound macro overview](images/LFO.png)
+
+### Auto-Bypass Engine — CPU & Delta-Load Savings
+
+Every VST on an inactive channel is automatically bypassed. The Smart Bypass engine watches the RECH routing matrix per scope and wakes a plugin only when at least one active input actually routes through it; any plugin that isn't contributing audio goes to sleep. This cuts real-time CPU load dramatically during a live set — typical songs use 2-4 layers out of 10 possible VST slots, so 6-8 plugins are idle at any moment.
+
+The same mechanism enables **Delta-Load**: Gig Performer can keep the full VST library loaded in memory while only the active subset is processing audio. Switching songs becomes a matter of flipping bypass flags rather than loading and unloading plugins, which means sub-100ms song transitions even for large sound libraries. The engine honors explicit per-scope overrides — if you deliberately want a plugin active or bypassed for a specific channel, that wins over the routing-based default.
+
 ### Hardware Abstraction Layer (HAL)
 
 All hardware is configured via `DeviceConfig.txt` — no hardcoded MIDI devices in the script. Supports multiple devices with capability flags (transport sync, SysEx, joystick, crossfader targets, feedback). Switch your entire hardware setup by editing one text file.
@@ -89,7 +105,6 @@ Planned features, roughly in order of implementation:
 1. **MIDI Recorder & Player** — Record and play back MIDI performances, bar-aligned to the timeline
 2. **Overdub Layers** — Stack multiple recording takes on top of each other, building up arrangements layer by layer
 3. **Backing Tracks Integration** — Trigger and sync audio backing tracks to the timeline with automatic cue points and transport control
-4. **LFO Engine** — Scriptable LFOs linked to Controller Map macros for automated parameter modulation (filter sweeps, tremolo, panning, etc.)
 
 ## Requirements
 
