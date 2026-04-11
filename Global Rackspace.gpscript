@@ -13944,7 +13944,13 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
                RecordTimelineEvent("Macro", paramIdx)
            end
        end
-   end 
+
+       // LFO trigger: if this macro is bound to an LFO, (re)start it
+       if paramIdx >= 0 and paramIdx < MAX_MACROS and LFO_ByMacro[paramIdx] >= 0 then
+           StartLFO(paramIdx)
+           if DebugMode then Trace("LFO: StartLFO triggered by macro write on slot " + paramIdx) end
+       end
+   end
 End
 
 // ---------------------------------------------------------
