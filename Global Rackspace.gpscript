@@ -12549,7 +12549,6 @@ Initialization
    // B. Load hardware & text databases
    LoadHardwareMap() // <- Now safely near the top!
    LoadVstDatabase()
-   LoadLFOConfig()   // <- NEW
    BuildFilteredVstList()
 
    // ====================================================================================
@@ -12598,6 +12597,7 @@ Initialization
    LFO_SelectedIdx = 0
    LFO_ManualRun = false
    if DebugMode then Trace("LFO: state arrays initialized (MAX_MACROS=" + MAX_MACROS + ")") end
+   LoadLFOConfig()   // <- NEW: populate registry after arrays are zeroed
 
    // ====================================================================================
    // PHASE 5: DATABASE LOADING
