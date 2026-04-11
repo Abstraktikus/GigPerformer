@@ -5776,6 +5776,167 @@ Function LoopMasterActionName(actionCode : Integer) Returns String
 End
 
 // ---------------------------------------------------------
+// LFO ENUMERATORS
+// Forward + reverse lookup between text names and integer indices
+// for the three enum fields (Type, Rate, Cycles).
+// ---------------------------------------------------------
+
+Function LFOTypeIdx(name : String) Returns Integer
+   var n : String = ""
+   n = TrimString(name)
+   if n == "Triangle" then result = 0
+   elsif n == "TriangleUp" then result = 1
+   elsif n == "TriangleDown" then result = 2
+   elsif n == "Sinus" then result = 3
+   elsif n == "Square" then result = 4
+   elsif n == "Random" then result = 5
+   else result = -1 end
+End
+
+Function LFOTypeName(idx : Integer) Returns String
+   if idx == 0 then result = "Triangle"
+   elsif idx == 1 then result = "TriangleUp"
+   elsif idx == 2 then result = "TriangleDown"
+   elsif idx == 3 then result = "Sinus"
+   elsif idx == 4 then result = "Square"
+   elsif idx == 5 then result = "Random"
+   else result = "?" end
+End
+
+Function LFORateIdx(name : String) Returns Integer
+   var n : String = ""
+   n = TrimString(name)
+   if n == "8/1" then result = 0
+   elsif n == "4/1" then result = 1
+   elsif n == "2/1" then result = 2
+   elsif n == "1/1" then result = 3
+   elsif n == "1/2" then result = 4
+   elsif n == "1/4" then result = 5
+   elsif n == "1/8" then result = 6
+   elsif n == "1/16" then result = 7
+   elsif n == "1/32" then result = 8
+   else result = -1 end
+End
+
+Function LFORateName(idx : Integer) Returns String
+   if idx == 0 then result = "8/1"
+   elsif idx == 1 then result = "4/1"
+   elsif idx == 2 then result = "2/1"
+   elsif idx == 3 then result = "1/1"
+   elsif idx == 4 then result = "1/2"
+   elsif idx == 5 then result = "1/4"
+   elsif idx == 6 then result = "1/8"
+   elsif idx == 7 then result = "1/16"
+   elsif idx == 8 then result = "1/32"
+   else result = "?" end
+End
+
+Function LFORateBars(idx : Integer) Returns Double
+   if idx == 0 then result = 8.0
+   elsif idx == 1 then result = 4.0
+   elsif idx == 2 then result = 2.0
+   elsif idx == 3 then result = 1.0
+   elsif idx == 4 then result = 0.5
+   elsif idx == 5 then result = 0.25
+   elsif idx == 6 then result = 0.125
+   elsif idx == 7 then result = 0.0625
+   elsif idx == 8 then result = 0.03125
+   else result = 1.0 end
+End
+
+Function LFOCyclesParse(s : String) Returns Integer
+   var n : String = ""
+   n = TrimString(s)
+   if n == "-" or n == "" then result = 0
+   elsif n == "Infinite" then result = -1
+   else result = StringToInt(n) end
+End
+
+Function LFOCyclesName(cycles : Integer) Returns String
+   if cycles == 0 then result = "-"
+   elsif cycles == -1 then result = "Infinite"
+   else result = IntToString(cycles) end
+End
+
+// ---------------------------------------------------------
+// LOAD LFO CONFIG
+// Parses LFOConfig.txt into the LFO registry arrays. Silently
+// skips malformed sections with a DebugMode trace.
+// ---------------------------------------------------------
+Function LoadLFOConfig()
+   var content, sectionContent, remaining, line, key, val, name : String
+   var lines : String Array
+   var startPos, endPos, headerLen, i, eqPos : Integer
+   var parsedType, parsedRate, parsedCycles : Integer
+
+   LFO_Names = []
+   LFO_Types = []
+   LFO_Rates = []
+   LFO_Cycles = []
+
+   if not FileExists(LFOConfigFilePath) then
+       if DebugMode then Trace("LFO: LFOConfig.txt not found at " + LFOConfigFilePath + " — registry empty") end
+   else
+       content = LoadStringFromTextFile(LFOConfigFilePath)
+
+       startPos = IndexOfSubstring(content, "[LFO:", false)
+       While startPos > -1 Do
+          endPos = IndexOfSubstring(CopySubstring(content, startPos, Length(content) - startPos), "]", false)
+          if endPos < 0 then
+              startPos = -1
+          else
+              name = CopySubstring(content, startPos + 5, endPos - 5)
+              headerLen = endPos + 1
+
+              remaining = CopySubstring(content, startPos + headerLen, Length(content) - (startPos + headerLen))
+              endPos = IndexOfSubstring(remaining, "[LFO:", false)
+              if endPos > -1 then
+                  sectionContent = CopySubstring(remaining, 0, endPos)
+              else
+                  sectionContent = remaining
+              end
+
+              parsedType = -1
+              parsedRate = -1
+              parsedCycles = 0
+
+              lines = SplitString(sectionContent, NEW_LINE)
+              For i = 0; i < Size(lines); i = i + 1 Do
+                 line = TrimString(lines[i])
+                 if Length(line) > 0 and IndexOfSubstring(line, ";", false) != 0 and IndexOfSubstring(line, "=", false) > -1 then
+                     eqPos = IndexOfSubstring(line, "=", false)
+                     key = TrimString(CopySubstring(line, 0, eqPos))
+                     val = TrimString(CopySubstring(line, eqPos + 1, Length(line) - (eqPos + 1)))
+                     if key == "Type" then parsedType = LFOTypeIdx(val)
+                     elsif key == "Rate" then parsedRate = LFORateIdx(val)
+                     elsif key == "Cycles" then parsedCycles = LFOCyclesParse(val)
+                     else
+                         if DebugMode then Trace("LFO: unknown key '" + key + "' in [LFO:" + name + "]") end
+                     end
+                 end
+              End
+
+              if parsedType < 0 or parsedRate < 0 then
+                  if DebugMode then Trace("LFO: [LFO:" + name + "] rejected (malformed Type/Rate)") end
+              else
+                  LFO_Names <-- name
+                  LFO_Types <-- parsedType
+                  LFO_Rates <-- parsedRate
+                  LFO_Cycles <-- parsedCycles
+                  if DebugMode then Trace("LFO: registered '" + name + "' type=" + LFOTypeName(parsedType) + " rate=" + LFORateName(parsedRate) + " cycles=" + LFOCyclesName(parsedCycles)) end
+              end
+
+              // Advance: chop off the parsed prefix and re-scan
+              content = CopySubstring(content, startPos + 1, Length(content) - (startPos + 1))
+              startPos = IndexOfSubstring(content, "[LFO:", false)
+          end
+       End
+   end
+
+   if DebugMode then Trace("LFO: LoadLFOConfig complete, " + Size(LFO_Names) + " entries") end
+End
+
+// ---------------------------------------------------------
 // ARRANGER MAPPING FILE HANDLER
 // ---------------------------------------------------------
 
@@ -12388,6 +12549,7 @@ Initialization
    // B. Load hardware & text databases
    LoadHardwareMap() // <- Now safely near the top!
    LoadVstDatabase()
+   LoadLFOConfig()   // <- NEW
    BuildFilteredVstList()
 
    // ====================================================================================
