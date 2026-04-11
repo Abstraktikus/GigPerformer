@@ -7862,68 +7862,87 @@ Function CalculateBarFromMS(timeMS : Double) Returns Integer
 End
 
 // ---------------------------------------------------------
-// REALTIME SMART BYPASS
-// Monitors the matrix live and puts unused VSTs & channels to sleep
+// REALTIME SMART BYPASS — per-scope two-branch logic
+//
+// Per channel with active RECH input, decide independently:
+//   Mem_ScopeBypassConfigured[ch] = true  -> Explicit Branch:
+//      honor Mem_ManualVSTBypass[] for every routed VST of this scope
+//   Mem_ScopeBypassConfigured[ch] = false -> Default Branch:
+//      activate only the first routed VST of HumanRoutingMap[ch],
+//      bypass the rest
+//
+// Contributions from all active scopes are merged with OR logic:
+// a VST is ultimately active iff at least one scope contributes
+// "active" for it. This matches the pre-existing behaviour where
+// any-routed-scope-needs-it wakes a VST.
 // ---------------------------------------------------------
 Function ExecuteSmartBypass()
-   var i, vstIdx, k, activeInputs : Integer
-   var vstNeeded : Boolean Array = [false, false, false, false, false, false, false, false, false, false]
+   var ch, i, p, activeInputs, vstIdx : Integer
+   var routeParts : String Array
+   var vstShouldBeActive : Boolean Array = [false, false, false, false, false, false, false, false, false, false]
 
-   // 1. Scan live matrix (which channel & which VST is needed?)
-   For i = 0; i < 16; i = i + 1 Do
+   // 1. Per channel: gather routing contributions
+   For ch = 0; ch < 16; ch = ch + 1 Do
        activeInputs = 0
-       For k = 0; k < 16; k = k + 1 Do
-          if GetParameter(RECH, (k * 16) + i) > 0.5 then activeInputs = activeInputs + 1 end
+       For i = 0; i < 16; i = i + 1 Do
+          if GetParameter(RECH, (i * 16) + ch) > 0.5 then activeInputs = activeInputs + 1 end
        End
 
-       // --- NEW: CHANNEL BYPASS LOGIC ---
        if activeInputs > 0 then
-           // Channel is in use -> activate NoteProcessor
-           if IsPluginBypassed(BLK_NoteProcessor[i]) then SetPluginBypassed(BLK_NoteProcessor[i], false) end
-           
-           // MULTI-VST CHECK (which VST is connected to this channel?)
-           if Size(RoutingMatrix) == 160 then
-               For vstIdx = 0; vstIdx < MAX_VSTS; vstIdx = vstIdx + 1 Do
-                   if RoutingMatrix[(vstIdx * 16) + i] == true then
-                       vstNeeded[vstIdx] = true
+           // Channel is in use -> NoteProcessor on
+           if IsPluginBypassed(BLK_NoteProcessor[ch]) then
+               SetPluginBypassed(BLK_NoteProcessor[ch], false)
+               if DebugMode then Trace("BYPASS: NP ch" + (ch+1) + " woken (active inputs=" + activeInputs + ")") end
+           end
+
+           routeParts = SplitString(HumanRoutingMap[ch], ",")
+
+           if Mem_ScopeBypassConfigured[ch] then
+               // EXPLICIT BRANCH: honor Mem_ManualVSTBypass for each routed VST
+               For p = 0; p < Size(routeParts); p = p + 1 Do
+                   vstIdx = StringToInt(TrimString(routeParts[p])) - 1
+                   if vstIdx >= 0 and vstIdx < MAX_VSTS then
+                       if not Mem_ManualVSTBypass[vstIdx] then
+                           vstShouldBeActive[vstIdx] = true
+                       end
                    end
                End
+           else
+               // DEFAULT BRANCH: first routed VST active, rest stay at their current contribution
+               if Size(routeParts) > 0 then
+                   vstIdx = StringToInt(TrimString(routeParts[0])) - 1
+                   if vstIdx >= 0 and vstIdx < MAX_VSTS then
+                       vstShouldBeActive[vstIdx] = true
+                   end
+               end
            end
        else
-           // Channel is NOT in use -> put NoteProcessor to sleep!
-           if not IsPluginBypassed(BLK_NoteProcessor[i]) then SetPluginBypassed(BLK_NoteProcessor[i], true) end
+           // Channel NOT in use -> NoteProcessor sleep
+           if not IsPluginBypassed(BLK_NoteProcessor[ch]) then
+               SetPluginBypassed(BLK_NoteProcessor[ch], true)
+               if DebugMode then Trace("BYPASS: NP ch" + (ch+1) + " parked (no active inputs)") end
+           end
        end
    End
 
-   // 2. Bypass or activate VSTs based on routing state
+   // 2. Apply merged decisions to the plugin bypass states
    For i = 0; i < MAX_VSTS; i = i + 1 Do
-       
-       // ---> THE ABSOLUTE OVERRIDE <---
-       if Mem_ManualVSTBypass[i] == true then
-           // VST MUST sleep!
-           if IsPluginBypassed(BLK_VST[i]) == false then
-               ParkFadersForVST(i)
-               SetPluginBypassed(BLK_VST[i], true)
-               if DebugMode then Trace("SMART BYPASS: VST " + (i+1) + " FORCED SLEEP (Manual Override).") end
+       if vstShouldBeActive[i] then
+           if IsPluginBypassed(BLK_VST[i]) then
+               SetPluginBypassed(BLK_VST[i], false)
+               RestoreFadersForVST(i)
+               if DebugMode then Trace("BYPASS: VST " + (i+1) + " woken (merged OR across scopes)") end
            end
        else
-           // ---> NORMAL SMART LOGIC <---
-           if vstNeeded[i] == true then
-               if IsPluginBypassed(BLK_VST[i]) == true then
-                   SetPluginBypassed(BLK_VST[i], false)
-                   RestoreFadersForVST(i) // Restore fader positions
-                   if DebugMode then Trace("SMART BYPASS: VST " + (i+1) + " woken up.") end
-               end
-           else
-               if IsPluginBypassed(BLK_VST[i]) == false then
-                   ParkFadersForVST(i) // Stash faders to safety
-                   SetPluginBypassed(BLK_VST[i], true)
-                   if DebugMode then Trace("SMART BYPASS: VST " + (i+1) + " bypassed.") end
-               end
+           if not IsPluginBypassed(BLK_VST[i]) then
+               ParkFadersForVST(i)
+               SetPluginBypassed(BLK_VST[i], true)
+               if DebugMode then Trace("BYPASS: VST " + (i+1) + " parked (no scope needs it)") end
            end
        end
    End
-   UpdateVstInfoDisplay() 
+
+   UpdateVstInfoDisplay()
    UpdateUsageLabelDisplay()
 End
 
