@@ -7884,6 +7884,7 @@ End
 
 Function CommitTimelineRecording()
     var i : Integer
+    var lmCount, lmIdxTrace : Integer
 
     if TimelineRecState == 1 then
         // Overdub: Append new events to existing committed events
@@ -7901,6 +7902,15 @@ Function CommitTimelineRecording()
             Snap_TL_Val <-- Arr_Rec_Val[i]
         end
     end
+
+    if DebugMode then
+        lmCount = 0
+        for lmIdxTrace = 0; lmIdxTrace < Size(Snap_TL_Type); lmIdxTrace = lmIdxTrace + 1 do
+            if Snap_TL_Type[lmIdxTrace] == "LoopMaster" then lmCount = lmCount + 1 end
+        end
+        Trace("LOOPER-TL: snapshot now contains " + lmCount + " LoopMaster events")
+    end
+
     Snap_TL_Fired = []
 
     TimelineRecActive = false
