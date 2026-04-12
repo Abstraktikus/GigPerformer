@@ -1652,7 +1652,7 @@ Function ParseDeviceConfig()
    var content, line, key, val, section : String
    var lines : String Array
    var i, eqPos, currentDevIdx, currentCtrlIdx, currentSysExIdx : Integer
-   var currentSwitchIdx, currentMapIdx, currentPermIdx, currentOvlIdx, stateNum : Integer
+   var currentSwitchIdx, currentMapIdx, currentPermIdx, currentOvlIdx, stateNum, sw : Integer
 
    if not FileExists(DeviceConfigFilePath) then
       Trace("HAL: No DeviceConfig.txt found at " + DeviceConfigFilePath + ". Running in fallback mode.")
@@ -1787,15 +1787,16 @@ Function ParseDeviceConfig()
                   end
 
                elsif section == "PERMANENT" and currentPermIdx >= 0 and currentPermIdx < MAX_PERMANENT then
-                  Select
-                     key == "Device"    Do Permanent_DevIdx[currentPermIdx] = StringToInt(val)
-                     key == "Source"    Do
-                        // Parse "CC64" → 64
-                        if IndexOfSubstring(val, "CC", false) == 0 then
-                           Permanent_SourceCC[currentPermIdx] = StringToInt(CopySubstring(val, 2, Length(val) - 2))
-                        end
-                     key == "Function"  Do Permanent_Function[currentPermIdx] = val
-                  End
+                  if key == "Device" then
+                     Permanent_DevIdx[currentPermIdx] = StringToInt(val)
+                  elsif key == "Source" then
+                     // Parse "CC64" → 64
+                     if IndexOfSubstring(val, "CC", false) == 0 then
+                        Permanent_SourceCC[currentPermIdx] = StringToInt(CopySubstring(val, 2, Length(val) - 2))
+                     end
+                  elsif key == "Function" then
+                     Permanent_Function[currentPermIdx] = val
+                  end
 
                elsif section == "OVERLAY" and currentOvlIdx >= 0 and currentOvlIdx < MAX_OVERLAYS then
                   Select
@@ -1811,7 +1812,6 @@ Function ParseDeviceConfig()
       Trace("HAL: Loaded " + IntToString(CTRL_Count) + " controls, " + IntToString(SYSEX_Count) + " SysEx commands.")
       if LayerSwitch_Count > 0 then
          Trace("HAL: " + IntToString(LayerSwitch_Count) + " layer switches, " + IntToString(Permanent_Count) + " permanent bindings, " + IntToString(Overlay_Count) + " overlay actions")
-         var sw : Integer
          For sw = 0; sw < LayerSwitch_Count; sw = sw + 1 Do
             Trace("  Switch " + IntToString(sw) + ": " + LayerSwitch_Label[sw] + " [" + LayerSwitch_Type[sw] + "]")
          End
