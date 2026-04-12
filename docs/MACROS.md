@@ -1,370 +1,566 @@
-# Macros, Controller Maps, Hardware Map, and SYSMODE
+# Macros, ControllerMap v2, DeviceConfig, and SYS-MODE
 
-This document is the user-facing reference for how macros work in the Global Rackspace, how to bind hardware inputs to them, which roles can be assigned through the Controller Map file, and how the SYSMODE joystick navigation layer fits on top. If you're editing `ControllerMaps.txt` or `HardwareMap.txt` by hand and want to know what the parser will accept, this is where to look.
+This document is the user-facing reference for the unified ControllerMap architecture in the Global Rackspace. It covers macro slots, hardware layer system, overlay triggers, DeviceConfig, SYSACT roles, and SYS-MODE joystick navigation. If you are editing `ControllerMaps.txt` or `DeviceConfig.txt` by hand, this is the authoritative syntax reference.
 
-If you just want to get started: read sections **1**, **2**, and **7**. The rest is reference material for specific questions.
+Quick start: read sections **1**, **2**, and **3**. The rest is reference material for specific questions.
 
 ---
 
 ## 1. The Mental Model
 
-The Global Rackspace exposes **256 macro slots** (`MAX_MACROS = 256`). Slots are split into two conceptual regions:
+The Global Rackspace exposes **256 macro slots** (`MAX_MACROS = 256`). Slots are split into two regions:
 
 | Slot range (1-based) | Region | Who owns it |
 |---|---|---|
-| **1 – 50** | **User zone** — free for anything | You (via `ControllerMaps.txt`) |
-| **51 – 210** | **Group roles** — system-reserved | Hardcoded, not overrideable per map |
-| **211 – 256** | **Headroom** for future groups | Reserved |
+| **1 -- 95** | **User zone** -- free for layer system bindings | You (via `ControllerMaps.txt`) |
+| **96 -- 255** | **System groups** -- 10 groups of 16 channels each | Hardcoded, not overridable per map |
 
-### Group role layout (slots 51–210)
+### System group layout (slots 96--255)
 
-Each group is a 16-element block — one slot per channel strip.
+Each group is a contiguous 16-element block -- one slot per channel strip (channels 1--16).
 
 | Group | Slots (1-based) | Purpose |
 |---|---|---|
-| Looper Triggers | 51 – 66 | Record / play / overdub per channel |
-| Smart Solo | 67 – 82 | Smart solo toggle per channel |
-| Strict Solo | 83 – 98 | Strict solo toggle per channel |
-| User Mute | 99 – 114 | User mute per channel |
-| Velocity Range | 115 – 130 | Velocity range gate toggle per channel |
-| Root / Chord | 131 – 146 | Chord-mode toggle per channel |
-| Octaver | 147 – 162 | Polyphonic Octave Generator toggle per channel |
-| Humanizer | 163 – 178 | Humanizer toggle per channel |
-| Scale Quantizer | 179 – 194 | Scale quantizer toggle per channel |
-| Auto Sustain | 195 – 210 | Auto-sustain toggle per channel |
+| Looper Triggers | 96 -- 111 | Record / play / overdub per channel |
+| Smart Solo | 112 -- 127 | Smart solo toggle per channel |
+| Strict Solo | 128 -- 143 | Strict solo toggle per channel |
+| User Mute | 144 -- 159 | User mute per channel |
+| Velocity Range | 160 -- 175 | Velocity range gate toggle per channel |
+| Root / Chord | 176 -- 191 | Chord-mode toggle per channel |
+| Octaver | 192 -- 207 | Polyphonic Octave Generator toggle per channel |
+| Humanizer | 208 -- 223 | Humanizer toggle per channel |
+| Scale Quantizer | 224 -- 239 | Scale quantizer toggle per channel |
+| Auto Sustain | 240 -- 255 | Auto-sustain toggle per channel |
 
-**Key rule:** these group slots are wired at startup from the hardcoded `DEF_*_MacroIdx` constants in `Global Rackspace.gpscript` SECTION 2. They are **not overridable per map** — if you need to change where Looper channel 1 lives, you edit the `DEF_LOOPER_CH_MacroIdx` array in the script itself, not the Controller Map file.
+**Key rule:** These group slots are wired at startup from the hardcoded `DEF_*_MacroIdx` constants in `Global Rackspace.gpscript` SECTION 2. They are **not overridable per map**. To relocate a group slot, edit the constant array in the script itself.
 
 ### Why two regions
 
-Separating user macros from group macros means you never have to worry about accidentally binding a hardware input to "Looper channel 3" because you wanted Macro 52 for a preset knob. If you stay in the 1–50 range for your own work, the system region is inert from your perspective — it just works.
+Separating user macros (1--95) from system macros (96--255) prevents accidental collisions. The user zone holds all layer-multiplied hardware bindings. The system zone is inert from the user's perspective -- it just works.
 
 ---
 
-## 2. The Two Configuration Files
+## 2. The Configuration Files
 
-Two files live alongside the `.gig` file, in the same folder as the rackspace data:
+Two files live alongside the `.gig` file. The former `HardwareMap.txt` is eliminated -- hardware sources are now inline in the ControllerMap.
 
-### `ControllerMaps.txt` — "What does each macro slot do?"
+### `ControllerMaps.txt` -- "What does each macro do, and which hardware input drives it?"
 
-Multiple `[Map:<SongName>]` sections, one per song or setup. Each section maps macro slots to **behaviors**: parameter links, direct CC routings, single-role keywords (like `CROSSFADER`), or SYSACT roles.
+Contains a `[Map:Default]` base section and optional `[Map:<SongName>]` override sections. Each section maps macro slots to hardware sources AND behavioral bindings (VST parameters, CC routings, keywords, SYSACT roles, overlay triggers).
 
-Switching between sections is per-song — the active section determines what Macro 5 currently triggers. When you edit a song's Controller Map, you're editing how that song's macros behave.
+`[Map:Default]` is the base configuration. All song maps inherit from it. A song map only needs to declare differences (deltas). Inheritance works per-layer, per-macro: if a song map does not mention a macro, the entire macro definition comes from Default. If a song map overrides only one layer of a macro, the other layers remain inherited.
 
-### `HardwareMap.txt` — "Which physical input is each macro slot?"
+### `DeviceConfig.txt` -- "What hardware exists and how is it wired?"
 
-A single `[Assignment:Standard]` section listing which MIDI channel + CC (or Note) each macro slot is bound to. This is **global** — not per-song. Your foot pedal on CC64 stays Macro 42 across every song in the set.
+Defines physical devices, their controls with labels, layer switch triggers, layer-to-bitmask mappings, permanent bindings, and layer-level overlay actions. Parsed once at startup.
 
-This is the HAL (Hardware Abstraction Layer) side. It's managed via the rackspace's Learn mode — you rarely edit it by hand. Format is simple:
+### How they interact
 
-```
-[Assignment:Standard]
-; Controller Bindings (Auto-Generated)
-Macro1 = Ch13:CC17
-Macro2 = Ch13:CC19 | Ch1:CC20
-Macro42 = Ch16:CC64
-```
-
-Macros can have multiple hardware sources via `|`. Notes are supported via `Ch<n>:Note<n>` instead of `Ch<n>:CC<n>`.
-
-### The separation matters
-
-- Song A and Song B can have totally different Controller Maps (different behaviors for Macro 5) but **share** the same Hardware Map (Macro 5 is always the same button on your pedalboard).
-- If you get a new keyboard with different CC numbers, you edit the Hardware Map **once** and all songs follow.
+- **ControllerMap** references controls by their DeviceConfig **label** (e.g., `Enc1`, `Fader3`), not by type+number. The label is resolved to a physical CC at parse time via DeviceConfig.
+- **Song maps** override individual macros or layers from Default. Unspecified elements inherit.
+- **Permanent bindings** in DeviceConfig (e.g., CC64 = SYSTEM_TOGGLE) are always active, independent of the loaded ControllerMap.
+- If you get a new keyboard with different CC numbers, you edit DeviceConfig once. All ControllerMaps follow because they reference labels, not CC numbers.
 
 ---
 
-## 3. Controller Map Section Syntax
+## 3. ControllerMap Syntax
 
-A Controller Map section looks like this:
+### Full line syntax
 
 ```
-[Map:MySong]
-Macro1 = VST1_GRS:48:Filter Cutoff {0.0, 1.0}
-Macro2 = Ch13:CC7:Volume
-Macro5 = SYSACT_VST_SCOPE_UP
-Macro6 = CROSSFADER
-Macro10 = VST1_GRS:0:Level (p1) {0.0, 0.289} | VST2_GRS:0:Level (p1) {0.0, 0.289}
-CC11 = CROSSFADER
-CC64 = SYSTEM_TOGGLE
+Macro<N> = DEV<d>:LAY<l>:<Label> [& DEV<d>:LAY<l>:<Label>] ; <Bindings>
 ```
 
-The parser (in `LoadControllerMap`) accepts four kinds of bindings on the right side of `=`, plus two source forms on the left side.
+- `Macro<N>` -- macro slot index (1--256).
+- `DEV<d>:LAY<l>:<Label>` -- hardware source. `d` = device index, `l` = layer index, `Label` = control label from DeviceConfig.
+- `&` -- joins multiple hardware sources to one macro (last-write-wins on value).
+- `;` -- separates the source declaration from bindings.
+- `<Bindings>` -- one or more binding targets separated by `|`.
 
-### Source forms (left of `=`)
+Every macro declares exactly **one layer** in its source. A physical control on different layers maps to different macros:
 
-- `Macro<N>` — refers to macro slot N (1-based). N must be in `1..MAX_MACROS` (1–256).
-- `CC<n>` — refers to raw MIDI CC number n on a dedicated CC lane. Only valid for **single-role keywords** and **SYSACT roles**, not for arbitrary parameter links.
+```ini
+Macro1  = DEV0:LAY0:Enc1; VST1_GRS:48{0.0,1.0}
+Macro25 = DEV0:LAY1:Enc1; ROOT:CH1{OTZ,1.0,1.0}
+Macro26 = DEV0:LAY2:Enc1; OCTAVER:CH1{OTZ,1.0,1.0}
+```
 
-### Binding kinds (right of `=`)
+If no `DEV...;` prefix is present in a song map line, the source is inherited from `[Map:Default]`.
 
-| Kind | Syntax | Multi-`|` allowed | Purpose |
+### Binding kinds
+
+| Kind | Syntax | Multi-`\|` | Purpose |
 |---|---|---|---|
-| **VST plugin parameter** | `VST<k>_GRS:<paramIdx>:<label> {min, max}` | ✓ | Route the macro to a parameter on the k-th VST slot |
-| **Direct CC routing** | `Ch<c>:CC<n>:<label> {min, max}` | ✓ | Emit a CC message on channel c, number n |
-| **Single-role keyword** | `CROSSFADER`, `SCRUBBER`, `SYSTEM_TOGGLE`, `VST_SCOPE`, `VST_SCOPE_PREV`, `VST_SCOPE_NEXT`, `VST_PREV`, `VST_NEXT`, `VST_BROWSE`, `SYSMODE_CYCLE`, `SYSMODE_SELECT`, `REC_SONGPART` | one Macro source + one CC source per role per section | Bind a fixed global system function |
-| **SYSACT role** | `SYSACT_<NAME>` | **no** (Isolation Rule) | Bind a virtual SYSMODE action (see section 5) |
+| **VST parameter** | `VST<k>_GRS:<paramIdx>[:<label>] [{min,max}]` | yes | Route macro to a parameter on the k-th VST slot |
+| **Direct CC** | `Ch<c>:CC<n>[:<label>] [{min,max}]` | yes | Emit a CC message on channel c, number n |
+| **Keyword** | See list below | one per role | Bind a fixed global system function |
+| **SYSACT role** | `SYSACT_<NAME>` | no (Isolation Rule) | Bind a virtual SYS-MODE action |
+| **Overlay trigger** | `<FuncName>:CH<c>{OTZ,min,max}` | yes | Trigger an overlay function on a channel |
 
 The `{min, max}` scaling suffix is optional; default is `{0.0, 1.0}` (pass-through).
 
-### Multi-assignment on one slot
-
-For VST and CC links, you can combine multiple targets with `|`:
-
-```
-Macro4 = VST1_GRS:48:Cutoff | Ch11:CC18:Phaser {0.0, 1.0} | Ch12:CC18:Phaser {0.0, 1.0}
-```
-
-When Macro 4 is pressed, all three targets fire in parallel. This is handy for "one knob, two instruments playing in unison" setups.
-
----
-
-## 4. Single-Role Keywords
-
-These are hardcoded global functions. A Controller Map section can bind **one Macro source + one CC source** per keyword (per section). Multiple Macros to the same keyword in one section is not supported — the last one wins.
+### Keywords
 
 | Keyword | What it does |
 |---|---|
 | `CROSSFADER` | Global audio / expression balance fader |
 | `SCRUBBER` | Timeline scrubber + panic transport stop |
-| `SYSTEM_TOGGLE` | Press-and-hold gesture that activates System Mode (joystick hijack — used to switch into SYSMODE) |
+| `SYSTEM_TOGGLE` | Press-and-hold gesture activating System Mode |
 | `VST_SCOPE` | Direct VST scope select (rotary encoder, absolute) |
 | `VST_SCOPE_PREV` / `VST_SCOPE_NEXT` | Step to previous/next VST scope (button pair) |
-| `VST_PREV` / `VST_NEXT` | Step to previous/next VST preset on the current scope |
+| `VST_PREV` / `VST_NEXT` | Step to previous/next VST preset on current scope |
 | `VST_BROWSE` | Preset browse encoder |
-| `SYSMODE_CYCLE` | Cycle through the 5 SYSMODE modes |
-| `SYSMODE_SELECT` | Absolute SYSMODE selection (0–4) |
-| `REC_SONGPART` | Record: mark next songpart (timeline marker) |
+| `SYSMODE_CYCLE` | Cycle through the 5 SYS-MODE modes |
+| `SYSMODE_SELECT` | Absolute SYS-MODE selection (0--4) |
+| `REC_SONGPART` | Record: mark next song part (timeline marker) |
 
-### Per-song rebinding
+### Multi-assignment on one slot
 
-The whole reason single-role keywords exist is that different songs use different hardware inputs. Song A's foot pedal is CC11; Song B's is CC64. With a single-role keyword you can write:
+For VST and CC bindings, combine multiple targets with `|`:
 
-```
-[Map:SongA]
-CC11 = CROSSFADER
-
-[Map:SongB]
-CC64 = CROSSFADER
+```ini
+Macro4 = DEV0:LAY0:Enc4; VST1_GRS:48:Cutoff | Ch11:CC18:Phaser{0.0,1.0} | Ch12:CC18:Phaser{0.0,1.0}
 ```
 
-…and the crossfader binding follows the active song.
+All three targets fire in parallel when Macro 4 changes.
+
+### Multi-device sources
+
+Multiple hardware sources feed one macro via `&`:
+
+```ini
+Macro15 = DEV0:LAY0:Fader3 & DEV1:LAY0:Fader1; VST1_GRS:2{0.0,1.0}
+```
+
+Last-write-wins on value. Debounce is per-macro, not per-source.
+
+### Per-layer inheritance rules
+
+| Element in song map | Behavior |
+|---|---|
+| No `DEV...;` prefix | Source inherited from Default |
+| `DEV...;` prefix present | Source completely replaced |
+| Macro not listed | Entire macro inherited from Default |
+
+Song maps override per-macro. Unspecified macros and layers remain as defined in `[Map:Default]`.
 
 ---
 
-## 5. SYSACT Roles (the System Action Framework)
+## 4. Layer System
 
-SYSACT roles are a more flexible system than single-role keywords. There are **20 virtual actions** — things like "advance VST scope," "toggle strip macro," "record songpart" — that can be bound to any user-zone macro slot or CC number, and they follow a strict **Isolation Rule**.
+### Layer switches
 
-### Why not just single-role keywords?
+Layer switches are defined in DeviceConfig via `[LAYERSWITCH:<n>]` sections. Each switch is a binary toggle triggered by incoming SysEx, Note, or CC messages.
 
-Single-role keywords are limited: one binding per hardware type, fixed set, no per-channel parameterization. SYSACT solves this by giving every virtual SYSMODE action its own named role that can be dispatched from:
+```ini
+[LAYERSWITCH:0]
+Device=0
+Label=Harmony
+Type=SYSEX
+OnData=F0 43 10 4C 04 00 0C 40 F7
+OffData=F0 43 10 4C 04 00 0C 7F F7
 
-1. **The joystick path** — via `ProcessSystemNavigation` in `Global Rackspace.gpscript`
-2. **A bound hardware button** — via the macro ParameterValueChanged handler or the CC handler (reverse-lookup into `SysAction_ByMacro` / `SysAction_ByCC`)
+[LAYERSWITCH:1]
+Device=0
+Label=Talk
+Type=SYSEX
+OnData=F0 43 10 4C 04 00 16 7F F7
+OffData=F0 43 10 4C 04 00 16 00 F7
+```
 
-Both paths converge on the same `FireSystemAction(actionIdx)` dispatcher. This means any joystick action can also be triggered by a hardware pad or foot switch, with zero code changes — just a binding line in `ControllerMaps.txt`.
+Supported trigger types:
+
+| Type | ON condition | OFF condition |
+|---|---|---|
+| `SYSEX` | Incoming matches `OnData` | Incoming matches `OffData` |
+| `NOTE` | Velocity > 0 | Velocity = 0 |
+| `CC` | Value > 63 | Value <= 63 |
+
+### Bitmask to layer number
+
+Switch states form a bitmask (Switch 0 = bit 0, Switch 1 = bit 1). The `[LAYERMAP:<n>]` section maps each bitmask state to a layer number:
+
+```ini
+[LAYERMAP:0]
+Device=0
+State_0=LAY0
+State_1=LAY1
+State_2=LAY2
+State_3=LAY3
+```
+
+Two switches yield 4 layers (2^2). Extensible to N switches.
+
+### Per-layer reverse lookup
+
+Each macro declares exactly one layer in its source: `DEV0:LAY1:Enc1`. The same physical control on different layers maps to different macros. At runtime, per-layer reverse lookup arrays (`Mac_ReverseLookup_L0` through `Mac_ReverseLookup_L3`) resolve the active layer's physical CC to the correct macro index.
+
+```
+ProcessHardwareCC:
+  cc = GetCCNumber(m)
+  Select ActiveLayer:
+    0: macroIdx = Mac_ReverseLookup_L0[cc]
+    1: macroIdx = Mac_ReverseLookup_L1[cc]
+    ...
+  if macroIdx > 0: ExecuteHardwareMacro(macroIdx, val)
+```
+
+No layer check is needed inside `ExecuteHardwareMacro` -- the macro was already layer-correctly selected. All bindings on that macro fire unconditionally.
+
+---
+
+## 5. Overlay Trigger Zones (OTZ)
+
+### The OTZ marker
+
+The `{OTZ,min,max}` marker in a binding distinguishes overlay triggers from normal value-passthrough targets.
+
+```
+{0.0,1.0}          = Normal value scaling (default)
+{OTZ,1.0,1.0}      = Overlay: Point Max
+{OTZ,0.0,0.0}      = Overlay: Point Min
+{OTZ,0.5,0.8}      = Overlay: Zone (positional)
+{OTZ,0.0,1.0}      = Overlay: Full Range (movement-toggle)
+```
+
+### Range types
+
+| Range | Type | Behavior |
+|---|---|---|
+| `{OTZ,1.0,1.0}` | Point Max | Positional: ON when value = max, OFF when away |
+| `{OTZ,0.0,0.0}` | Point Min | Positional: ON when value = min, OFF when away |
+| `{OTZ,0.3,0.7}` | Zone | Positional: ON when value inside range, OFF outside |
+| `{OTZ,0.0,1.0}` | Full Range | Movement-Toggle with **10-second debounce** -- any movement toggles state, then ignores further movement for 10 seconds |
+
+### Registered overlay functions
+
+| Function name | Activate | Deactivate |
+|---|---|---|
+| `SMART_SOLO` | `Mem_SoloSmart[ch]=1`, clear Strict | `Mem_SoloSmart[ch]=0` |
+| `STRICT_SOLO` | `Mem_SoloStrict[ch]=1`, clear Smart | `Mem_SoloStrict[ch]=0` |
+| `ROOT` | `SetChordMode(ch, 1)` | `SetChordMode(ch, 0)` |
+| `OCTAVER` | `SetOctaverMode(ch, 1)` | `SetOctaverMode(ch, 0)` |
+| `USER_MUTE` | `Mem_UserMute[ch]=1` | `Mem_UserMute[ch]=0` |
+| `HUMANIZE` | `SetHumanize(ch, 1)` | `SetHumanize(ch, 0)` |
+| `SCALE` | `SetScaleQuantizer(ch, 1)` | `SetScaleQuantizer(ch, 0)` |
+| `RANGE` | `SetVelocityRange(ch, 1)` | `SetVelocityRange(ch, 0)` |
+| `AUTO_SUSTAIN` | `SetAutoSustain(ch, 1)` | `SetAutoSustain(ch, 0)` |
+
+Unknown function names combined with OTZ are ignored with a Trace warning. All registered functions route through `ActivateOverlay()` / `DeactivateOverlay()` -- the same entry points used by Strip Control UI and widget buttons.
+
+### Example: slider with overlay on LAY1
+
+```ini
+Macro1  = DEV0:LAY0:Fader1; VST1_GRS:0:Level (p1){0.0,1.0}
+Macro19 = DEV0:LAY1:Fader1; VST1_GRS:0:Level (p1){0.0,1.0} | SMART_SOLO:CH1{OTZ,0.0,1.0}
+```
+
+On LAY1, moving Fader1 both adjusts the VST parameter (normal target) and can toggle Smart Solo on channel 1 (overlay target with movement-toggle).
+
+---
+
+## 6. DeviceConfig -- Controls and Labels
+
+### Control definitions
+
+Each physical control is defined in a `[CONTROL:<n>]` section in `DeviceConfig.txt`:
+
+```ini
+[CONTROL:4]
+Device=0
+Label=Enc1
+Type=ENCODER
+CC=17
+Channel=13
+```
+
+Controls have **labels** -- free-form strings, unique per device. The ControllerMap references controls by label, not by type or CC number. This decouples the map from physical wiring.
+
+### Control types
+
+| Type | Physical form | Value range |
+|---|---|---|
+| `FADER` | Slider / linear pot | 0--127 |
+| `ENCODER` | Rotary knob (endless) | Relative |
+| `BUTTON` | Press / release | 0 / 127 |
+| `JOYSTICK` | Directional axis | Range-dependent |
+| `PAD` | Velocity-sensitive surface | 0--127 |
+
+### Genos2 layout (19 controls)
+
+- 4 joystick axes: `JoyUp`, `JoyDown`, `JoyLeft`, `JoyRight`
+- 6 encoders: `Enc1` through `Enc6`
+- 9 faders: `Fader1` through `Fader9`
+
+### Parser resolution
+
+When the ControllerMap parser encounters `DEV0:LAY0:Enc1`:
+
+1. Extract device index (0), layer index (0), label string (`Enc1`).
+2. Search DeviceConfig's `CTRL_Label[]` where `CTRL_DevIdx == 0` and `CTRL_Label == "Enc1"`.
+3. Resolve to the physical CC number from `CTRL_CC[match]`.
+4. Register in the appropriate per-layer reverse lookup array.
+
+---
+
+## 7. Permanent Bindings
+
+`[PERMANENT]` sections in DeviceConfig define hardware functions that are always active, independent of the loaded ControllerMap. They do not consume user macro slots.
+
+```ini
+[PERMANENT:0]
+Device=0
+Source=CC64
+Function=SYSTEM_TOGGLE
+
+[PERMANENT:1]
+Device=0
+Source=CC11
+Function=CROSSFADER
+```
+
+These bindings are checked before the ControllerMap reverse lookup in `ProcessHardwareCC`. CC64 always triggers SYSTEM_TOGGLE and CC11 always drives CROSSFADER, regardless of which song map is active.
+
+---
+
+## 8. SYSACT Roles (the System Action Framework)
+
+SYSACT roles are virtual actions that can be bound to any user-zone macro slot. There are **20 virtual actions** covering VST navigation, looper control, controller map browsing, strip control, and timeline operations.
 
 ### The 20 roles
 
-| # | Name | Human label | What it does |
+| # | Name | Label | What it does |
 |---|---|---|---|
-| 0 | `SYSACT_VST_SCOPE_UP` | VST Scope [Next] | Advance the current VST scope by one, apply focus bypass |
-| 1 | `SYSACT_VST_SCOPE_DOWN` | VST Scope [Prev] | Step back one VST scope, apply focus bypass |
+| 0 | `SYSACT_VST_SCOPE_UP` | VST Scope [Next] | Advance VST scope by one, apply focus bypass |
+| 1 | `SYSACT_VST_SCOPE_DOWN` | VST Scope [Prev] | Step back one VST scope |
 | 2 | `SYSACT_VST_PRESET_UP` | VST Preset [Next] | Load next preset on current VST scope |
-| 3 | `SYSACT_VST_PRESET_DOWN` | VST Preset [Prev] | Load previous preset on current VST scope |
+| 3 | `SYSACT_VST_PRESET_DOWN` | VST Preset [Prev] | Load previous preset |
 | 4 | `SYSACT_LOOPER_CH_UP` | Looper Channel [Next] | Cycle looper channel scope forward |
 | 5 | `SYSACT_LOOPER_CH_DOWN` | Looper Channel [Prev] | Cycle looper channel scope backward |
-| 6 | `SYSACT_LOOPER_REC` | Looper Record | Click the Loop Record widget (rec/play/overdub flow) |
-| 7 | `SYSACT_LOOPER_CLEAR` | Looper Clear | Click the Loop Clear widget for the current channel |
+| 6 | `SYSACT_LOOPER_REC` | Looper Record | Click Loop Record widget (rec/play/overdub) |
+| 7 | `SYSACT_LOOPER_CLEAR` | Looper Clear | Click Loop Clear widget for current channel |
 | 8 | `SYSACT_CTRLMAP_PREV` | Ctrl Map [Prev Active] | Preview previous active Controller Map |
 | 9 | `SYSACT_CTRLMAP_NEXT` | Ctrl Map [Next Active] | Preview next active Controller Map |
-| 10 | `SYSACT_CTRLMAP_RESTORE` | Ctrl Map Restore Initial | Reload the song's originally-assigned Controller Map |
-| 11 | `SYSACT_CTRLMAP_CYCLE` | Ctrl Map Cycle | Cycle through all Controller Maps (regardless of active state) |
-| 12 | `SYSACT_STRIP_CH_UP` | Strip Channel [Next] | Cycle the Strip Control channel scope forward |
-| 13 | `SYSACT_STRIP_CH_DOWN` | Strip Channel [Prev] | Cycle the Strip Control channel scope backward |
-| 14 | `SYSACT_STRIP_THEME_PREV` | Strip Theme [Prev] | Cycle Strip Control theme backward (Octaver → Humanizer → …) |
+| 10 | `SYSACT_CTRLMAP_RESTORE` | Ctrl Map Restore Initial | Reload the song's original Controller Map |
+| 11 | `SYSACT_CTRLMAP_CYCLE` | Ctrl Map Cycle | Cycle through all Controller Maps |
+| 12 | `SYSACT_STRIP_CH_UP` | Strip Channel [Next] | Cycle Strip Control channel scope forward |
+| 13 | `SYSACT_STRIP_CH_DOWN` | Strip Channel [Prev] | Cycle Strip Control channel scope backward |
+| 14 | `SYSACT_STRIP_THEME_PREV` | Strip Theme [Prev] | Cycle Strip Control theme backward |
 | 15 | `SYSACT_STRIP_THEME_NEXT` | Strip Theme [Next] | Cycle Strip Control theme forward |
-| 16 | `SYSACT_STRIP_MACRO_TOGGLE` | Strip Macro Toggle | Toggle the macro at the current Strip Control grid position |
-| 17 | `SYSACT_TL_PARTJUMP_NEXT` | Timeline Part Jump [Next] | Preview next song part (Timeline mode, PLAY sub-mode) |
+| 16 | `SYSACT_STRIP_MACRO_TOGGLE` | Strip Macro Toggle | Toggle macro at current Strip Control position |
+| 17 | `SYSACT_TL_PARTJUMP_NEXT` | Timeline Part Jump [Next] | Preview next song part |
 | 18 | `SYSACT_TL_PARTJUMP_PREV` | Timeline Part Jump [Prev] | Preview previous song part |
-| 19 | `SYSACT_TL_REC_SONGPART` | Timeline Rec Songpart | Mark the current position as a song part during recording |
+| 19 | `SYSACT_TL_REC_SONGPART` | Timeline Rec Songpart | Mark current position as song part during recording |
 
-The registry lives in `Global Rackspace.gpscript` SECTION 2 (`SysAction_Names` / `SysAction_Labels`). Adding a new action is a 3-step change: new entry in both arrays, new case in `FireSystemAction()`, done — parser and display pick it up automatically.
+The registry lives in `Global Rackspace.gpscript` SECTION 2 (`SysAction_Names` / `SysAction_Labels`). Adding a new action: new entry in both arrays, new case in `FireSystemAction()` -- parser and display pick it up automatically.
 
-### Binding SYSACT roles
+### Binding syntax
 
-```
+```ini
 [Map:MySong]
-Macro5 = SYSACT_VST_SCOPE_UP
-Macro6 = SYSACT_VST_SCOPE_DOWN
-CC42 = SYSACT_LOOPER_REC
+Macro37 = DEV0:LAY3:Enc1; SYSACT_VST_SCOPE_UP
+Macro38 = DEV0:LAY3:Enc2; SYSACT_VST_SCOPE_DOWN
 ```
 
-After loading, pressing the hardware button assigned to Macro 5 fires `ChangeVstScope(1, -1); ApplyVstFocusBypass()` — exactly the same function the joystick Y+ in SYSMODE 0 calls.
+Both the joystick path (`ProcessSystemNavigation`) and the hardware-button path (`ExecuteHardwareMacro`) converge on the same `FireSystemAction(actionIdx)` dispatcher. Any joystick action can also be triggered by a bound control with zero code changes.
 
-### Multi-binding is natural
+### The Isolation Rule
 
-Multiple macro slots can bind the **same** SYSACT role — the reverse-lookup table `SysAction_ByMacro[slot]` simply stores the action index at each slot. If you bind both Macro 5 and Macro 88 to `SYSACT_LOOPER_REC`, either macro press triggers the looper record. This matches the channel-injection pattern used elsewhere in the codebase.
+> A `SYSACT_*` role binds to a macro slot **only when the binding list is a single entry.** If the line contains a `|` separator mixing SYSACT with other targets, the SYSACT token is silently dropped; the remaining entries are parsed normally.
 
----
+A macro slot is either exclusively a SYSACT role, or it is not a SYSACT role at all. This prevents ambiguous record/playback semantics and keeps the Timeline filter clean.
 
-## 6. The Isolation Rule (cross-cutting)
-
-> A `SYSACT_*` role binds to a macro/CC slot **only when the `valuePart` is a single entry.** If the line contains a `|` separator, the SYSACT_* token is silently dropped; the remaining entries are parsed normally by the VST/CC link parser.
-
-### Why
-
-SYSACT roles are distinct from normal parameter links — they fire an action, not set a value. Allowing them to coexist with VST/CC links on one slot would create ambiguous record/playback semantics and tangle the Timeline filter. The Isolation Rule sidesteps that entirely: a macro slot is either exclusively a SYSACT role, or it isn't a SYSACT role at all.
-
-### Examples
+**Examples:**
 
 ```
-Macro5 = SYSACT_VST_SCOPE_UP                          ✓ bound
-Macro5 = SYSACT_VST_SCOPE_UP | VST1_GRS:0:Level       ✗ SYSACT dropped, VST1 link active
-Macro5 = VST1_GRS:0:Level | SYSACT_VST_SCOPE_UP       ✗ SYSACT dropped, VST1 link active
-Macro5 = SYSACT_BOGUS_NAME                            ✗ unknown action, DebugMode trace, slot unbound
+Macro5 = DEV0:LAY3:Enc5; SYSACT_VST_SCOPE_UP                         -- bound
+Macro5 = DEV0:LAY0:Enc5; SYSACT_VST_SCOPE_UP | VST1_GRS:0:Level      -- SYSACT dropped, VST link active
+Macro5 = DEV0:LAY0:Enc5; SYSACT_BOGUS_NAME                           -- unknown action, Trace warning, slot unbound
 ```
 
 ### Timeline recording consequence
 
-Timeline recording uses the same reverse-lookup to filter out SYSACT-exclusive macros. If a slot is in `SysAction_ByMacro[]`, `IsSystemActionMacro(paramIdx)` returns true and `RecordTimelineEvent("Macro", paramIdx)` is skipped. A multi-assigned slot never enters the reverse-lookup in the first place, so it records as a normal macro event and replays the user's VST/CC link exactly as expected. **No special playback logic needed** — the Isolation Rule does all the work at the parser level.
+If a slot is in `SysAction_ByMacro[]`, `IsSystemActionMacro(paramIdx)` returns true and `RecordTimelineEvent()` is skipped. A multi-assigned slot (where SYSACT was dropped) records as a normal macro event.
 
 ---
 
-## 7. SYSMODE — The Joystick Navigation Layer
+## 9. SYS-MODE -- The Joystick Navigation Layer
 
-SYSMODE is a modal state machine on top of the rackspace. When you hold `SYSTEM_TOGGLE` (or press `SYSMODE_CYCLE`), the hardware joystick's pitch-bend and modulation axes are "hijacked" away from their normal musical use and become a navigation controller. The current mode determines what the joystick does. There are **5 modes**, cycled in order:
+SYS-MODE is a modal state machine. When `SYSTEM_TOGGLE` is active (held, or forced via LAY3 overlay), the hardware joystick axes are hijacked from musical use and become a navigation controller. There are **5 modes**, cycled in order:
 
 | # | Name | Joystick Y axis | Joystick X axis | Button / Encoder |
 |---|---|---|---|---|
-| 0 | **VOICE SELECTOR** | VST scope ± | VST preset ± | Same as axis |
-| 1 | **LOOPER CONTROL** | Channel scope ± | Left=Clear, Right=Rec | Button=Rec |
+| 0 | **VOICE SELECTOR** | VST scope +/- | VST preset +/- | Same as axis |
+| 1 | **LOOPER CONTROL** | Channel scope +/- | Left=Clear, Right=Rec | Button=Rec |
 | 2 | **CONTROLLER MAP** | Up=Restore initial | Prev/Next active map | Button=Cycle all |
-| 3 | **STRIP-CONTROL** | Channel scope ± | Left=Theme prev, Right=Macro toggle | Button=Macro toggle |
+| 3 | **STRIP-CONTROL** | Channel scope +/- | Left=Theme prev, Right=Macro toggle | Button=Macro toggle |
 | 4 | **TIMELINE** | Toggle PLAY/REC | PLAY: Part jump; REC: Rec songpart (right) / Replace-Overdub-Discard cycle (left) | Same as Y |
 
-### Mode 0 — VOICE SELECTOR
+### Mode 0 -- VOICE SELECTOR
 
-Quick VST scope and preset navigation. Y+ advances to the next VST slot (0→1→2→…), Y- goes back. X+ loads the next preset on the currently-focused VST, X- loads the previous. This is the default "browse sounds" mode.
+Quick VST scope and preset navigation. Y+ advances to the next VST slot, Y- goes back. X+ loads the next preset on the focused VST, X- loads the previous. Default "browse sounds" mode.
 
-### Mode 1 — LOOPER CONTROL
+### Mode 1 -- LOOPER CONTROL
 
-Per-channel looper management. Y selects which channel scope the looper operates on (1–16). X-left clears the current channel's loop, X-right triggers the Record → Play → Overdub state flow. Button press alone = Record (same as X-right).
+Per-channel looper management. Y selects the channel scope (1--16). X-left clears the current channel's loop, X-right triggers the Record / Play / Overdub state flow. Button = Record (same as X-right).
 
-### Mode 2 — CONTROLLER MAP
+### Mode 2 -- CONTROLLER MAP
 
-Browse Controller Map sections at runtime. Y+ jumps back to the song's originally-loaded map (useful after you've browsed around and want to reset). X cycles through **active** maps (the ones relevant to the current VST set). Button cycles through **all** maps regardless of active state.
+Browse ControllerMap sections at runtime. Y+ restores the song's originally loaded map. X cycles through active maps. Button cycles through all maps.
 
-### Mode 3 — STRIP-CONTROL
+### Mode 3 -- STRIP-CONTROL
 
-A 16-channel × 9-theme grid. Y picks the channel (1–16), X-left cycles the theme (Octaver → Humanizer → Scale Quantizer → Auto Sustain → Looper → Smart Solo → Strict Solo → User Mute → Velocity Range → Root/Chord → …). X-right or button press toggles the macro at the current channel+theme grid position.
+A 16-channel x 9-theme grid. Y picks the channel (1--16). X-left cycles the theme (Octaver, Humanizer, Scale Quantizer, Auto Sustain, Looper, Smart Solo, Strict Solo, User Mute, Velocity Range, Root/Chord). X-right or button toggles the macro at the current channel+theme position.
 
-### Mode 4 — TIMELINE
+### Mode 4 -- TIMELINE
 
 Song timeline playback and recording.
 
-- **PLAY sub-mode** (default): Y or button toggles to REC. X/encoder jumps through song parts (preview before committing).
-- **REC sub-mode**: Y or button commits recording and returns to PLAY. X-right marks the current position as a song part (`REC_SONGPART`). X-left cycles through the three recording policies: **Replace** → **Overdub** → **Discard** (back to Replace).
+- **PLAY sub-mode** (default): Y or button toggles to REC. X/encoder jumps through song parts.
+- **REC sub-mode**: Y or button commits recording and returns to PLAY. X-right marks the current position as a song part. X-left cycles recording policy: Replace / Overdub / Discard.
 
-Timeline meta-controls (the PLAY/REC toggle itself, the recording policy cycle, the discard action) are deliberately **not virtualized through SYSACT** — they are the recording controls, and recording them into the timeline stream would be nonsense.
+Timeline meta-controls (PLAY/REC toggle, recording policy cycle, discard) are deliberately **not** virtualized through SYSACT -- recording the recording controls into the timeline stream would be nonsensical.
 
-### How the dispatch works
+### Dispatch
 
-Joystick events (pitch-bend beyond threshold on one of the hardware device ins) land in `On PitchBendEvent` in the Global Rackspace, which calls `ProcessSystemNavigation(deviceID, actionType, direction)`. That function is a pure router:
+Joystick events land in `On PitchBendEvent` / `On ControllerEvent`, which calls `ProcessSystemNavigation(deviceID, actionType, direction)`. Every virtualizable branch routes through `FireSystemAction(SysActIdx("<NAME>"))` -- the same entry point as hardware-button-bound SYSACT roles.
 
-```gpscript
-elsif GlobalSystemMode == 1 then
-    if actionType == "Y_AXIS" or actionType == "ENCODER" then
-        if dir > 0 then FireSystemAction(SysActIdx("LOOPER_CH_UP"))
-        else FireSystemAction(SysActIdx("LOOPER_CH_DOWN")) end
-    elsif actionType == "X_AXIS" then
-        if dir == -1 then FireSystemAction(SysActIdx("LOOPER_CLEAR"))
-        elsif dir == 1 then FireSystemAction(SysActIdx("LOOPER_REC")) end
-    elsif actionType == "BUTTON" then
-        FireSystemAction(SysActIdx("LOOPER_REC"))
-    end
+---
+
+## 10. Smart Solo Enhanced
+
+Smart Solo now considers both the **RECH routing input** and the **Manual zone** (Upper / Lower / None) when deciding which channels to mute.
+
+### Logic
+
+```
+For each channel outCol (0-15):
+  If Mem_SoloSmart[outCol] == 0:
+    For each soloed channel soloCh:
+      sameInput = any RECH row routes to both outCol and soloCh
+      sameZone  = Mem_Manual[outCol] == Mem_Manual[soloCh]
+      If sameInput AND sameZone:
+        LooperSoloMute[outCol] = true
 ```
 
-Every virtualizable branch routes through `FireSystemAction(SysActIdx("<NAME>"))` — the same entry point that a hardware-button-bound SYSACT role uses. Single source of truth, zero code duplication.
+### Behavior matrix
+
+| Solo channel zone | Other channel zone | Result |
+|---|---|---|
+| Upper | Upper | Muted (same zone) |
+| Upper | Lower | **Not muted** (different zone) |
+| Upper | None (Arranger) | **Not muted** (Arranger free) |
+| None | None | Muted (same zone) |
+
+### Practical effect
+
+Soloing an Upper channel mutes other Upper channels sharing the same input, but Lower channels and Arranger channels (zone = None) continue playing. This allows left-hand solo without silencing the backing.
 
 ---
 
-## 8. Velocity Range Tamper (a related live-forgiveness feature)
+## 11. VST Validation
 
-Not strictly a macro topic, but part of the same "live-play forgiveness" family as the Latch Auto-Release. The Note Prozessor's **Velocity Range** gates incoming notes to a `[p_MinVel, p_MaxVel]` window — everything outside is silent. Useful for velocity-sensitive instrument layering, but the hard edges are musically unforgiving.
+### Map-level VST declarations
 
-The **Tamper** feature (`BTN_Inject_NP_VelTamper` → `p_VelRangeFade`) softens those edges: within 10% of each side of the range (configurable via `VelTamperPadPct` in the Note Prozessor scriptlet), velocities are linearly scaled down toward zero. The first inaudible velocity is exactly at `p_MinVel - 1` and `p_MaxVel + 1`. Activated per-channel via the Inject panel.
+Each map that references VST parameters must declare expected VSTs:
 
-For the full spec, see `docs/superpowers/specs/2026-04-10-vel-tamper-macro-refactor-sysact-design.md`.
+```ini
+[Map:SlowHip80erDream]
+VST1=Omnisphere
+VST3=Triton Extreme
+Macro14 = DEV0:LAY0:Fader2; VST1_GRS:1:Level (p2){0.000,0.442}
+Macro16 = DEV0:LAY0:Fader4; Ch13:CC7:Volume Triton
+```
+
+`[Map:Default]` also declares its expected VSTs. Song maps inherit Default's declarations and can override them.
+
+### Per-binding validation
+
+At map load, each declared VST is compared against the actually loaded plugin (`GetPluginName(BLK_VST[x])`). Results per VST: VALID, MISMATCH, or NOT_LOADED.
+
+| Binding type | VST valid | Behavior |
+|---|---|---|
+| VST parameter | Yes | Execute normally |
+| VST parameter | No | **BLOCKED** -- not executed, warning in display |
+| CC routing | -- | Always execute |
+| Keyword | -- | Always execute |
+| SYSACT role | -- | Always execute |
+| Overlay function | -- | Always execute |
+
+Only VST-referencing bindings are affected. All other binding types always execute regardless of VST validation state.
+
+### BTN_SmartAdapt
+
+SmartAdapt reads the plugin name from the current VST scope (`GetPluginName(BLK_VST[CurrentVstScope])`) and searches for a `[Map:<PluginName>]` section. If found, it loads with validation. If not found, the current map stays active with a Trace warning.
 
 ---
 
-## 9. Chord Latch Auto-Release
+## 12. Timeline Recording
 
-When the Note Prozessor's **Chord Mode** is combined with **Latch Mode** (`BTN_Inject_NP_Hold` → `p_LatchMode`), the detected root note stays held after you release the keys. Historically this was too permanent — the root kept droning even after the song ended.
+All overlay toggles are recorded into the Timeline -- no exceptions, no per-function filter. Every `ActivateOverlay()` / `DeactivateOverlay()` call triggers `RecordTimelineEvent()`.
 
-Now a **beat-scaled auto-release** fires after `LatchTimeoutBeats = 4` beats of complete note-on silence (BPM-aware) or `LatchTimeoutFallbackMs = 4000` milliseconds when `GetBPM()` is unavailable. Both tunables live in `Global Rackspace.gpscript` SECTION 2.
+Overlay events are encoded as `OVL_<func>` event type with channel and state (on/off).
 
-The check runs inside `On TimerTick` (not `On BeatChanged`, because `BeatChanged` doesn't fire when the transport is stopped, which is exactly when the release is needed). `ProcessHardwareNote` stamps the global `Latch_LastNoteOnTime` on every incoming hardware note-on; the timer checks idle-time-since-stamp against the BPM-scaled window and fires `p_LatchRelease = 1` on every channel in Chord+Latch mode when the threshold is crossed.
+If a toggle should not have been recorded, the user can delete it from the Timeline file after the fact. The design principle: live performance equals arrangement -- everything played is captured.
 
-For the full spec, see `docs/superpowers/specs/2026-04-10-latch-auto-release-design.md`.
+SYSACT-exclusive macros are **not** recorded (filtered by `IsSystemActionMacro()`). Normal macros (VST/CC bindings) are always recorded. The Isolation Rule ensures there is never ambiguity between the two categories.
 
 ---
 
-## 10. Troubleshooting
+## 13. Troubleshooting
 
 ### "My SYSACT binding doesn't fire."
 
-1. Check the line for a `|` separator — SYSACT roles are dropped from multi-assigned lines per the Isolation Rule.
-2. Enable `DebugMode` and look for `SYSACT: Unknown action name '<X>'` (typo in the role name) or `SYSACT: Multi-assigned valuePart - SYSACT role ignored on slot <N>`.
-3. Verify the macro slot is actually bound to a hardware input in `HardwareMap.txt`. The Controller Map says "what happens when Macro 5 fires"; the Hardware Map says "which button is Macro 5."
+1. Check the line for a `|` separator -- SYSACT roles are dropped from multi-assigned lines per the Isolation Rule.
+2. Enable `DebugMode` and look for `SYSACT: Unknown action name` (typo) or `SYSACT: Multi-assigned` (isolation violation).
+3. Verify the macro's `DEV<d>:LAY<l>:<Label>` source resolves to a valid control in DeviceConfig.
 
-### "Looper button does nothing."
+### "My overlay doesn't fire."
 
-The looper trigger macros live at fixed slots 51–66 (default). Make sure your hardware button is mapped to one of those slots in `HardwareMap.txt`, not to a user-zone slot.
+1. Check that the binding uses the `{OTZ,min,max}` marker -- without `OTZ`, the range is treated as a normal value scaling, not an overlay trigger.
+2. Verify the function name is one of the 9 registered names (SMART_SOLO, STRICT_SOLO, ROOT, OCTAVER, USER_MUTE, HUMANIZE, SCALE, RANGE, AUTO_SUSTAIN). Unknown names with OTZ are silently ignored.
+3. Check that the macro's source layer matches the currently active layer.
+4. For Full Range (`{OTZ,0.0,1.0}`): the 10-second debounce may be active. Wait and try again.
 
-### "Latch auto-release never fires."
+### "Layer switch doesn't work."
 
-1. Is `On TimerTick` running? It should be — it's transport-independent. Check Gig Performer's script console for any errors.
-2. Enable `DebugMode` and look for `LATCH: auto-release fired after Nms idle`. If you don't see it, the `Latch_LastNoteOnTime` stamp probably isn't being updated — check that `ProcessHardwareNote` is actually receiving your note-ons (only `DeviceIn_0..3` are wired).
-3. Is `Mem_NP_ChordMode[channel]` and `Mem_NP_LatchMode[channel]` both 1? The check in `CheckLatchTimeout` gates on both.
-4. If `GetBPM()` returns something weird (e.g., 0 during a song switch), the 4000ms fallback should still fire. If not, something else is wrong.
+1. Check `DeviceConfig.txt` for the `[LAYERSWITCH:<n>]` section -- verify the `OnData` and `OffData` SysEx signatures match what your hardware actually sends.
+2. For NOTE/CC type switches: confirm the correct channel and number.
+3. Verify the `[LAYERMAP:<n>]` section maps all bitmask states to layer numbers.
+4. Enable `DebugMode` -- layer changes produce Trace output on every switch event.
 
-### "I edited `ControllerMaps.txt` and nothing changed."
+### "Song loads the wrong map."
 
-Make sure you're editing the right section (the `[Map:<name>]` that's currently active for the loaded song). Gig Performer may also need a rackspace reload to pick up the new file contents.
+1. Check the snapshot `.ini` file for the `ControllerMap=` value -- this is what determines which map loads with the song.
+2. Verify the `[Map:<name>]` section exists in `ControllerMaps.txt` with the exact name (case-sensitive).
 
-### "I see a group keyword in my file that doesn't work anymore."
+### "I edited ControllerMaps.txt and nothing changed."
 
-Legacy keywords like `LOOPER_CH1`, `SOLO_SMART_CH3`, `USER_MUTE_CH2`, `VELRANGE_CH1`, etc. were removed from the parser. If they're still in your file, they silently fall into the normal-link branch and get discarded. Group roles are now purely hardcoded at their default slot positions — you can't override them per map. Just delete those lines from your Controller Map sections; the groups still work at their defaults.
+Make sure you are editing the correct `[Map:<name>]` section. Gig Performer requires a rackspace reload (or snapshot switch) to pick up file changes.
 
-### "Single-role keyword appears twice in my map — which wins?"
+### "VST binding shows BLOCKED in the display."
 
-For single-role keywords (`CROSSFADER`, `SCRUBBER`, etc.), the parser uses last-wins semantics: if you have both `Macro5 = CROSSFADER` and `Macro8 = CROSSFADER` in the same section, only `Macro8` takes effect (the later assignment overwrites). If you need the crossfader on two hardware inputs, use one Macro binding + one CC binding instead:
+The map declares a VST (e.g., `VST3=Triton Extreme`) but the actually loaded plugin in that slot does not match. CC bindings, keywords, SYSACT roles, and overlay functions on the same map continue working -- only VST-referencing bindings are blocked.
 
-```
-Macro5 = CROSSFADER
-CC11 = CROSSFADER
-```
+### "Single-role keyword appears twice in my map -- which wins?"
 
-Both will work because they populate different slots (`CF_MacroIdx` and `CF_CCIdx`).
+Last-wins semantics. If both `Macro5` and `Macro8` are bound to `CROSSFADER` in the same section, only `Macro8` takes effect.
 
 ---
 
-## Reference — File Locations
+## Reference -- File Locations
 
-| File | Path | Owner | Edited by hand? |
-|---|---|---|---|
-| Global Rackspace script | `Global Rackspace.gpscript` | You / repo | Usually yes (it's source) |
-| Note Prozessor scriptlet | `Note Prozessor.gpscript` | You / repo | Yes (it's source) |
-| Controller Maps | `ControllerMaps.txt` (next to gig file) | You | Yes (hand-edit is the intended workflow) |
-| Hardware Map | `HardwareMap.txt` (next to gig file) | Auto-generated by Learn mode | Rarely |
-| Rackspace settings | `UserSnapshotPath` folder | Gig Performer | No |
+| File | Path | Edited by hand? |
+|---|---|---|
+| Global Rackspace script | `Global Rackspace.gpscript` | Yes (source) |
+| Note Prozessor scriptlet | `Note Prozessor.gpscript` | Yes (source) |
+| Controller Maps | `ControllerMaps.txt` (next to gig file) | Yes (primary workflow) |
+| Device Config | `DeviceConfig.txt` (next to gig file) | Yes (hardware setup) |
+| Rackspace settings | `UserSnapshotPath` folder | No |
 
-## Reference — Key Specs for Deeper Dives
+## Reference -- Key Specs
 
-- **Macro space renumbering, SysAction framework, legacy keyword removal:** `docs/superpowers/specs/2026-04-10-vel-tamper-macro-refactor-sysact-design.md`
-- **Velocity Range Tamper:** same file (Feature A)
-- **Chord Latch Auto-Release:** `docs/superpowers/specs/2026-04-10-latch-auto-release-design.md`
-- **Implementation plans** for both: `docs/superpowers/plans/2026-04-10-*.md`
+- **Unified ControllerMap, layer system, Smart Solo Enhanced:** `docs/superpowers/specs/2026-04-12-layer-system-unified-controllermap-design.md`
+- **Control label reference:** `docs/superpowers/specs/2026-04-12-control-label-reference-design.md`
+- **Layer-aware reverse lookup:** `docs/superpowers/specs/2026-04-12-layer-aware-reverse-lookup-design.md`
+- **Macro renumbering, SYSACT framework:** `docs/superpowers/specs/2026-04-10-vel-tamper-macro-refactor-sysact-design.md`
