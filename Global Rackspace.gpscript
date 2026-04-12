@@ -214,6 +214,37 @@ Var
    SYSEX_Purpose : String Array
    SYSEX_Data    : String Array
 
+   // --- Layer Switch Registry (dynamic, filled from DeviceConfig v2) ---
+   MAX_SWITCHES : Integer = 8
+   LayerSwitch_Count : Integer = 0
+   LayerSwitch_DevIdx : Integer Array = [-1, -1, -1, -1, -1, -1, -1, -1]
+   LayerSwitch_Label : String Array = ["", "", "", "", "", "", "", ""]
+   LayerSwitch_Type : String Array = ["", "", "", "", "", "", "", ""]
+   LayerSwitch_OnData : String Array = ["", "", "", "", "", "", "", ""]
+   LayerSwitch_OffData : String Array = ["", "", "", "", "", "", "", ""]
+   LayerSwitch_State : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0]
+
+   // --- Layer Map (switch combination → layer number) ---
+   MAX_LAYERS : Integer = 16
+   LayerMap_Count : Integer = 0
+   LayerMap_DevIdx : Integer Array = [-1, -1, -1, -1]
+   LayerMap_LayerIdx : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   ActiveLayer : Integer = 0
+
+   // --- Permanent Bindings (always active, map-independent) ---
+   MAX_PERMANENT : Integer = 8
+   Permanent_Count : Integer = 0
+   Permanent_DevIdx : Integer Array = [-1, -1, -1, -1, -1, -1, -1, -1]
+   Permanent_SourceCC : Integer Array = [-1, -1, -1, -1, -1, -1, -1, -1]
+   Permanent_Function : String Array = ["", "", "", "", "", "", "", ""]
+
+   // --- Layer-Level Overlay Actions (fire on layer activation) ---
+   MAX_OVERLAYS : Integer = 8
+   Overlay_Count : Integer = 0
+   Overlay_DevIdx : Integer Array = [-1, -1, -1, -1, -1, -1, -1, -1]
+   Overlay_Layer : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0]
+   Overlay_Action : String Array = ["", "", "", "", "", "", "", ""]
+
    // --- Convenience Indices (set during boot) ---
    arrangerDevIdx   : Integer = -1
    controllerDevIdx : Integer = -1
@@ -714,7 +745,61 @@ Var
    
    PendingMapName : String = ""
    MacroFeedbackLockTimer : Double = 0.0
-   
+
+   // --- Unified Macro System (v2) ---
+   MAX_SOURCES_PER_MACRO : Integer = 4
+   MAX_BINDINGS_PER_LAYER : Integer = 8
+   MAX_OVERLAY_BINDINGS : Integer = 512
+
+   // Source arrays: which hardware controls feed each macro
+   Mac_SourceCount : Integer Array       // [MAX_MACROS]
+   Mac_SourceDev : Integer Array         // [MAX_MACROS * MAX_SOURCES_PER_MACRO]
+   Mac_SourceType : String Array         // [MAX_MACROS * MAX_SOURCES_PER_MACRO] BTN/SLD/ENC/JOY
+   Mac_SourceCtrl : Integer Array        // [MAX_MACROS * MAX_SOURCES_PER_MACRO]
+
+   // Per-layer bindings: flat arrays
+   // Index = (macroIdx * MAX_LAYERS * MAX_BINDINGS_PER_LAYER) + (layerIdx * MAX_BINDINGS_PER_LAYER) + bindIdx
+   Mac_Layer_BindCount : Integer Array   // [MAX_MACROS * MAX_LAYERS]
+   Mac_Layer_TargetType : String Array   // VST/CC/KEYWORD/SYSACT/OVERLAY
+   Mac_Layer_Target : String Array       // serialized target string
+   Mac_Layer_RangeMin : Double Array
+   Mac_Layer_RangeMax : Double Array
+   Mac_Layer_Channel : Integer Array     // for overlay targets (MIDI channel)
+   Mac_Layer_VSTIdx : Integer Array      // for VST targets
+   Mac_Layer_ParamIdx : Integer Array    // for VST targets
+   Mac_Layer_ParamLabel : String Array   // cached param names from VST
+
+   // Default map (persistent, cloned on song switch)
+   Def_Mac_SourceCount : Integer Array
+   Def_Mac_SourceDev : Integer Array
+   Def_Mac_SourceType : String Array
+   Def_Mac_SourceCtrl : Integer Array
+   Def_Mac_Layer_BindCount : Integer Array
+   Def_Mac_Layer_TargetType : String Array
+   Def_Mac_Layer_Target : String Array
+   Def_Mac_Layer_RangeMin : Double Array
+   Def_Mac_Layer_RangeMax : Double Array
+   Def_Mac_Layer_Channel : Integer Array
+   Def_Mac_Layer_VSTIdx : Integer Array
+   Def_Mac_Layer_ParamIdx : Integer Array
+   Def_Mac_Layer_ParamLabel : String Array
+
+   // VST declarations per map
+   MAX_VST_DECL : Integer = 10
+   MapVST_Name : String Array = ["", "", "", "", "", "", "", "", "", ""]
+   MapVST_Valid : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   DefMapVST_Name : String Array = ["", "", "", "", "", "", "", "", "", ""]
+
+   // Reverse lookups (rebuilt on map load)
+   Mac_ReverseLookup_CC : Integer Array    // [16 * 128] = 2048: CC(ch,num) -> macroIdx
+   Mac_ReverseLookup_SysAct : Integer Array // [MAX_MACROS] macroIdx -> sysActionIdx
+
+   // Debounce state for full-range movement-toggle overlays
+   Debounce_Active : Boolean Array     // [MAX_OVERLAY_BINDINGS]
+   Debounce_Timer : Double Array       // [MAX_OVERLAY_BINDINGS]
+   Debounce_State : Integer Array      // [MAX_OVERLAY_BINDINGS] 0=OFF, 1=ON
+   DEBOUNCE_TIMEOUT : Double = 10.0
+
    // ========================================================================
    // SECTION 9: ENGINE DATA — VST DATABASE & REPLACER
    // ========================================================================
@@ -858,6 +943,91 @@ Function Wait(ms : Double)
    var t_wait : Double = 0.0
    t_wait = TimeSinceStartup();
    While (TimeSinceStartup() - t_wait) < ms Do End
+End
+
+// --- Unified Macro System: Index Helpers ---
+
+// Flat index into Mac_Layer_* binding arrays
+Function MacLayerBindIdx(macroIdx : Integer, layerIdx : Integer, bindIdx : Integer) Returns Integer
+   var idx : Integer
+   idx = (macroIdx * MAX_LAYERS * MAX_BINDINGS_PER_LAYER) + (layerIdx * MAX_BINDINGS_PER_LAYER) + bindIdx
+   Result = idx
+End
+
+// Flat index into Mac_Layer_BindCount
+Function MacLayerIdx(macroIdx : Integer, layerIdx : Integer) Returns Integer
+   var idx : Integer
+   idx = (macroIdx * MAX_LAYERS) + layerIdx
+   Result = idx
+End
+
+// Flat index into Mac_Source* arrays
+Function MacSourceIdx(macroIdx : Integer, srcIdx : Integer) Returns Integer
+   var idx : Integer
+   idx = (macroIdx * MAX_SOURCES_PER_MACRO) + srcIdx
+   Result = idx
+End
+
+// Resolve physical CC number from DeviceConfig CONTROL registry
+Function ResolveControlCC(devIdx : Integer, srcType : String, ctrlIdx : Integer) Returns Integer
+   var c, matchCount : Integer
+   matchCount = 0
+   For c = 0; c < CTRL_Count; c = c + 1
+      if CTRL_DevIdx[c] == devIdx then
+         var ctrlType : Integer
+         ctrlType = CTRL_Type[c]
+         var typeMatch : Boolean = false
+         if srcType == "SLD" and ctrlType == CTYPE_FADER then
+            typeMatch = true
+         elsif srcType == "BTN" and ctrlType == CTYPE_BUTTON then
+            typeMatch = true
+         elsif srcType == "ENC" and ctrlType == CTYPE_ENCODER then
+            typeMatch = true
+         elsif srcType == "JOY" and ctrlType == CTYPE_JOYSTICK then
+            typeMatch = true
+         elsif srcType == "PAD" and ctrlType == CTYPE_PAD then
+            typeMatch = true
+         end
+         if typeMatch then
+            if matchCount == ctrlIdx then
+               Result = CTRL_CC[c]
+            end
+            matchCount = matchCount + 1
+         end
+      end
+   End
+   Result = -1
+End
+
+// Resolve physical MIDI channel from DeviceConfig CONTROL registry
+Function ResolveControlChannel(devIdx : Integer, srcType : String, ctrlIdx : Integer) Returns Integer
+   var c, matchCount : Integer
+   matchCount = 0
+   For c = 0; c < CTRL_Count; c = c + 1
+      if CTRL_DevIdx[c] == devIdx then
+         var ctrlType : Integer
+         ctrlType = CTRL_Type[c]
+         var typeMatch : Boolean = false
+         if srcType == "SLD" and ctrlType == CTYPE_FADER then
+            typeMatch = true
+         elsif srcType == "BTN" and ctrlType == CTYPE_BUTTON then
+            typeMatch = true
+         elsif srcType == "ENC" and ctrlType == CTYPE_ENCODER then
+            typeMatch = true
+         elsif srcType == "JOY" and ctrlType == CTYPE_JOYSTICK then
+            typeMatch = true
+         elsif srcType == "PAD" and ctrlType == CTYPE_PAD then
+            typeMatch = true
+         end
+         if typeMatch then
+            if matchCount == ctrlIdx then
+               Result = CTRL_Channel[c]
+            end
+            matchCount = matchCount + 1
+         end
+      end
+   End
+   Result = -1
 End
 
 Function Trace(msg : String)
