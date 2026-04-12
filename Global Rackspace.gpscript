@@ -3132,6 +3132,57 @@ End
 // SECTION 17: CONTROLLER MAP ENGINE
 // ============================================================================
 
+// --- Unified Macro System: Array Initialization ---
+Function InitMacroArrays()
+   var i : Integer
+   var totalSources : Integer = MAX_MACROS * MAX_SOURCES_PER_MACRO
+   var totalLayerSlots : Integer = MAX_MACROS * MAX_LAYERS
+   var totalBindings : Integer = MAX_MACROS * MAX_LAYERS * MAX_BINDINGS_PER_LAYER
+
+   // Source arrays
+   Mac_SourceCount = []; For i = 0; i < MAX_MACROS; i = i + 1 Do Mac_SourceCount <-- 0 End
+   Mac_SourceDev = []; For i = 0; i < totalSources; i = i + 1 Do Mac_SourceDev <-- -1 End
+   Mac_SourceType = []; For i = 0; i < totalSources; i = i + 1 Do Mac_SourceType <-- "" End
+   Mac_SourceCtrl = []; For i = 0; i < totalSources; i = i + 1 Do Mac_SourceCtrl <-- -1 End
+
+   // Per-layer binding arrays
+   Mac_Layer_BindCount = []; For i = 0; i < totalLayerSlots; i = i + 1 Do Mac_Layer_BindCount <-- 0 End
+   Mac_Layer_TargetType = []; For i = 0; i < totalBindings; i = i + 1 Do Mac_Layer_TargetType <-- "" End
+   Mac_Layer_Target = []; For i = 0; i < totalBindings; i = i + 1 Do Mac_Layer_Target <-- "" End
+   Mac_Layer_RangeMin = []; For i = 0; i < totalBindings; i = i + 1 Do Mac_Layer_RangeMin <-- 0.0 End
+   Mac_Layer_RangeMax = []; For i = 0; i < totalBindings; i = i + 1 Do Mac_Layer_RangeMax <-- 1.0 End
+   Mac_Layer_Channel = []; For i = 0; i < totalBindings; i = i + 1 Do Mac_Layer_Channel <-- -1 End
+   Mac_Layer_VSTIdx = []; For i = 0; i < totalBindings; i = i + 1 Do Mac_Layer_VSTIdx <-- -1 End
+   Mac_Layer_ParamIdx = []; For i = 0; i < totalBindings; i = i + 1 Do Mac_Layer_ParamIdx <-- -1 End
+   Mac_Layer_ParamLabel = []; For i = 0; i < totalBindings; i = i + 1 Do Mac_Layer_ParamLabel <-- "" End
+
+   // Default map arrays (same structure)
+   Def_Mac_SourceCount = []; For i = 0; i < MAX_MACROS; i = i + 1 Do Def_Mac_SourceCount <-- 0 End
+   Def_Mac_SourceDev = []; For i = 0; i < totalSources; i = i + 1 Do Def_Mac_SourceDev <-- -1 End
+   Def_Mac_SourceType = []; For i = 0; i < totalSources; i = i + 1 Do Def_Mac_SourceType <-- "" End
+   Def_Mac_SourceCtrl = []; For i = 0; i < totalSources; i = i + 1 Do Def_Mac_SourceCtrl <-- -1 End
+   Def_Mac_Layer_BindCount = []; For i = 0; i < totalLayerSlots; i = i + 1 Do Def_Mac_Layer_BindCount <-- 0 End
+   Def_Mac_Layer_TargetType = []; For i = 0; i < totalBindings; i = i + 1 Do Def_Mac_Layer_TargetType <-- "" End
+   Def_Mac_Layer_Target = []; For i = 0; i < totalBindings; i = i + 1 Do Def_Mac_Layer_Target <-- "" End
+   Def_Mac_Layer_RangeMin = []; For i = 0; i < totalBindings; i = i + 1 Do Def_Mac_Layer_RangeMin <-- 0.0 End
+   Def_Mac_Layer_RangeMax = []; For i = 0; i < totalBindings; i = i + 1 Do Def_Mac_Layer_RangeMax <-- 1.0 End
+   Def_Mac_Layer_Channel = []; For i = 0; i < totalBindings; i = i + 1 Do Def_Mac_Layer_Channel <-- -1 End
+   Def_Mac_Layer_VSTIdx = []; For i = 0; i < totalBindings; i = i + 1 Do Def_Mac_Layer_VSTIdx <-- -1 End
+   Def_Mac_Layer_ParamIdx = []; For i = 0; i < totalBindings; i = i + 1 Do Def_Mac_Layer_ParamIdx <-- -1 End
+   Def_Mac_Layer_ParamLabel = []; For i = 0; i < totalBindings; i = i + 1 Do Def_Mac_Layer_ParamLabel <-- "" End
+
+   // Reverse lookups
+   Mac_ReverseLookup_CC = []; For i = 0; i < 2048; i = i + 1 Do Mac_ReverseLookup_CC <-- -1 End
+   Mac_ReverseLookup_SysAct = []; For i = 0; i < MAX_MACROS; i = i + 1 Do Mac_ReverseLookup_SysAct <-- -1 End
+
+   // Debounce
+   Debounce_Active = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_Active <-- false End
+   Debounce_Timer = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_Timer <-- 0.0 End
+   Debounce_State = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_State <-- 0 End
+
+   Trace("MACRO INIT: Arrays initialized (sources=" + IntToString(totalSources) + " bindings=" + IntToString(totalBindings) + ")")
+End
+
 // --- Unified Macro Parser ---
 
 // Parses "DEV0:SLD3 & DEV1:SLD1" into Mac_Source* arrays for macroIdx
@@ -13865,6 +13916,7 @@ Initialization
    Arr_Subbar_LEDs = [LBL_Subbar_1, LBL_Subbar_2, LBL_Subbar_3, LBL_Subbar_4]
    
    // B. Load text databases
+   InitMacroArrays() // pre-allocate all unified macro system arrays
    LoadControllerMap("DEFAULT_INIT") // parse [Map:Default] once at startup
    LoadVstDatabase()
    BuildFilteredVstList()
