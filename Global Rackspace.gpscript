@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-11.002"
+   SCRIPT_VERSION : String = "2026-04-12.001"
 
    DebugMode : Boolean = false
 
