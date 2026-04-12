@@ -3569,7 +3569,168 @@ End
 // CONTROLLER INFO DISPLAY (CLEAN, SMART & STATUS AWARE)
 // ---------------------------------------------------------
 
+// --- v2 Hierarchical Controller Info Display ---
+Function UpdateControllerInfoDisplayV2()
+   var m, l, b, fi, v, p : Integer
+   var devName, srcDesc, targetDesc, statusStr : String
+
+   CtrlInfo_Lines = []
+
+   // Header
+   CtrlInfo_Lines <-- "--- MAPPING: " + CurrentCtrlMapName + " ---"
+
+   // VST validation status
+   For v = 1; v < MAX_VST_DECL; v = v + 1 Do
+      if MapVST_Valid[v] > 0 then
+         if MapVST_Valid[v] == 1 then
+            statusStr = "[OK]"
+         elsif MapVST_Valid[v] == 2 then
+            statusStr = "[MISMATCH]"
+         elsif MapVST_Valid[v] == 3 then
+            statusStr = "[NOT LOADED]"
+         else
+            statusStr = ""
+         end
+         CtrlInfo_Lines <-- "VST" + IntToString(v) + ": " + MapVST_Name[v] + "  " + statusStr
+      end
+   End
+   CtrlInfo_Lines <-- ""
+
+   // User Macros (1-50) with hierarchy
+   For m = 1; m <= 50; m = m + 1 Do
+      var hasAny : Boolean = false
+      For l = 0; l < MAX_LAYERS; l = l + 1 Do
+         if Mac_Layer_BindCount[MacLayerIdx(m, l)] > 0 then
+            hasAny = true
+         end
+      End
+      if hasAny or Mac_SourceCount[m] > 0 then
+         // Source description
+         if Mac_SourceCount[m] > 0 then
+            var devIdx : Integer
+            devIdx = Mac_SourceDev[MacSourceIdx(m, 0)]
+            if devIdx >= 0 and devIdx < MAX_DEVICES then
+               devName = DEV_Name[devIdx]
+            else
+               devName = "DEV" + IntToString(devIdx)
+            end
+            srcDesc = devName + ":" + Mac_SourceType[MacSourceIdx(m, 0)] + IntToString(Mac_SourceCtrl[MacSourceIdx(m, 0)])
+         else
+            srcDesc = "?"
+         end
+         CtrlInfo_Lines <-- "Macro " + IntToString(m) + " [" + srcDesc + "]:"
+
+         // LAY0: show as "(N Targets)" with sub-lines
+         var lay0Count : Integer
+         lay0Count = Mac_Layer_BindCount[MacLayerIdx(m, 0)]
+         if lay0Count > 0 then
+            if lay0Count == 1 then
+               CtrlInfo_Lines <-- "  LAY0: (1 Target)"
+            else
+               CtrlInfo_Lines <-- "  LAY0: (" + IntToString(lay0Count) + " Targets)"
+            end
+            For b = 0; b < lay0Count; b = b + 1 Do
+               fi = MacLayerBindIdx(m, 0, b)
+               targetDesc = Mac_Layer_Target[fi]
+               if Length(Mac_Layer_ParamLabel[fi]) > 0 then
+                  targetDesc = targetDesc + " " + Mac_Layer_ParamLabel[fi]
+               end
+               if Mac_Layer_RangeMin[fi] <> 0.0 or Mac_Layer_RangeMax[fi] <> 1.0 then
+                  targetDesc = targetDesc + " {" + DoubleToString(Mac_Layer_RangeMin[fi], 1) + "," + DoubleToString(Mac_Layer_RangeMax[fi], 1) + "}"
+               end
+               // Check VST validity
+               if Mac_Layer_TargetType[fi] == "VST" then
+                  var vstV : Integer
+                  vstV = Mac_Layer_VSTIdx[fi]
+                  if vstV >= 1 and vstV < MAX_VST_DECL then
+                     if MapVST_Valid[vstV] > 1 then
+                        targetDesc = targetDesc + "  [BLOCKED: VST" + IntToString(vstV) + " invalid]"
+                     end
+                  end
+               end
+               CtrlInfo_Lines <-- "    -> " + targetDesc
+            End
+         end
+
+         // LAY1-N: single line each
+         For l = 1; l < MAX_LAYERS; l = l + 1 Do
+            var layBindCount : Integer
+            layBindCount = Mac_Layer_BindCount[MacLayerIdx(m, l)]
+            if layBindCount > 0 then
+               fi = MacLayerBindIdx(m, l, 0)
+               var overlayDesc : String
+               overlayDesc = Mac_Layer_Target[fi]
+               if Mac_Layer_TargetType[fi] == "OVERLAY" then
+                  overlayDesc = overlayDesc + ":CH" + IntToString(Mac_Layer_Channel[fi])
+               end
+               if Mac_Layer_RangeMin[fi] <> 0.0 or Mac_Layer_RangeMax[fi] <> 1.0 then
+                  overlayDesc = overlayDesc + " {" + DoubleToString(Mac_Layer_RangeMin[fi], 1) + "," + DoubleToString(Mac_Layer_RangeMax[fi], 1) + "}"
+               end
+               CtrlInfo_Lines <-- "  LAY" + IntToString(l) + ": " + overlayDesc
+            end
+         End
+      end
+   End
+
+   // CC Bindings (Permanent)
+   CtrlInfo_Lines <-- ""
+   CtrlInfo_Lines <-- "--- CC BINDINGS (Permanent) ---"
+   For p = 0; p < Permanent_Count; p = p + 1 Do
+      CtrlInfo_Lines <-- "CC" + IntToString(Permanent_SourceCC[p]) + ": " + Permanent_Function[p]
+   End
+
+   // System Macro Groups
+   CtrlInfo_Lines <-- ""
+   CtrlInfo_Lines <-- "--- SYSTEM MACRO GROUPS ---"
+   CtrlInfo_Lines <-- ">> Macro 51-66: Looper (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 67-82: Smart Solo (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 83-98: Strict Solo (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 99-114: User Mute (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 115-130: Velocity Range (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 131-146: Root/Chord (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 147-162: Octaver (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 163-178: Humanizer (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 179-194: Scale Quantizer (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 195-210: Auto Sustain (Ch 1-16) <<"
+
+   // Hardware Assignments
+   CtrlInfo_Lines <-- ""
+   CtrlInfo_Lines <-- "--- HARDWARE ASSIGNMENTS ---"
+   For m = 1; m <= MAX_MACROS; m = m + 1 Do
+      if Mac_SourceCount[m] > 0 then
+         var hwDesc : String; var devIdx2, s2 : Integer
+         devIdx2 = Mac_SourceDev[MacSourceIdx(m, 0)]
+         if devIdx2 >= 0 and devIdx2 < MAX_DEVICES then
+            hwDesc = DEV_Name[devIdx2]
+         else
+            hwDesc = "DEV" + IntToString(devIdx2)
+         end
+         hwDesc = hwDesc + ":" + Mac_SourceType[MacSourceIdx(m, 0)] + IntToString(Mac_SourceCtrl[MacSourceIdx(m, 0)])
+         if Mac_SourceCount[m] > 1 then
+            For s2 = 1; s2 < Mac_SourceCount[m]; s2 = s2 + 1 Do
+               devIdx2 = Mac_SourceDev[MacSourceIdx(m, s2)]
+               if devIdx2 >= 0 and devIdx2 < MAX_DEVICES then
+                  hwDesc = hwDesc + " & " + DEV_Name[devIdx2]
+               else
+                  hwDesc = hwDesc + " & DEV" + IntToString(devIdx2)
+               end
+               hwDesc = hwDesc + ":" + Mac_SourceType[MacSourceIdx(m, s2)] + IntToString(Mac_SourceCtrl[MacSourceIdx(m, s2)])
+            End
+         end
+         CtrlInfo_Lines <-- "Macro " + IntToString(m) + " = " + hwDesc
+      end
+   End
+
+   ScrollToCurrentCtrlScope()
+End
+
+// Wrapper: redirects all existing call-sites to v2
 Function UpdateControllerInfoDisplay()
+   UpdateControllerInfoDisplayV2()
+End
+
+// --- Legacy v1 Controller Info Display (dead code, kept for reference) ---
+Function UpdateControllerInfoDisplay_LEGACY()
    var s, l, idx, count, vMin, vMax : Integer
    var valStr, hwStr, mainLine, realName : String
    var linksForThisSource : Integer Array
