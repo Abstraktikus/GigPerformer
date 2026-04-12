@@ -7276,7 +7276,7 @@ Function ValidateMapVSTs()
             MapVST_Valid[v] = 1  // wildcard = always valid
          else
             if v <= MAX_VSTS then
-               loadedName = GetPluginName(BLK_VST[v])
+               loadedName = GetPluginInfo(BLK_VST[v], 0)
             else
                loadedName = ""
             end
@@ -7474,7 +7474,7 @@ Function EvaluateSmartAdapt()
         // 3. ISOLATION ACTIVE: Exactly ONE VST is active! (regardless of mode)
         if activeVSTs == 1 then
             // Search by plugin name instead of slot number
-            pluginName = GetPluginName(BLK_VST[targetVstIdx])
+            pluginName = GetPluginInfo(BLK_VST[targetVstIdx], 0)
             if Length(pluginName) > 0 then
                targetMap = pluginName
             else
