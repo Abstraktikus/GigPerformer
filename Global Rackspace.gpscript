@@ -11277,21 +11277,34 @@ Function UpdateSoloMuteState()
            if Mem_SoloStrict[outCol] == 0 then LooperSoloMute[outCol] = true end
        End
 
-   // 4. MANUAL SMART MODE (Only rules when Focus & Strict are OFF!)
+   // 4. ENHANCED SMART MODE (RECH input + Manual zone)
+   // Mutes channels sharing BOTH the same RECH input AND the same Manual zone
    elsif anySmart then
        For outCol = 0; outCol < 16; outCol = outCol + 1 Do
            if Mem_SoloSmart[outCol] == 0 and not LooperSoloMute[outCol] then
-               fedBySameInput = false
-               For inRow = 0; inRow < 16; inRow = inRow + 1 Do
-                   if GetParameter(RECH, (inRow * 16) + outCol) > 0.5 then
-                       For scopeIdx = 0; scopeIdx < 16; scopeIdx = scopeIdx + 1 Do
-                           if Mem_SoloSmart[scopeIdx] == 1 and GetParameter(RECH, (inRow * 16) + scopeIdx) > 0.5 then
-                               fedBySameInput = true
+               var fedBySameInputAndZone : Boolean = false
+               For scopeIdx = 0; scopeIdx < 16; scopeIdx = scopeIdx + 1 Do
+                   if Mem_SoloSmart[scopeIdx] == 1 and scopeIdx <> outCol then
+                       // Check 1: Same RECH input?
+                       var sameInput : Boolean = false
+                       For inRow = 0; inRow < 16; inRow = inRow + 1 Do
+                           if GetParameter(RECH, (inRow * 16) + outCol) > 0.5
+                              and GetParameter(RECH, (inRow * 16) + scopeIdx) > 0.5 then
+                               sameInput = true
                            end
                        End
+                       // Check 2: Same Manual zone? (0=None, 1=Upper, 2=Lower)
+                       var sameZone : Boolean = false
+                       if Mem_Manual[outCol] == Mem_Manual[scopeIdx] then
+                           sameZone = true
+                       end
+                       // Both must match for muting
+                       if sameInput and sameZone then
+                           fedBySameInputAndZone = true
+                       end
                    end
                End
-               if fedBySameInput then LooperSoloMute[outCol] = true end
+               if fedBySameInputAndZone then LooperSoloMute[outCol] = true end
            end
        End
    end
