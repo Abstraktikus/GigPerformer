@@ -7544,6 +7544,7 @@ Function EvaluateSmartAdapt()
     // 5. FEATURE DISABLED: Clean up any ghost state!
     else
         if IsAutoSoloMapActive then
+            Trace("SMART ADAPT: DISABLED path, IsAutoSoloMapActive=true, PreSoloMapName='" + PreSoloMapName + "' CurrentCtrlMapName='" + CurrentCtrlMapName + "'")
             if PreSoloMapName != "" and PreSoloMapName != CurrentCtrlMapName then
                 Trace("SMART ADAPT: Feature disabled. Reverting to -> " + PreSoloMapName)
                 LoadControllerMap(PreSoloMapName)
