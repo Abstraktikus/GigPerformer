@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-12.007"
+   SCRIPT_VERSION : String = "2026-04-12.008"
 
    DebugMode : Boolean = false
 
@@ -748,8 +748,7 @@ Var
    // Source arrays: which hardware controls feed each macro
    Mac_SourceCount : Integer Array       // [MAX_MACROS]
    Mac_SourceDev : Integer Array         // [MAX_MACROS * MAX_SOURCES_PER_MACRO]
-   Mac_SourceType : String Array         // [MAX_MACROS * MAX_SOURCES_PER_MACRO] BTN/SLD/ENC/JOY
-   Mac_SourceCtrl : Integer Array        // [MAX_MACROS * MAX_SOURCES_PER_MACRO]
+   Mac_SourceLabel : String Array        // [MAX_MACROS * MAX_SOURCES_PER_MACRO] DeviceConfig label (e.g. Enc1, Fader3)
 
    // Per-macro bindings: flat arrays (no layer dimension — layer is in source)
    // Index = macroIdx * MAX_BINDINGS_PER_LAYER + bindIdx
@@ -766,8 +765,7 @@ Var
    // Default map (persistent, cloned on song switch)
    Def_Mac_SourceCount : Integer Array
    Def_Mac_SourceDev : Integer Array
-   Def_Mac_SourceType : String Array
-   Def_Mac_SourceCtrl : Integer Array
+   Def_Mac_SourceLabel : String Array
    Def_Mac_Layer_BindCount : Integer Array
    Def_Mac_Layer_TargetType : String Array
    Def_Mac_Layer_Target : String Array
@@ -969,64 +967,24 @@ Function MacSourceIdx(macroIdx : Integer, srcIdx : Integer) Returns Integer
    result = idx
 End
 
-// Resolve physical CC number from DeviceConfig CONTROL registry
-Function ResolveControlCC(devIdx : Integer, srcType : String, ctrlIdx : Integer) Returns Integer
-   var c, matchCount, ctrlType : Integer
-   var typeMatch : Boolean = false
-   matchCount = 0
+// Resolve physical CC number from DeviceConfig CONTROL registry (label-based)
+Function ResolveControlCC(devIdx : Integer, label : String) Returns Integer
+   var c : Integer
    result = -1
    For c = 0; c < CTRL_Count; c = c + 1 Do
-      if CTRL_DevIdx[c] == devIdx then
-         ctrlType = CTRL_Type[c]
-         typeMatch = false
-         if srcType == "SLD" and ctrlType == CTYPE_FADER then
-            typeMatch = true
-         elsif srcType == "BTN" and ctrlType == CTYPE_BUTTON then
-            typeMatch = true
-         elsif srcType == "ENC" and ctrlType == CTYPE_ENCODER then
-            typeMatch = true
-         elsif srcType == "JOY" and ctrlType == CTYPE_JOYSTICK then
-            typeMatch = true
-         elsif srcType == "PAD" and ctrlType == CTYPE_PAD then
-            typeMatch = true
-         end
-         if typeMatch then
-            if matchCount == ctrlIdx then
-               result = CTRL_CC[c]
-            end
-            matchCount = matchCount + 1
-         end
+      if CTRL_DevIdx[c] == devIdx and CTRL_Label[c] == label then
+         result = CTRL_CC[c]
       end
    End
 End
 
-// Resolve physical MIDI channel from DeviceConfig CONTROL registry
-Function ResolveControlChannel(devIdx : Integer, srcType : String, ctrlIdx : Integer) Returns Integer
-   var c, matchCount, ctrlType : Integer
-   var typeMatch : Boolean = false
-   matchCount = 0
+// Resolve physical MIDI channel from DeviceConfig CONTROL registry (label-based)
+Function ResolveControlChannel(devIdx : Integer, label : String) Returns Integer
+   var c : Integer
    result = -1
    For c = 0; c < CTRL_Count; c = c + 1 Do
-      if CTRL_DevIdx[c] == devIdx then
-         ctrlType = CTRL_Type[c]
-         typeMatch = false
-         if srcType == "SLD" and ctrlType == CTYPE_FADER then
-            typeMatch = true
-         elsif srcType == "BTN" and ctrlType == CTYPE_BUTTON then
-            typeMatch = true
-         elsif srcType == "ENC" and ctrlType == CTYPE_ENCODER then
-            typeMatch = true
-         elsif srcType == "JOY" and ctrlType == CTYPE_JOYSTICK then
-            typeMatch = true
-         elsif srcType == "PAD" and ctrlType == CTYPE_PAD then
-            typeMatch = true
-         end
-         if typeMatch then
-            if matchCount == ctrlIdx then
-               result = CTRL_Channel[c]
-            end
-            matchCount = matchCount + 1
-         end
+      if CTRL_DevIdx[c] == devIdx and CTRL_Label[c] == label then
+         result = CTRL_Channel[c]
       end
    End
 End
@@ -3221,8 +3179,7 @@ Function InitMacroArrays_Active()
    Mac_SourceCount = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Mac_SourceCount <-- 0 End
    Mac_SourceLayer = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Mac_SourceLayer <-- -1 End
    Mac_SourceDev = []; For i = 0; i < 200; i = i + 1 Do Mac_SourceDev <-- -1 End
-   Mac_SourceType = []; For i = 0; i < 200; i = i + 1 Do Mac_SourceType <-- "" End
-   Mac_SourceCtrl = []; For i = 0; i < 200; i = i + 1 Do Mac_SourceCtrl <-- -1 End
+   Mac_SourceLabel = []; For i = 0; i < 200; i = i + 1 Do Mac_SourceLabel <-- "" End
    Mac_Layer_BindCount = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Mac_Layer_BindCount <-- 0 End
    Mac_Layer_TargetType = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_TargetType <-- "" End
    Mac_Layer_Target = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Target <-- "" End
@@ -3239,8 +3196,7 @@ Function InitMacroArrays_Default()
    Def_Mac_SourceCount = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Def_Mac_SourceCount <-- 0 End
    Def_Mac_SourceLayer = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Def_Mac_SourceLayer <-- -1 End
    Def_Mac_SourceDev = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_SourceDev <-- -1 End
-   Def_Mac_SourceType = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_SourceType <-- "" End
-   Def_Mac_SourceCtrl = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_SourceCtrl <-- -1 End
+   Def_Mac_SourceLabel = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_SourceLabel <-- "" End
    Def_Mac_Layer_BindCount = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Def_Mac_Layer_BindCount <-- 0 End
    Def_Mac_Layer_TargetType = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_TargetType <-- "" End
    Def_Mac_Layer_Target = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Target <-- "" End
@@ -3274,11 +3230,12 @@ End
 
 // --- Unified Macro Parser ---
 
-// Parses "DEV0:LAY1:SLD3 & DEV1:LAY1:SLD1" into Mac_Source* arrays for macroIdx
+// Parses "DEV0:LAY1:Enc1 & DEV1:LAY1:Fader1" into Mac_Source* arrays for macroIdx
 // Layer is extracted from the FIRST source and stored in Mac_SourceLayer[macroIdx]
+// The third colon-separated part is the DeviceConfig label (e.g. Enc1, Fader3, JoyUp)
 Function ParseMacroSource(macroIdx : Integer, sourceStr : String) Returns Integer
-   var count, devNum, ctrlNum, layerNum, colonPos, colonPos2, ampPos, iteration : Integer
-   var remaining, onePart, typePart, afterDev : String
+   var count, devNum, layerNum, colonPos, colonPos2, ampPos, iteration : Integer
+   var remaining, onePart, afterDev, labelPart : String
    count = 0
    layerNum = 0
    remaining = TrimString(sourceStr)
@@ -3293,7 +3250,7 @@ Function ParseMacroSource(macroIdx : Integer, sourceStr : String) Returns Intege
             onePart = TrimString(CopySubstring(remaining, 0, ampPos))
             remaining = TrimString(CopySubstring(remaining, ampPos + 1, Length(remaining) - ampPos - 1))
          end
-         // Pattern: DEV<n>:LAY<n>:<TYPE><n>  or  DEV<n>:<TYPE><n> (layer defaults to 0)
+         // Pattern: DEV<n>:LAY<n>:<Label>  or  DEV<n>:<Label> (layer defaults to 0)
          if IndexOfSubstring(onePart, "DEV", false) == 0 then
             colonPos = IndexOfSubstring(onePart, ":", false)
             if colonPos > 0 then
@@ -3307,12 +3264,10 @@ Function ParseMacroSource(macroIdx : Integer, sourceStr : String) Returns Intege
                      afterDev = CopySubstring(afterDev, colonPos2 + 1, Length(afterDev) - colonPos2 - 1)
                   end
                end
-               // afterDev is now "<TYPE><n>" e.g. "SLD3"
-               typePart = CopySubstring(afterDev, 0, 3)
-               ctrlNum = StringToInt(CopySubstring(afterDev, 3, Length(afterDev) - 3))
+               // afterDev is now the DeviceConfig label e.g. "Enc1", "Fader3", "JoyUp"
+               labelPart = afterDev
                Mac_SourceDev[MacSourceIdx(macroIdx, count)] = devNum
-               Mac_SourceType[MacSourceIdx(macroIdx, count)] = typePart
-               Mac_SourceCtrl[MacSourceIdx(macroIdx, count)] = ctrlNum
+               Mac_SourceLabel[MacSourceIdx(macroIdx, count)] = labelPart
                count = count + 1
             end
          end
@@ -3487,8 +3442,7 @@ Function ParseMacroLine(line : String, isDefault : Boolean)
             Def_Mac_SourceLayer[macroIdx] = Mac_SourceLayer[macroIdx]
             For si = 0; si < Mac_SourceCount[macroIdx]; si = si + 1 Do
                Def_Mac_SourceDev[MacSourceIdx(macroIdx, si)] = Mac_SourceDev[MacSourceIdx(macroIdx, si)]
-               Def_Mac_SourceType[MacSourceIdx(macroIdx, si)] = Mac_SourceType[MacSourceIdx(macroIdx, si)]
-               Def_Mac_SourceCtrl[MacSourceIdx(macroIdx, si)] = Mac_SourceCtrl[MacSourceIdx(macroIdx, si)]
+               Def_Mac_SourceLabel[MacSourceIdx(macroIdx, si)] = Mac_SourceLabel[MacSourceIdx(macroIdx, si)]
             End
             Def_Mac_Layer_BindCount[macroIdx] = Mac_Layer_BindCount[macroIdx]
             For bi = 0; bi < bindCount; bi = bi + 1 Do
@@ -3795,7 +3749,7 @@ Function UpdateControllerInfoDisplay()
             else
                devName = "DEV" + IntToString(devIdx)
             end
-            srcDesc = devName + ":LAY" + IntToString(Mac_SourceLayer[m]) + ":" + Mac_SourceType[MacSourceIdx(m, 0)] + IntToString(Mac_SourceCtrl[MacSourceIdx(m, 0)])
+            srcDesc = devName + ":LAY" + IntToString(Mac_SourceLayer[m]) + ":" + Mac_SourceLabel[MacSourceIdx(m, 0)]
          else
             srcDesc = "?"
          end
@@ -3861,7 +3815,7 @@ Function UpdateControllerInfoDisplay()
          else
             hwDesc = "DEV" + IntToString(devIdx2)
          end
-         hwDesc = hwDesc + ":" + Mac_SourceType[MacSourceIdx(m, 0)] + IntToString(Mac_SourceCtrl[MacSourceIdx(m, 0)])
+         hwDesc = hwDesc + ":" + Mac_SourceLabel[MacSourceIdx(m, 0)]
          if Mac_SourceCount[m] > 1 then
             For s2 = 1; s2 < Mac_SourceCount[m]; s2 = s2 + 1 Do
                devIdx2 = Mac_SourceDev[MacSourceIdx(m, s2)]
@@ -3870,7 +3824,7 @@ Function UpdateControllerInfoDisplay()
                else
                   hwDesc = hwDesc + " & DEV" + IntToString(devIdx2)
                end
-               hwDesc = hwDesc + ":" + Mac_SourceType[MacSourceIdx(m, s2)] + IntToString(Mac_SourceCtrl[MacSourceIdx(m, s2)])
+               hwDesc = hwDesc + ":" + Mac_SourceLabel[MacSourceIdx(m, s2)]
             End
          end
          CtrlInfo_Lines <-- "Macro " + IntToString(m) + " = " + hwDesc
@@ -7266,8 +7220,7 @@ Function CloneDefaultToActive()
       Mac_SourceLayer[m] = Def_Mac_SourceLayer[m]
       For s = 0; s < MAX_SOURCES_PER_MACRO; s = s + 1 Do
          Mac_SourceDev[MacSourceIdx(m, s)] = Def_Mac_SourceDev[MacSourceIdx(m, s)]
-         Mac_SourceType[MacSourceIdx(m, s)] = Def_Mac_SourceType[MacSourceIdx(m, s)]
-         Mac_SourceCtrl[MacSourceIdx(m, s)] = Def_Mac_SourceCtrl[MacSourceIdx(m, s)]
+         Mac_SourceLabel[MacSourceIdx(m, s)] = Def_Mac_SourceLabel[MacSourceIdx(m, s)]
       End
       Mac_Layer_BindCount[m] = Def_Mac_Layer_BindCount[m]
       For b = 0; b < MAX_BINDINGS_PER_LAYER; b = b + 1 Do
@@ -7317,8 +7270,8 @@ End
 
 // Rebuilds per-layer CC lookups and SysAction reverse lookups from active Mac_* arrays
 Function RebuildReverseLookups()
-   var m, b, fi, lookupIdx, bindCount, actionIdx, srcCount, devIdx, ctrlIdx, physCC, physCh, layer : Integer
-   var actionName, srcType : String
+   var m, b, fi, lookupIdx, bindCount, actionIdx, srcCount, devIdx, physCC, physCh, layer : Integer
+   var actionName, label : String
 
    // Clear all 4 per-layer reverse lookup arrays
    For m = 0; m < 256; m = m + 1 Do
@@ -7356,10 +7309,9 @@ Function RebuildReverseLookups()
          layer = Mac_SourceLayer[m]
          For b = 0; b < srcCount; b = b + 1 Do
             devIdx = Mac_SourceDev[MacSourceIdx(m, b)]
-            srcType = Mac_SourceType[MacSourceIdx(m, b)]
-            ctrlIdx = Mac_SourceCtrl[MacSourceIdx(m, b)]
-            physCC = ResolveControlCC(devIdx, srcType, ctrlIdx)
-            physCh = ResolveControlChannel(devIdx, srcType, ctrlIdx)
+            label = Mac_SourceLabel[MacSourceIdx(m, b)]
+            physCC = ResolveControlCC(devIdx, label)
+            physCh = ResolveControlChannel(devIdx, label)
             if physCC >= 0 and physCh >= 0 then
                lookupIdx = physCh * 128 + physCC
                if lookupIdx >= 0 and lookupIdx < 256 then
