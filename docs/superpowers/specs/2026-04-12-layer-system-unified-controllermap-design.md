@@ -134,7 +134,7 @@ Range       = "{" <min> "," <max> "}"
 - **With LAY prefix** = only active when that layer is active
 - **No Range** = default `{0.0, 1.0}` for normal bindings, `{1.0, 1.0}` for overlay functions
 - **Multi-Device** (`&`) = all sources feed the same macro, last-write-wins on value
-- **Isolation Rule** = SYSACT bindings with `|` are dropped (unchanged from v1)
+- **Isolation Rule** = SYSACT bindings are dropped when mixed with other targets **on the same layer**. The `|` separator between different `LAYn:` entries does NOT trigger the rule — each layer is evaluated independently. Example: `VST1_GRS:49 | LAY3:SYSACT_TRANSPORT_TOGGLE` is valid (different layers). `SYSACT_X | VST1_GRS:49` is invalid (both LAY0, SYSACT dropped).
 
 ### 3.4 Range-Based Trigger Logic
 
@@ -412,7 +412,11 @@ Macro 13 [Genos2:SLD1]:
 
 Macro 16 [Genos2:SLD4]:
   LAY0: (1 Target)
-    -> Ch13:CC7 Volume Triton       [BLOCKED: VST3 invalid]
+    -> Ch13:CC7 Volume Triton
+
+Macro 17 [Genos2:SLD5]:
+  LAY0: (1 Target)
+    -> VST3_GRS:12 Reverb Send {0.0,1.0}   [BLOCKED: VST3 invalid]
 
 --- CC BINDINGS (Permanent) ---
 CC64: SYSTEM_TOGGLE
@@ -587,4 +591,4 @@ See `examples/DeviceConfig_v2.txt` and `examples/ControllerMaps_v2.txt` for the 
 
 - **LAYERSWITCH SysEx signatures:** Exact OnData/OffData for Harmony and Talk to be validated on running hardware
 - **CHANNEL_BOUND_LFO / SYSACT_TRANSPORT_TOGGLE:** New system actions, implementation details TBD
-- **Existing ControllerMaps_v2.txt:** Needs update for VST-named maps (e.g., `[Map:Omnisphere]` instead of `[Map:Standard_VST1]`) and VST declarations
+- **Generic VST maps (VST4-9):** Use `VST<n>=*` wildcard — semantics TBD (match any VST in that slot, or skip validation?)

@@ -59,7 +59,8 @@ Macro21 = DEV0:SLD9; Ch13:CC7:Volume Triton
 ; Per-layer inheritance: unlisted layers are inherited automatically
 ; =========================================================================
 
-[Map:Standard_VST1]
+[Map:Omnisphere]
+VST1=Omnisphere
 ; --- Omnisphere: different VST params on BTN1-5, CROSSFADER on BTN6 ---
 Macro1 = VST1_GRS:48
 Macro2 = VST1_GRS:49
@@ -78,7 +79,8 @@ Macro19 = VST1_GRS:5
 Macro20 = VST1_GRS:6
 Macro21 = VST1_GRS:7
 
-[Map:Standard_VST2]
+[Map:V_Lab]
+VST2=V_Lab
 Macro1 = Ch11:CC74{0.0,1.0}
 Macro2 = Ch11:CC71{0.0,1.0}
 Macro3 = Ch11:CC76{0.0,1.0}
@@ -100,7 +102,8 @@ Macro25 = DEV0:SLD13; VST2_GRS:42{0.0,1.0}
 Macro26 = DEV0:SLD14; VST2_GRS:43{0.0,1.0}
 Macro27 = DEV0:SLD15; VST2_GRS:44{0.0,1.0}
 
-[Map:Standard_VST3]
+[Map:Triton Extreme]
+VST3=Triton Extreme
 ; --- Triton Extreme (via MIDI CC) ---
 Macro1 = Ch13:CC17:Knob1
 Macro2 = Ch13:CC19:Knob2
@@ -114,37 +117,45 @@ Macro17 = Ch13:CC16:SW1
 Macro18 = Ch13:CC16:SW2
 Macro19 = Ch12:CC83:External
 
-[Map:Standard_VST4]
+[Map:VST4_Generic]
+VST4=*
 Macro4 = VST_SCOPE
 Macro5 = VST_BROWSE
 Macro6 = CROSSFADER
 
-[Map:Standard_VST5]
+[Map:VST5_Generic]
+VST5=*
 Macro4 = VST_SCOPE
 Macro5 = VST_BROWSE
 Macro6 = CROSSFADER
 
-[Map:Standard_VST6]
+[Map:VST6_Generic]
+VST6=*
 Macro4 = VST_SCOPE
 Macro5 = VST_BROWSE
 Macro6 = CROSSFADER
 
-[Map:Standard_VST7]
+[Map:VST7_Generic]
+VST7=*
 Macro4 = VST_SCOPE
 Macro5 = VST_BROWSE
 Macro6 = CROSSFADER
 
-[Map:Standard_VST8]
+[Map:VST8_Generic]
+VST8=*
 Macro4 = VST_SCOPE
 Macro5 = VST_BROWSE
 Macro6 = CROSSFADER
 
-[Map:Standard_VST9]
+[Map:VST9_Generic]
+VST9=*
 Macro4 = VST_SCOPE
 Macro5 = VST_BROWSE
 Macro6 = CROSSFADER
 
 [Map:SlowHip80erDream]
+VST1=Omnisphere
+VST3=Triton Extreme
 ; Only LAY0 overrides — all layer overlays inherited from Default
 Macro1 = Ch11:CC74{0.0,1.0}
 Macro2 = Ch11:CC71{0.0,1.0}
