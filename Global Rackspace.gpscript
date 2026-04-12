@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-12.005"
+   SCRIPT_VERSION : String = "2026-04-12.006"
 
    DebugMode : Boolean = false
 
@@ -224,7 +224,7 @@ Var
 
    // --- Layer Map (switch combination → layer number) ---
    MAX_LAYERS : Integer = 4
-   MAX_LAYER_MACROS : Integer = 51  // Only user macros 1-50 get layer bindings (1-based, so 51 slots)
+   MAX_LAYER_MACROS : Integer = 100  // 1-based, so 100 slots (75+ macros with layer-in-source)
    LayerMap_Count : Integer = 0
    LayerMap_DevIdx : Integer Array = [-1, -1, -1, -1]
    LayerMap_LayerIdx : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -740,8 +740,8 @@ Var
    LayerFeedbackStatus : String = "LAY0"
 
    // --- Unified Macro System (v2) ---
-   MAX_SOURCES_PER_MACRO : Integer = 4
-   MAX_BINDINGS_PER_LAYER : Integer = 1  // GP array limit: 256 max. 51*4*1=204 fits.
+   MAX_SOURCES_PER_MACRO : Integer = 2  // 100 * 2 = 200, under 256
+   MAX_BINDINGS_PER_LAYER : Integer = 2  // GP array limit: 256 max. 100*2=200 fits (no layer dimension).
    MAX_OVERLAY_BINDINGS : Integer = 128
 
    // Source arrays: which hardware controls feed each macro
@@ -750,9 +750,9 @@ Var
    Mac_SourceType : String Array         // [MAX_MACROS * MAX_SOURCES_PER_MACRO] BTN/SLD/ENC/JOY
    Mac_SourceCtrl : Integer Array        // [MAX_MACROS * MAX_SOURCES_PER_MACRO]
 
-   // Per-layer bindings: flat arrays
-   // Index = (macroIdx * MAX_LAYERS * MAX_BINDINGS_PER_LAYER) + (layerIdx * MAX_BINDINGS_PER_LAYER) + bindIdx
-   Mac_Layer_BindCount : Integer Array   // [MAX_MACROS * MAX_LAYERS]
+   // Per-macro bindings: flat arrays (no layer dimension — layer is in source)
+   // Index = macroIdx * MAX_BINDINGS_PER_LAYER + bindIdx
+   Mac_Layer_BindCount : Integer Array   // [MAX_LAYER_MACROS]
    Mac_Layer_TargetType : String Array   // VST/CC/KEYWORD/SYSACT/OVERLAY
    Mac_Layer_Target : String Array       // serialized target string
    Mac_Layer_RangeMin : Double Array
@@ -783,8 +783,15 @@ Var
    MapVST_Valid : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
    DefMapVST_Name : String Array = ["", "", "", "", "", "", "", "", "", ""]
 
-   // Reverse lookups (rebuilt on map load)
-   Mac_ReverseLookup_CC : Integer Array    // [16 * 128] = 2048: CC(ch,num) -> macroIdx
+   // Source layer per macro (layer-in-source model)
+   Mac_SourceLayer : Integer Array          // [MAX_LAYER_MACROS] layer index per macro
+   Def_Mac_SourceLayer : Integer Array      // default clone
+
+   // Reverse lookups (rebuilt on map load) — per-layer CC dispatch
+   Mac_ReverseLookup_L0 : Integer Array     // [256] CC -> macroIdx for LAY0
+   Mac_ReverseLookup_L1 : Integer Array     // [256] CC -> macroIdx for LAY1
+   Mac_ReverseLookup_L2 : Integer Array     // [256] CC -> macroIdx for LAY2
+   Mac_ReverseLookup_L3 : Integer Array     // [256] CC -> macroIdx for LAY3
    Mac_ReverseLookup_SysAct : Integer Array // [MAX_MACROS] macroIdx -> sysActionIdx
 
    // Debounce state for full-range movement-toggle overlays
@@ -940,18 +947,18 @@ End
 
 // --- Unified Macro System: Index Helpers ---
 
-// Flat index into Mac_Layer_* binding arrays
+// Flat index into Mac_Layer_* binding arrays (layer dimension removed — layer is in source)
+// layerIdx parameter kept for API compatibility but ignored (always 0)
 Function MacLayerBindIdx(macroIdx : Integer, layerIdx : Integer, bindIdx : Integer) Returns Integer
    var idx : Integer
-   idx = (macroIdx * MAX_LAYERS * MAX_BINDINGS_PER_LAYER) + (layerIdx * MAX_BINDINGS_PER_LAYER) + bindIdx
+   idx = (macroIdx * MAX_BINDINGS_PER_LAYER) + bindIdx
    result = idx
 End
 
-// Flat index into Mac_Layer_BindCount
+// Flat index into Mac_Layer_BindCount (layer dimension removed)
+// layerIdx parameter kept for API compatibility but ignored (always 0)
 Function MacLayerIdx(macroIdx : Integer, layerIdx : Integer) Returns Integer
-   var idx : Integer
-   idx = (macroIdx * MAX_LAYERS) + layerIdx
-   result = idx
+   result = macroIdx
 End
 
 // Flat index into Mac_Source* arrays
@@ -3203,48 +3210,54 @@ Function AppendBoolN(arr : Boolean Array, count : Integer, val : Boolean) Return
 End
 
 // GP has a hard limit of 256 elements per array.
-// All arrays must stay under 256. With MAX_LAYER_MACROS=51, MAX_LAYERS=4, MAX_BINDINGS_PER_LAYER=1:
-//   Sources: 51 * 4 = 204  ✓
-//   BindCount: 51 * 4 = 204  ✓
-//   Bindings: 51 * 4 * 1 = 204  ✓
+// All arrays must stay under 256. With MAX_LAYER_MACROS=100, MAX_BINDINGS_PER_LAYER=2:
+//   Sources: 100 * 4 = 400 → use MAX_SOURCES=256 (cap at 64 macros with 4 sources)
+//   BindCount: 100  ✓
+//   Bindings: 100 * 2 = 200  ✓
+//   SourceLayer: 100  ✓
 Function InitMacroArrays_Active()
    var i : Integer
    Mac_SourceCount = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Mac_SourceCount <-- 0 End
-   Mac_SourceDev = []; For i = 0; i < 204; i = i + 1 Do Mac_SourceDev <-- -1 End
-   Mac_SourceType = []; For i = 0; i < 204; i = i + 1 Do Mac_SourceType <-- "" End
-   Mac_SourceCtrl = []; For i = 0; i < 204; i = i + 1 Do Mac_SourceCtrl <-- -1 End
-   Mac_Layer_BindCount = []; For i = 0; i < 204; i = i + 1 Do Mac_Layer_BindCount <-- 0 End
-   Mac_Layer_TargetType = []; For i = 0; i < 204; i = i + 1 Do Mac_Layer_TargetType <-- "" End
-   Mac_Layer_Target = []; For i = 0; i < 204; i = i + 1 Do Mac_Layer_Target <-- "" End
-   Mac_Layer_RangeMin = []; For i = 0; i < 204; i = i + 1 Do Mac_Layer_RangeMin <-- 0.0 End
-   Mac_Layer_RangeMax = []; For i = 0; i < 204; i = i + 1 Do Mac_Layer_RangeMax <-- 1.0 End
-   Mac_Layer_Channel = []; For i = 0; i < 204; i = i + 1 Do Mac_Layer_Channel <-- -1 End
-   Mac_Layer_VSTIdx = []; For i = 0; i < 204; i = i + 1 Do Mac_Layer_VSTIdx <-- -1 End
-   Mac_Layer_ParamIdx = []; For i = 0; i < 204; i = i + 1 Do Mac_Layer_ParamIdx <-- -1 End
-   Mac_Layer_ParamLabel = []; For i = 0; i < 204; i = i + 1 Do Mac_Layer_ParamLabel <-- "" End
+   Mac_SourceLayer = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Mac_SourceLayer <-- -1 End
+   Mac_SourceDev = []; For i = 0; i < 200; i = i + 1 Do Mac_SourceDev <-- -1 End
+   Mac_SourceType = []; For i = 0; i < 200; i = i + 1 Do Mac_SourceType <-- "" End
+   Mac_SourceCtrl = []; For i = 0; i < 200; i = i + 1 Do Mac_SourceCtrl <-- -1 End
+   Mac_Layer_BindCount = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Mac_Layer_BindCount <-- 0 End
+   Mac_Layer_TargetType = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_TargetType <-- "" End
+   Mac_Layer_Target = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Target <-- "" End
+   Mac_Layer_RangeMin = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_RangeMin <-- 0.0 End
+   Mac_Layer_RangeMax = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_RangeMax <-- 1.0 End
+   Mac_Layer_Channel = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Channel <-- -1 End
+   Mac_Layer_VSTIdx = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_VSTIdx <-- -1 End
+   Mac_Layer_ParamIdx = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_ParamIdx <-- -1 End
+   Mac_Layer_ParamLabel = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_ParamLabel <-- "" End
 End
 
 Function InitMacroArrays_Default()
    var i : Integer
    Def_Mac_SourceCount = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Def_Mac_SourceCount <-- 0 End
-   Def_Mac_SourceDev = []; For i = 0; i < 204; i = i + 1 Do Def_Mac_SourceDev <-- -1 End
-   Def_Mac_SourceType = []; For i = 0; i < 204; i = i + 1 Do Def_Mac_SourceType <-- "" End
-   Def_Mac_SourceCtrl = []; For i = 0; i < 204; i = i + 1 Do Def_Mac_SourceCtrl <-- -1 End
-   Def_Mac_Layer_BindCount = []; For i = 0; i < 204; i = i + 1 Do Def_Mac_Layer_BindCount <-- 0 End
-   Def_Mac_Layer_TargetType = []; For i = 0; i < 204; i = i + 1 Do Def_Mac_Layer_TargetType <-- "" End
-   Def_Mac_Layer_Target = []; For i = 0; i < 204; i = i + 1 Do Def_Mac_Layer_Target <-- "" End
-   Def_Mac_Layer_RangeMin = []; For i = 0; i < 204; i = i + 1 Do Def_Mac_Layer_RangeMin <-- 0.0 End
-   Def_Mac_Layer_RangeMax = []; For i = 0; i < 204; i = i + 1 Do Def_Mac_Layer_RangeMax <-- 1.0 End
-   Def_Mac_Layer_Channel = []; For i = 0; i < 204; i = i + 1 Do Def_Mac_Layer_Channel <-- -1 End
-   Def_Mac_Layer_VSTIdx = []; For i = 0; i < 204; i = i + 1 Do Def_Mac_Layer_VSTIdx <-- -1 End
-   Def_Mac_Layer_ParamIdx = []; For i = 0; i < 204; i = i + 1 Do Def_Mac_Layer_ParamIdx <-- -1 End
-   Def_Mac_Layer_ParamLabel = []; For i = 0; i < 204; i = i + 1 Do Def_Mac_Layer_ParamLabel <-- "" End
+   Def_Mac_SourceLayer = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Def_Mac_SourceLayer <-- -1 End
+   Def_Mac_SourceDev = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_SourceDev <-- -1 End
+   Def_Mac_SourceType = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_SourceType <-- "" End
+   Def_Mac_SourceCtrl = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_SourceCtrl <-- -1 End
+   Def_Mac_Layer_BindCount = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Def_Mac_Layer_BindCount <-- 0 End
+   Def_Mac_Layer_TargetType = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_TargetType <-- "" End
+   Def_Mac_Layer_Target = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Target <-- "" End
+   Def_Mac_Layer_RangeMin = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_RangeMin <-- 0.0 End
+   Def_Mac_Layer_RangeMax = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_RangeMax <-- 1.0 End
+   Def_Mac_Layer_Channel = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Channel <-- -1 End
+   Def_Mac_Layer_VSTIdx = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_VSTIdx <-- -1 End
+   Def_Mac_Layer_ParamIdx = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_ParamIdx <-- -1 End
+   Def_Mac_Layer_ParamLabel = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_ParamLabel <-- "" End
 End
 
 Function InitMacroArrays_Lookups()
    var i : Integer
-   // Reverse CC lookup needs >256 → split into 2 arrays (channels 0-7, 8-15)
-   Mac_ReverseLookup_CC = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_CC <-- -1 End
+   // Per-layer reverse CC lookups (layer-aware dispatch)
+   Mac_ReverseLookup_L0 = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_L0 <-- -1 End
+   Mac_ReverseLookup_L1 = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_L1 <-- -1 End
+   Mac_ReverseLookup_L2 = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_L2 <-- -1 End
+   Mac_ReverseLookup_L3 = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_L3 <-- -1 End
    Mac_ReverseLookup_SysAct = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Mac_ReverseLookup_SysAct <-- -1 End
    Debounce_Active = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_Active <-- false End
    Debounce_Timer = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_Timer <-- 0.0 End
@@ -3255,16 +3268,18 @@ Function InitMacroArrays()
    InitMacroArrays_Active()
    InitMacroArrays_Default()
    InitMacroArrays_Lookups()
-   Trace("MACRO INIT: VSTIdx=" + IntToString(Size(Mac_Layer_VSTIdx)) + " SourceDev=" + IntToString(Size(Mac_SourceDev)) + " Lookups=" + IntToString(Size(Mac_ReverseLookup_CC)))
+   Trace("MACRO INIT: VSTIdx=" + IntToString(Size(Mac_Layer_VSTIdx)) + " SourceDev=" + IntToString(Size(Mac_SourceDev)) + " Lookups=" + IntToString(Size(Mac_ReverseLookup_L0)))
 End
 
 // --- Unified Macro Parser ---
 
-// Parses "DEV0:SLD3 & DEV1:SLD1" into Mac_Source* arrays for macroIdx
+// Parses "DEV0:LAY1:SLD3 & DEV1:LAY1:SLD1" into Mac_Source* arrays for macroIdx
+// Layer is extracted from the FIRST source and stored in Mac_SourceLayer[macroIdx]
 Function ParseMacroSource(macroIdx : Integer, sourceStr : String) Returns Integer
-   var count, devNum, ctrlNum, colonPos, ampPos, iteration : Integer
-   var remaining, onePart, typePart : String
+   var count, devNum, ctrlNum, layerNum, colonPos, colonPos2, ampPos, iteration : Integer
+   var remaining, onePart, typePart, afterDev : String
    count = 0
+   layerNum = 0
    remaining = TrimString(sourceStr)
 
    For iteration = 0; iteration < MAX_SOURCES_PER_MACRO; iteration = iteration + 1 Do
@@ -3277,13 +3292,23 @@ Function ParseMacroSource(macroIdx : Integer, sourceStr : String) Returns Intege
             onePart = TrimString(CopySubstring(remaining, 0, ampPos))
             remaining = TrimString(CopySubstring(remaining, ampPos + 1, Length(remaining) - ampPos - 1))
          end
-         // Pattern: DEV<n>:<TYPE><n>
+         // Pattern: DEV<n>:LAY<n>:<TYPE><n>  or  DEV<n>:<TYPE><n> (layer defaults to 0)
          if IndexOfSubstring(onePart, "DEV", false) == 0 then
             colonPos = IndexOfSubstring(onePart, ":", false)
             if colonPos > 0 then
                devNum = StringToInt(CopySubstring(onePart, 3, colonPos - 3))
-               typePart = CopySubstring(onePart, colonPos + 1, 3)
-               ctrlNum = StringToInt(CopySubstring(onePart, colonPos + 4, Length(onePart) - colonPos - 4))
+               afterDev = CopySubstring(onePart, colonPos + 1, Length(onePart) - colonPos - 1)
+               // Check for LAY prefix in afterDev
+               if IndexOfSubstring(afterDev, "LAY", false) == 0 then
+                  colonPos2 = IndexOfSubstring(afterDev, ":", false)
+                  if colonPos2 > 0 then
+                     layerNum = StringToInt(CopySubstring(afterDev, 3, colonPos2 - 3))
+                     afterDev = CopySubstring(afterDev, colonPos2 + 1, Length(afterDev) - colonPos2 - 1)
+                  end
+               end
+               // afterDev is now "<TYPE><n>" e.g. "SLD3"
+               typePart = CopySubstring(afterDev, 0, 3)
+               ctrlNum = StringToInt(CopySubstring(afterDev, 3, Length(afterDev) - 3))
                Mac_SourceDev[MacSourceIdx(macroIdx, count)] = devNum
                Mac_SourceType[MacSourceIdx(macroIdx, count)] = typePart
                Mac_SourceCtrl[MacSourceIdx(macroIdx, count)] = ctrlNum
@@ -3293,45 +3318,59 @@ Function ParseMacroSource(macroIdx : Integer, sourceStr : String) Returns Intege
       end
    End
    Mac_SourceCount[macroIdx] = count
+   Mac_SourceLayer[macroIdx] = layerNum
    result = count
 End
 
-// Parses one binding token, stores at flat index. Returns detected layer index.
+// Parses one binding token, stores at flat index. Returns 0 (layer is now in source, not binding).
+// Recognizes OTZ marker: {OTZ,min,max} sets targetType=OVERLAY
 Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx : Integer, bindIdx : Integer) Returns Integer
-   var trimmed, rest, targetType, label, vstPart, rangeStr : String
-   var layerIdx, flatIdx, colonPos, colonPos2, bracePos, commaPos, closeBrace, underPos, vstIdx, paramIdx : Integer
+   var trimmed, rest, targetType, label, vstPart, rangeStr, firstToken, afterFirstComma : String
+   var flatIdx, colonPos, colonPos2, bracePos, commaPos, commaPos2, closeBrace, underPos, vstIdx, paramIdx : Integer
+   var isOTZ : Boolean = false
    var rangeMin, rangeMax : Double = 0.0
    rangeMax = 1.0
 
    trimmed = TrimString(token)
-   layerIdx = targetLayerIdx
 
-   // Check for LAY prefix: "LAY1:..."
-   if IndexOfSubstring(trimmed, "LAY", false) == 0 then
-      colonPos = IndexOfSubstring(trimmed, ":", false)
-      if colonPos > 0 then
-         layerIdx = StringToInt(CopySubstring(trimmed, 3, colonPos - 3))
-         trimmed = CopySubstring(trimmed, colonPos + 1, Length(trimmed) - colonPos - 1)
-      end
-   end
-
-   // Extract range {min,max} if present
+   // Extract range {min,max} or {OTZ,min,max} if present
    bracePos = IndexOfSubstring(trimmed, "{", false)
    if bracePos >= 0 then
       closeBrace = IndexOfSubstring(trimmed, "}", false)
       rangeStr = CopySubstring(trimmed, bracePos + 1, closeBrace - bracePos - 1)
       commaPos = IndexOfSubstring(rangeStr, ",", false)
       if commaPos > 0 then
-         rangeMin = StringToDouble(TrimString(CopySubstring(rangeStr, 0, commaPos)))
-         rangeMax = StringToDouble(TrimString(CopySubstring(rangeStr, commaPos + 1, Length(rangeStr) - commaPos - 1)))
+         firstToken = TrimString(CopySubstring(rangeStr, 0, commaPos))
+         afterFirstComma = CopySubstring(rangeStr, commaPos + 1, Length(rangeStr) - commaPos - 1)
+         if firstToken == "OTZ" then
+            isOTZ = true
+            commaPos2 = IndexOfSubstring(afterFirstComma, ",", false)
+            if commaPos2 > 0 then
+               rangeMin = StringToDouble(TrimString(CopySubstring(afterFirstComma, 0, commaPos2)))
+               rangeMax = StringToDouble(TrimString(CopySubstring(afterFirstComma, commaPos2 + 1, Length(afterFirstComma) - commaPos2 - 1)))
+            else
+               rangeMin = StringToDouble(TrimString(afterFirstComma))
+               rangeMax = rangeMin
+            end
+         else
+            rangeMin = StringToDouble(firstToken)
+            rangeMax = StringToDouble(TrimString(afterFirstComma))
+         end
       end
       trimmed = TrimString(CopySubstring(trimmed, 0, bracePos))
    end
 
-   flatIdx = MacLayerBindIdx(macroIdx, layerIdx, bindIdx)
+   flatIdx = MacLayerBindIdx(macroIdx, 0, bindIdx)
 
    // Classify target type
-   if IndexOfSubstring(trimmed, "VST", false) == 0 and IndexOfSubstring(trimmed, ":", false) > 0 then
+   if isOTZ and IndexOfSubstring(trimmed, ":CH", false) > 0 then
+      // OTZ overlay: SMART_SOLO:CH3{OTZ,0.0,1.0}
+      targetType = "OVERLAY"
+      colonPos = IndexOfSubstring(trimmed, ":CH", false)
+      Mac_Layer_Channel[flatIdx] = StringToInt(CopySubstring(trimmed, colonPos + 3, Length(trimmed) - colonPos - 3))
+      trimmed = CopySubstring(trimmed, 0, colonPos)
+
+   elsif IndexOfSubstring(trimmed, "VST", false) == 0 and IndexOfSubstring(trimmed, ":", false) > 0 then
       targetType = "VST"
       colonPos = IndexOfSubstring(trimmed, ":", false)
       if colonPos > 0 then
@@ -3365,7 +3404,7 @@ Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx :
       targetType = "SYSACT"
 
    elsif IndexOfSubstring(trimmed, ":CH", false) > 0 then
-      // Overlay function: SMART_SOLO:CH3, ROOT:CH11, etc.
+      // Non-OTZ overlay (legacy): SMART_SOLO:CH3{1.0,1.0}
       targetType = "OVERLAY"
       colonPos = IndexOfSubstring(trimmed, ":CH", false)
       Mac_Layer_Channel[flatIdx] = StringToInt(CopySubstring(trimmed, colonPos + 3, Length(trimmed) - colonPos - 3))
@@ -3381,18 +3420,17 @@ Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx :
    Mac_Layer_RangeMin[flatIdx] = rangeMin
    Mac_Layer_RangeMax[flatIdx] = rangeMax
 
-   result = layerIdx
+   result = 0
 End
 
-// Parses one complete "MacroN = DEV0:BTN1; VST1_GRS:48 | LAY1:ROOT:CH1{1.0,1.0}" line
+// Parses one complete "MacroN = DEV0:LAY1:BTN1; VST1_GRS:48{0.0,1.0} | SMART_SOLO:CH1{OTZ,0.0,1.0}" line
+// Layer is in the source (DEV0:LAY1:BTN1), not in binding tokens.
 Function ParseMacroLine(line : String, isDefault : Boolean)
-   var eqPos, semiPos, pipePos, macroIdx, dummy, detectedLayer, tmpColonPos, parsedL : Integer
+   var eqPos, semiPos, pipePos, macroIdx, dummy, bindCount : Integer
    var leftPart, rightPart, sourceStr, bindingsStr : String
    var hasSource : Boolean = false
    var token, remaining : String
-   var iteration, li, bi, si, fi : Integer
-   var layerBindCounts : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-   var hasLayerData : Boolean Array = [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]
+   var iteration, si, bi, fi : Integer
 
    eqPos = IndexOfSubstring(line, "=", false)
    if eqPos > 0 then
@@ -3414,18 +3452,15 @@ Function ParseMacroLine(line : String, isDefault : Boolean)
             bindingsStr = rightPart
          end
 
-         // Parse source if present
+         // Parse source if present (also sets Mac_SourceLayer)
          if hasSource then
             dummy = ParseMacroSource(macroIdx, sourceStr)
          end
 
-         // Track bind counts per layer — reset arrays for this macro
-         layerBindCounts = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-         hasLayerData = [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]
-
-         // Parse pipe-separated bindings
+         // Parse pipe-separated bindings — all go to layer 0 (flat)
+         bindCount = 0
          remaining = bindingsStr
-         For iteration = 0; iteration < 24; iteration = iteration + 1 Do
+         For iteration = 0; iteration < MAX_BINDINGS_PER_LAYER; iteration = iteration + 1 Do
             if Length(remaining) > 0 then
                pipePos = IndexOfSubstring(remaining, "|", false)
                if pipePos < 0 then
@@ -3436,47 +3471,35 @@ Function ParseMacroLine(line : String, isDefault : Boolean)
                   remaining = TrimString(CopySubstring(remaining, pipePos + 1, Length(remaining) - pipePos - 1))
                end
                if Length(token) > 0 then
-                  if IndexOfSubstring(TrimString(token), "LAY", false) == 0 then
-                     tmpColonPos = IndexOfSubstring(TrimString(token), ":", false)
-                     detectedLayer = StringToInt(CopySubstring(TrimString(token), 3, tmpColonPos - 3))
-                  else
-                     detectedLayer = 0
-                  end
-                  parsedL = ParseSingleBinding(macroIdx, token, detectedLayer, layerBindCounts[detectedLayer])
-                  layerBindCounts[detectedLayer] = layerBindCounts[detectedLayer] + 1
-                  hasLayerData[detectedLayer] = true
+                  dummy = ParseSingleBinding(macroIdx, token, 0, bindCount)
+                  bindCount = bindCount + 1
                end
             end
          End
 
-         // Update bind counts for layers that had data
-         For li = 0; li < MAX_LAYERS; li = li + 1 Do
-            if hasLayerData[li] then
-               Mac_Layer_BindCount[MacLayerIdx(macroIdx, li)] = layerBindCounts[li]
-            end
-         End
+         // Store bind count (no layer dimension)
+         Mac_Layer_BindCount[macroIdx] = bindCount
 
          // If storing to default, copy to Def_* arrays
          if isDefault then
             Def_Mac_SourceCount[macroIdx] = Mac_SourceCount[macroIdx]
+            Def_Mac_SourceLayer[macroIdx] = Mac_SourceLayer[macroIdx]
             For si = 0; si < Mac_SourceCount[macroIdx]; si = si + 1 Do
                Def_Mac_SourceDev[MacSourceIdx(macroIdx, si)] = Mac_SourceDev[MacSourceIdx(macroIdx, si)]
                Def_Mac_SourceType[MacSourceIdx(macroIdx, si)] = Mac_SourceType[MacSourceIdx(macroIdx, si)]
                Def_Mac_SourceCtrl[MacSourceIdx(macroIdx, si)] = Mac_SourceCtrl[MacSourceIdx(macroIdx, si)]
             End
-            For li = 0; li < MAX_LAYERS; li = li + 1 Do
-               Def_Mac_Layer_BindCount[MacLayerIdx(macroIdx, li)] = Mac_Layer_BindCount[MacLayerIdx(macroIdx, li)]
-               For bi = 0; bi < layerBindCounts[li]; bi = bi + 1 Do
-                  fi = MacLayerBindIdx(macroIdx, li, bi)
-                  Def_Mac_Layer_TargetType[fi] = Mac_Layer_TargetType[fi]
-                  Def_Mac_Layer_Target[fi] = Mac_Layer_Target[fi]
-                  Def_Mac_Layer_RangeMin[fi] = Mac_Layer_RangeMin[fi]
-                  Def_Mac_Layer_RangeMax[fi] = Mac_Layer_RangeMax[fi]
-                  Def_Mac_Layer_Channel[fi] = Mac_Layer_Channel[fi]
-                  Def_Mac_Layer_VSTIdx[fi] = Mac_Layer_VSTIdx[fi]
-                  Def_Mac_Layer_ParamIdx[fi] = Mac_Layer_ParamIdx[fi]
-                  Def_Mac_Layer_ParamLabel[fi] = Mac_Layer_ParamLabel[fi]
-               End
+            Def_Mac_Layer_BindCount[macroIdx] = Mac_Layer_BindCount[macroIdx]
+            For bi = 0; bi < bindCount; bi = bi + 1 Do
+               fi = MacLayerBindIdx(macroIdx, 0, bi)
+               Def_Mac_Layer_TargetType[fi] = Mac_Layer_TargetType[fi]
+               Def_Mac_Layer_Target[fi] = Mac_Layer_Target[fi]
+               Def_Mac_Layer_RangeMin[fi] = Mac_Layer_RangeMin[fi]
+               Def_Mac_Layer_RangeMax[fi] = Mac_Layer_RangeMax[fi]
+               Def_Mac_Layer_Channel[fi] = Mac_Layer_Channel[fi]
+               Def_Mac_Layer_VSTIdx[fi] = Mac_Layer_VSTIdx[fi]
+               Def_Mac_Layer_ParamIdx[fi] = Mac_Layer_ParamIdx[fi]
+               Def_Mac_Layer_ParamLabel[fi] = Mac_Layer_ParamLabel[fi]
             End
          end
       end
@@ -3759,16 +3782,11 @@ Function UpdateControllerInfoDisplay()
    End
    CtrlInfo_Lines <-- ""
 
-   // User Macros (1-50) with hierarchy
-   For m = 1; m <= 50; m = m + 1 Do
-      hasAny = false
-      For l = 0; l < MAX_LAYERS; l = l + 1 Do
-         if Mac_Layer_BindCount[MacLayerIdx(m, l)] > 0 then
-            hasAny = true
-         end
-      End
-      if hasAny or Mac_SourceCount[m] > 0 then
-         // Source description
+   // User Macros (1-99) — layer-in-source model
+   For m = 1; m < MAX_LAYER_MACROS; m = m + 1 Do
+      lay0Count = Mac_Layer_BindCount[m]
+      if lay0Count > 0 or Mac_SourceCount[m] > 0 then
+         // Source description with layer
          if Mac_SourceCount[m] > 0 then
             devIdx = Mac_SourceDev[MacSourceIdx(m, 0)]
             if devIdx >= 0 and devIdx < MAX_DEVICES then
@@ -3776,56 +3794,36 @@ Function UpdateControllerInfoDisplay()
             else
                devName = "DEV" + IntToString(devIdx)
             end
-            srcDesc = devName + ":" + Mac_SourceType[MacSourceIdx(m, 0)] + IntToString(Mac_SourceCtrl[MacSourceIdx(m, 0)])
+            srcDesc = devName + ":LAY" + IntToString(Mac_SourceLayer[m]) + ":" + Mac_SourceType[MacSourceIdx(m, 0)] + IntToString(Mac_SourceCtrl[MacSourceIdx(m, 0)])
          else
             srcDesc = "?"
          end
          CtrlInfo_Lines <-- "Macro " + IntToString(m) + " [" + srcDesc + "]:"
 
-         // LAY0: show as "(N Targets)" with sub-lines
-         lay0Count = Mac_Layer_BindCount[MacLayerIdx(m, 0)]
-         if lay0Count > 0 then
-            if lay0Count == 1 then
-               CtrlInfo_Lines <-- "  LAY0: (1 Target)"
-            else
-               CtrlInfo_Lines <-- "  LAY0: (" + IntToString(lay0Count) + " Targets)"
+         // Show all bindings (flat, no layer dimension)
+         lay0Count = Mac_Layer_BindCount[m]
+         For b = 0; b < lay0Count; b = b + 1 Do
+            fi = MacLayerBindIdx(m, 0, b)
+            targetDesc = Mac_Layer_Target[fi]
+            if Mac_Layer_TargetType[fi] == "OVERLAY" then
+               targetDesc = targetDesc + ":CH" + IntToString(Mac_Layer_Channel[fi])
             end
-            For b = 0; b < lay0Count; b = b + 1 Do
-               fi = MacLayerBindIdx(m, 0, b)
-               targetDesc = Mac_Layer_Target[fi]
-               if Length(Mac_Layer_ParamLabel[fi]) > 0 then
-                  targetDesc = targetDesc + " " + Mac_Layer_ParamLabel[fi]
-               end
-               if Mac_Layer_RangeMin[fi] <> 0.0 or Mac_Layer_RangeMax[fi] <> 1.0 then
-                  targetDesc = targetDesc + " {" + DoubleToString(Mac_Layer_RangeMin[fi], 1) + "," + DoubleToString(Mac_Layer_RangeMax[fi], 1) + "}"
-               end
-               // Check VST validity
-               if Mac_Layer_TargetType[fi] == "VST" then
-                  vstV = Mac_Layer_VSTIdx[fi]
-                  if vstV >= 1 and vstV < MAX_VST_DECL then
-                     if MapVST_Valid[vstV] > 1 then
-                        targetDesc = targetDesc + "  [BLOCKED: VST" + IntToString(vstV) + " invalid]"
-                     end
+            if Length(Mac_Layer_ParamLabel[fi]) > 0 then
+               targetDesc = targetDesc + " " + Mac_Layer_ParamLabel[fi]
+            end
+            if Mac_Layer_RangeMin[fi] <> 0.0 or Mac_Layer_RangeMax[fi] <> 1.0 then
+               targetDesc = targetDesc + " {" + DoubleToString(Mac_Layer_RangeMin[fi], 1) + "," + DoubleToString(Mac_Layer_RangeMax[fi], 1) + "}"
+            end
+            // Check VST validity
+            if Mac_Layer_TargetType[fi] == "VST" then
+               vstV = Mac_Layer_VSTIdx[fi]
+               if vstV >= 1 and vstV < MAX_VST_DECL then
+                  if MapVST_Valid[vstV] > 1 then
+                     targetDesc = targetDesc + "  [BLOCKED: VST" + IntToString(vstV) + " invalid]"
                   end
                end
-               CtrlInfo_Lines <-- "    -> " + targetDesc
-            End
-         end
-
-         // LAY1-N: single line each
-         For l = 1; l < MAX_LAYERS; l = l + 1 Do
-            layBindCount = Mac_Layer_BindCount[MacLayerIdx(m, l)]
-            if layBindCount > 0 then
-               fi = MacLayerBindIdx(m, l, 0)
-               overlayDesc = Mac_Layer_Target[fi]
-               if Mac_Layer_TargetType[fi] == "OVERLAY" then
-                  overlayDesc = overlayDesc + ":CH" + IntToString(Mac_Layer_Channel[fi])
-               end
-               if Mac_Layer_RangeMin[fi] <> 0.0 or Mac_Layer_RangeMax[fi] <> 1.0 then
-                  overlayDesc = overlayDesc + " {" + DoubleToString(Mac_Layer_RangeMin[fi], 1) + "," + DoubleToString(Mac_Layer_RangeMax[fi], 1) + "}"
-               end
-               CtrlInfo_Lines <-- "  LAY" + IntToString(l) + ": " + overlayDesc
             end
+            CtrlInfo_Lines <-- "    -> " + targetDesc
          End
       end
    End
@@ -7261,27 +7259,26 @@ End
 
 // Copies all Def_Mac_* arrays into Mac_* (active) arrays
 Function CloneDefaultToActive()
-   var m, s, l, b, fi : Integer
+   var m, s, b, fi : Integer
    For m = 1; m < MAX_LAYER_MACROS; m = m + 1 Do
       Mac_SourceCount[m] = Def_Mac_SourceCount[m]
+      Mac_SourceLayer[m] = Def_Mac_SourceLayer[m]
       For s = 0; s < MAX_SOURCES_PER_MACRO; s = s + 1 Do
          Mac_SourceDev[MacSourceIdx(m, s)] = Def_Mac_SourceDev[MacSourceIdx(m, s)]
          Mac_SourceType[MacSourceIdx(m, s)] = Def_Mac_SourceType[MacSourceIdx(m, s)]
          Mac_SourceCtrl[MacSourceIdx(m, s)] = Def_Mac_SourceCtrl[MacSourceIdx(m, s)]
       End
-      For l = 0; l < MAX_LAYERS; l = l + 1 Do
-         Mac_Layer_BindCount[MacLayerIdx(m, l)] = Def_Mac_Layer_BindCount[MacLayerIdx(m, l)]
-         For b = 0; b < MAX_BINDINGS_PER_LAYER; b = b + 1 Do
-            fi = MacLayerBindIdx(m, l, b)
-            Mac_Layer_TargetType[fi] = Def_Mac_Layer_TargetType[fi]
-            Mac_Layer_Target[fi] = Def_Mac_Layer_Target[fi]
-            Mac_Layer_RangeMin[fi] = Def_Mac_Layer_RangeMin[fi]
-            Mac_Layer_RangeMax[fi] = Def_Mac_Layer_RangeMax[fi]
-            Mac_Layer_Channel[fi] = Def_Mac_Layer_Channel[fi]
-            Mac_Layer_VSTIdx[fi] = Def_Mac_Layer_VSTIdx[fi]
-            Mac_Layer_ParamIdx[fi] = Def_Mac_Layer_ParamIdx[fi]
-            Mac_Layer_ParamLabel[fi] = Def_Mac_Layer_ParamLabel[fi]
-         End
+      Mac_Layer_BindCount[m] = Def_Mac_Layer_BindCount[m]
+      For b = 0; b < MAX_BINDINGS_PER_LAYER; b = b + 1 Do
+         fi = MacLayerBindIdx(m, 0, b)
+         Mac_Layer_TargetType[fi] = Def_Mac_Layer_TargetType[fi]
+         Mac_Layer_Target[fi] = Def_Mac_Layer_Target[fi]
+         Mac_Layer_RangeMin[fi] = Def_Mac_Layer_RangeMin[fi]
+         Mac_Layer_RangeMax[fi] = Def_Mac_Layer_RangeMax[fi]
+         Mac_Layer_Channel[fi] = Def_Mac_Layer_Channel[fi]
+         Mac_Layer_VSTIdx[fi] = Def_Mac_Layer_VSTIdx[fi]
+         Mac_Layer_ParamIdx[fi] = Def_Mac_Layer_ParamIdx[fi]
+         Mac_Layer_ParamLabel[fi] = Def_Mac_Layer_ParamLabel[fi]
       End
    End
    // Clone VST declarations
@@ -7317,22 +7314,25 @@ Function ValidateMapVSTs()
    End
 End
 
-// Rebuilds CC and SysAction reverse lookups from active Mac_* arrays
+// Rebuilds per-layer CC lookups and SysAction reverse lookups from active Mac_* arrays
 Function RebuildReverseLookups()
-   var m, b, fi, lookupIdx, bindCount, actionIdx, srcCount, devIdx, ctrlIdx, physCC, physCh : Integer
+   var m, b, fi, lookupIdx, bindCount, actionIdx, srcCount, devIdx, ctrlIdx, physCC, physCh, layer : Integer
    var actionName, srcType : String
 
-   // Clear reverse lookups
+   // Clear all 4 per-layer reverse lookup arrays
    For m = 0; m < 256; m = m + 1 Do
-      Mac_ReverseLookup_CC[m] = -1
+      Mac_ReverseLookup_L0[m] = -1
+      Mac_ReverseLookup_L1[m] = -1
+      Mac_ReverseLookup_L2[m] = -1
+      Mac_ReverseLookup_L3[m] = -1
    End
    For m = 0; m < MAX_LAYER_MACROS; m = m + 1 Do
       Mac_ReverseLookup_SysAct[m] = -1
    End
 
-   // Build SysAction lookup from LAY0 bindings (isolation rule: must be sole binding)
+   // Build SysAction lookup (isolation rule: must be sole binding)
    For m = 1; m < MAX_LAYER_MACROS; m = m + 1 Do
-      bindCount = Mac_Layer_BindCount[MacLayerIdx(m, 0)]
+      bindCount = Mac_Layer_BindCount[m]
       if bindCount == 1 then
          fi = MacLayerBindIdx(m, 0, 0)
          if Mac_Layer_TargetType[fi] == "SYSACT" then
@@ -7348,22 +7348,33 @@ Function RebuildReverseLookups()
       end
    End
 
-   // Build source-to-macro CC lookup
+   // Build per-layer source-to-macro CC lookups
    For m = 1; m < MAX_LAYER_MACROS; m = m + 1 Do
       srcCount = Mac_SourceCount[m]
-      For b = 0; b < srcCount; b = b + 1 Do
-         devIdx = Mac_SourceDev[MacSourceIdx(m, b)]
-         srcType = Mac_SourceType[MacSourceIdx(m, b)]
-         ctrlIdx = Mac_SourceCtrl[MacSourceIdx(m, b)]
-         physCC = ResolveControlCC(devIdx, srcType, ctrlIdx)
-         physCh = ResolveControlChannel(devIdx, srcType, ctrlIdx)
-         if physCC >= 0 and physCh >= 0 then
-            lookupIdx = physCh * 128 + physCC
-            if lookupIdx >= 0 and lookupIdx < 256 then
-               Mac_ReverseLookup_CC[lookupIdx] = m
+      if srcCount > 0 then
+         layer = Mac_SourceLayer[m]
+         For b = 0; b < srcCount; b = b + 1 Do
+            devIdx = Mac_SourceDev[MacSourceIdx(m, b)]
+            srcType = Mac_SourceType[MacSourceIdx(m, b)]
+            ctrlIdx = Mac_SourceCtrl[MacSourceIdx(m, b)]
+            physCC = ResolveControlCC(devIdx, srcType, ctrlIdx)
+            physCh = ResolveControlChannel(devIdx, srcType, ctrlIdx)
+            if physCC >= 0 and physCh >= 0 then
+               lookupIdx = physCh * 128 + physCC
+               if lookupIdx >= 0 and lookupIdx < 256 then
+                  if layer == 0 then
+                     Mac_ReverseLookup_L0[lookupIdx] = m
+                  elsif layer == 1 then
+                     Mac_ReverseLookup_L1[lookupIdx] = m
+                  elsif layer == 2 then
+                     Mac_ReverseLookup_L2[lookupIdx] = m
+                  elsif layer == 3 then
+                     Mac_ReverseLookup_L3[lookupIdx] = m
+                  end
+               end
             end
-         end
-      End
+         End
+      end
    End
 End
 
@@ -11323,97 +11334,83 @@ Function ExecuteKeywordBinding(keyword : String, val : Double)
    end
 End
 
-// Layer-aware macro dispatch
+// Macro dispatch — layer already resolved by per-layer reverse lookup
 Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
-   var l, b, fi, bindingKey, bindCount, vstIdx, paramIdx, chPos, ccPos, ccCh, ccNum, labelPos, actionIdx, channel : Integer
+   var b, fi, bindingKey, bindCount, vstIdx, paramIdx, chPos, ccPos, ccCh, ccNum, labelPos, actionIdx, channel : Integer
    var targetType, target, funcName, ccTarget, afterCC, actionName : String
-   var shouldFire : Boolean = false
    var scaledVal, rMin, rMax, scaledCC, rMinCC, rMaxCC : Double = 0.0
 
    // Guard: plugin safety during init/snapshot
    if not IsLoadingSnapshot and TimeSinceStartup() > FaderSafetyTimer then
-      For l = 0; l < MAX_LAYERS; l = l + 1 Do
-            bindCount = Mac_Layer_BindCount[MacLayerIdx(matchedMacro, l)]
-            if bindCount > 0 then
-               shouldFire = false
-               if l == 0 then
-                  shouldFire = true
-               elsif ActiveLayer == l then
-                  shouldFire = true
-               end
+      bindCount = Mac_Layer_BindCount[matchedMacro]
+      For b = 0; b < bindCount; b = b + 1 Do
+         fi = MacLayerBindIdx(matchedMacro, 0, b)
+         targetType = Mac_Layer_TargetType[fi]
+         target = Mac_Layer_Target[fi]
 
-               if shouldFire then
-                  For b = 0; b < bindCount; b = b + 1 Do
-                     fi = MacLayerBindIdx(matchedMacro, l, b)
-                     targetType = Mac_Layer_TargetType[fi]
-                     target = Mac_Layer_Target[fi]
-
-                     if targetType == "VST" then
-                        vstIdx = Mac_Layer_VSTIdx[fi]
-                        paramIdx = Mac_Layer_ParamIdx[fi]
-                        if vstIdx >= 1 and vstIdx < MAX_VST_DECL then
-                           if MapVST_Valid[vstIdx] == 1 or MapVST_Valid[vstIdx] == 0 then
-                              scaledVal = 0.0
-                              rMin = Mac_Layer_RangeMin[fi]
-                              rMax = Mac_Layer_RangeMax[fi]
-                              scaledVal = rMin + (val * (rMax - rMin))
-                              if vstIdx <= MAX_VSTS then
-                                 SetParameter(BLK_VST[vstIdx], paramIdx, scaledVal)
-                              end
-                           end
-                        end
-
-                     elsif targetType == "CC" then
-                        // Parse Ch<c>:CC<n> from target string
-                        ccTarget = target
-                        chPos = IndexOfSubstring(ccTarget, "Ch", false)
-                        ccPos = IndexOfSubstring(ccTarget, ":CC", false)
-                        if chPos >= 0 and ccPos > 0 then
-                           ccCh = StringToInt(CopySubstring(ccTarget, chPos + 2, ccPos - chPos - 2)) - 1
-                           afterCC = CopySubstring(ccTarget, ccPos + 3, Length(ccTarget) - ccPos - 3)
-                           // Strip label after ":"
-                           labelPos = IndexOfSubstring(afterCC, ":", false)
-                           if labelPos >= 0 then
-                              ccNum = StringToInt(CopySubstring(afterCC, 0, labelPos))
-                           else
-                              ccNum = StringToInt(afterCC)
-                           end
-                           scaledCC = 0.0
-                           rMinCC = Mac_Layer_RangeMin[fi]
-                           rMaxCC = Mac_Layer_RangeMax[fi]
-                           scaledCC = rMinCC + (val * (rMaxCC - rMinCC))
-                           SendNowToMidiOutDevice(DEV_MidiOut[0], MakeControlChangeMessageEx(ccNum, Round(scaledCC * 127.0), ccCh))
-                        end
-
-                     elsif targetType == "KEYWORD" then
-                        ExecuteKeywordBinding(target, val)
-
-                     elsif targetType == "SYSACT" then
-                        if val > 0.5 then
-                           actionName = target
-                           if IndexOfSubstring(actionName, "SYSACT_", false) == 0 then
-                              actionName = CopySubstring(actionName, 7, Length(actionName) - 7)
-                           end
-                           actionIdx = SysActIdx(actionName)
-                           if actionIdx >= 0 then
-                              // Deferred: FireSystemAction is defined after this function
-                              PendingSysActionIdx = actionIdx
-                           end
-                        end
-
-                     elsif targetType == "OVERLAY" then
-                        funcName = target
-                        channel = Mac_Layer_Channel[fi]
-                        bindingKey = fi
-                        if bindingKey < MAX_OVERLAY_BINDINGS then
-                           FireOverlayTrigger(funcName, channel, val, Mac_Layer_RangeMin[fi], Mac_Layer_RangeMax[fi], bindingKey)
-                        end
-                     end
-                  End
+         if targetType == "VST" then
+            vstIdx = Mac_Layer_VSTIdx[fi]
+            paramIdx = Mac_Layer_ParamIdx[fi]
+            if vstIdx >= 1 and vstIdx < MAX_VST_DECL then
+               if MapVST_Valid[vstIdx] == 1 or MapVST_Valid[vstIdx] == 0 then
+                  scaledVal = 0.0
+                  rMin = Mac_Layer_RangeMin[fi]
+                  rMax = Mac_Layer_RangeMax[fi]
+                  scaledVal = rMin + (val * (rMax - rMin))
+                  if vstIdx <= MAX_VSTS then
+                     SetParameter(BLK_VST[vstIdx], paramIdx, scaledVal)
+                  end
                end
             end
-         End
-      end
+
+         elsif targetType == "CC" then
+            // Parse Ch<c>:CC<n> from target string
+            ccTarget = target
+            chPos = IndexOfSubstring(ccTarget, "Ch", false)
+            ccPos = IndexOfSubstring(ccTarget, ":CC", false)
+            if chPos >= 0 and ccPos > 0 then
+               ccCh = StringToInt(CopySubstring(ccTarget, chPos + 2, ccPos - chPos - 2)) - 1
+               afterCC = CopySubstring(ccTarget, ccPos + 3, Length(ccTarget) - ccPos - 3)
+               // Strip label after ":"
+               labelPos = IndexOfSubstring(afterCC, ":", false)
+               if labelPos >= 0 then
+                  ccNum = StringToInt(CopySubstring(afterCC, 0, labelPos))
+               else
+                  ccNum = StringToInt(afterCC)
+               end
+               scaledCC = 0.0
+               rMinCC = Mac_Layer_RangeMin[fi]
+               rMaxCC = Mac_Layer_RangeMax[fi]
+               scaledCC = rMinCC + (val * (rMaxCC - rMinCC))
+               SendNowToMidiOutDevice(DEV_MidiOut[0], MakeControlChangeMessageEx(ccNum, Round(scaledCC * 127.0), ccCh))
+            end
+
+         elsif targetType == "KEYWORD" then
+            ExecuteKeywordBinding(target, val)
+
+         elsif targetType == "SYSACT" then
+            if val > 0.5 then
+               actionName = target
+               if IndexOfSubstring(actionName, "SYSACT_", false) == 0 then
+                  actionName = CopySubstring(actionName, 7, Length(actionName) - 7)
+               end
+               actionIdx = SysActIdx(actionName)
+               if actionIdx >= 0 then
+                  // Deferred: FireSystemAction is defined after this function
+                  PendingSysActionIdx = actionIdx
+               end
+            end
+
+         elsif targetType == "OVERLAY" then
+            funcName = target
+            channel = Mac_Layer_Channel[fi]
+            bindingKey = fi
+            if bindingKey < MAX_OVERLAY_BINDINGS then
+               FireOverlayTrigger(funcName, channel, val, Mac_Layer_RangeMin[fi], Mac_Layer_RangeMax[fi], bindingKey)
+            end
+         end
+      End
+   end
 End
 
 // ---------------------------------------------------------
@@ -11704,10 +11701,19 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
        
        // --- B: Link_* CC routing removed (now handled by Mac_Layer_* via ExecuteHardwareMacro) ---
 
-       // --- C: REVERSE LOOKUP (CC -> Macro) ---
+       // --- C: REVERSE LOOKUP (CC -> Macro) — layer-aware dispatch ---
        lookupIdx = ch * 128 + cc
        if lookupIdx >= 0 and lookupIdx < 256 then
-          macroFromLookup = Mac_ReverseLookup_CC[lookupIdx]
+          // Select lookup by ActiveLayer
+          if ActiveLayer == 0 then
+             macroFromLookup = Mac_ReverseLookup_L0[lookupIdx]
+          elsif ActiveLayer == 1 then
+             macroFromLookup = Mac_ReverseLookup_L1[lookupIdx]
+          elsif ActiveLayer == 2 then
+             macroFromLookup = Mac_ReverseLookup_L2[lookupIdx]
+          elsif ActiveLayer == 3 then
+             macroFromLookup = Mac_ReverseLookup_L3[lookupIdx]
+          end
           if macroFromLookup > 0 then
              ExecuteHardwareMacro(macroFromLookup, val)
              // Deferred SYSACT dispatch (ExecuteHardwareMacro can't call FireSystemAction directly)
@@ -11845,10 +11851,19 @@ Function ProcessHardwareNote(m : NoteMessage)
         // Convert NoteOn/Off to 1.0 and 0.0
         if IsNoteOn(m) then val = IntToFloat(GetVelocity(m)) / 127.0 else val = 0.0 end
 
-        // Note-based macro dispatch uses the CC reverse lookup
+        // Note-based macro dispatch — layer-aware reverse lookup
         lookupIdx = chan * 128 + noteNum
         if lookupIdx >= 0 and lookupIdx < 256 then
-           macroFromLookup = Mac_ReverseLookup_CC[lookupIdx]
+           // Select lookup by ActiveLayer
+           if ActiveLayer == 0 then
+              macroFromLookup = Mac_ReverseLookup_L0[lookupIdx]
+           elsif ActiveLayer == 1 then
+              macroFromLookup = Mac_ReverseLookup_L1[lookupIdx]
+           elsif ActiveLayer == 2 then
+              macroFromLookup = Mac_ReverseLookup_L2[lookupIdx]
+           elsif ActiveLayer == 3 then
+              macroFromLookup = Mac_ReverseLookup_L3[lookupIdx]
+           end
            if macroFromLookup > 0 then
               ExecuteHardwareMacro(macroFromLookup, val)
               if PendingSysActionIdx >= 0 then
