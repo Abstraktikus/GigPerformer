@@ -11084,6 +11084,130 @@ Function EvaluateAutoSysMode()
 End
 
 // ---------------------------------------------------------
+// v2 OVERLAY TRIGGER ENGINE
+// ---------------------------------------------------------
+
+// Stub for timeline recording — implemented in Plan C
+Function RecordTimelineOverlay(funcName : String, channel : Integer, state : Integer)
+   // Will call RecordTimelineEvent("OVERLAY", ...) when Timeline recording is active
+End
+
+// Unified overlay function dispatcher — same actions as Strip Control UI
+Function ActivateOverlay(funcName : String, channel : Integer)
+   if funcName == "SMART_SOLO" then
+      Mem_SoloSmart[channel] = 1
+      Mem_SoloStrict[channel] = 0
+      UpdateSoloMuteState()
+   elsif funcName == "STRICT_SOLO" then
+      Mem_SoloStrict[channel] = 1
+      Mem_SoloSmart[channel] = 0
+      UpdateSoloMuteState()
+   elsif funcName == "USER_MUTE" then
+      Mem_UserMute[channel] = 1
+      UpdateSoloMuteState()
+   elsif funcName == "ROOT" then
+      Mem_NP_ChordMode[channel] = 1
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ChordMode"), 1.0)
+   elsif funcName == "OCTAVER" then
+      Mem_NP_OctaverMode[channel] = 1
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_OctaverMode"), 1.0)
+   elsif funcName == "HUMANIZE" then
+      Mem_NP_HumanizerMode[channel] = 1
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_HumanizerMode"), 1.0)
+   elsif funcName == "SCALE" then
+      Mem_NP_ScaleMode[channel] = 1
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ScaleMode"), 1.0)
+   elsif funcName == "RANGE" then
+      Mem_NP_VelRangeActive[channel] = 1
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_VelRangeActive"), 1.0)
+   elsif funcName == "AUTO_SUSTAIN" then
+      Mem_NP_AutoSustain[channel] = 1
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_AutoSustain"), 1.0)
+   end
+   RecordTimelineOverlay(funcName, channel, 1)
+   if DebugMode then
+      Trace("OVERLAY ON: " + funcName + " CH" + IntToString(channel))
+   end
+End
+
+Function DeactivateOverlay(funcName : String, channel : Integer)
+   if funcName == "SMART_SOLO" then
+      Mem_SoloSmart[channel] = 0
+      UpdateSoloMuteState()
+   elsif funcName == "STRICT_SOLO" then
+      Mem_SoloStrict[channel] = 0
+      UpdateSoloMuteState()
+   elsif funcName == "USER_MUTE" then
+      Mem_UserMute[channel] = 0
+      UpdateSoloMuteState()
+   elsif funcName == "ROOT" then
+      Mem_NP_ChordMode[channel] = 0
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ChordMode"), 0.0)
+   elsif funcName == "OCTAVER" then
+      Mem_NP_OctaverMode[channel] = 0
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_OctaverMode"), 0.0)
+   elsif funcName == "HUMANIZE" then
+      Mem_NP_HumanizerMode[channel] = 0
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_HumanizerMode"), 0.0)
+   elsif funcName == "SCALE" then
+      Mem_NP_ScaleMode[channel] = 0
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ScaleMode"), 0.0)
+   elsif funcName == "RANGE" then
+      Mem_NP_VelRangeActive[channel] = 0
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_VelRangeActive"), 0.0)
+   elsif funcName == "AUTO_SUSTAIN" then
+      Mem_NP_AutoSustain[channel] = 0
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_AutoSustain"), 0.0)
+   end
+   RecordTimelineOverlay(funcName, channel, 0)
+   if DebugMode then
+      Trace("OVERLAY OFF: " + funcName + " CH" + IntToString(channel))
+   end
+End
+
+// Range-based overlay trigger with positional and movement-toggle support
+Function FireOverlayTrigger(funcName : String, channel : Integer, value : Double, rangeMin : Double, rangeMax : Double, bindingKey : Integer)
+   if rangeMin == 0.0 and rangeMax == 1.0 then
+      // FULL RANGE -> Movement-Toggle with 10s debounce
+      if not Debounce_Active[bindingKey] then
+         if Debounce_State[bindingKey] == 0 then
+            ActivateOverlay(funcName, channel)
+            Debounce_State[bindingKey] = 1
+         else
+            DeactivateOverlay(funcName, channel)
+            Debounce_State[bindingKey] = 0
+         end
+         Debounce_Active[bindingKey] = true
+         Debounce_Timer[bindingKey] = TimeSinceStartup()
+      end
+   else
+      // POSITIONAL - ON when value in [min,max], OFF otherwise
+      var isInRange : Boolean = false
+      if rangeMin == rangeMax then
+         // Point trigger: exact match with small tolerance
+         if Abs(value - rangeMin) < 0.02 then
+            isInRange = true
+         end
+      else
+         if value >= rangeMin and value <= rangeMax then
+            isInRange = true
+         end
+      end
+      if isInRange then
+         if Debounce_State[bindingKey] == 0 then
+            ActivateOverlay(funcName, channel)
+            Debounce_State[bindingKey] = 1
+         end
+      else
+         if Debounce_State[bindingKey] == 1 then
+            DeactivateOverlay(funcName, channel)
+            Debounce_State[bindingKey] = 0
+         end
+      end
+   end
+End
+
+// ---------------------------------------------------------
 // UNIFIED SOLO & FOCUS LOGIC (BASED ON CHANNEL MEMORY)
 // ---------------------------------------------------------
 Function UpdateSoloMuteState()
