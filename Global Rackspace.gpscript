@@ -3134,12 +3134,12 @@ End
 
 // --- Unified Macro System: Array Initialization ---
 Function InitMacroArrays()
-   var i : Integer
    // +1 because macroIdx is 1-based (Macro1..Macro256 → index 1..256)
-   var macroSlots : Integer = MAX_MACROS + 1
-   var totalSources : Integer = macroSlots * MAX_SOURCES_PER_MACRO
-   var totalLayerSlots : Integer = macroSlots * MAX_LAYERS
-   var totalBindings : Integer = macroSlots * MAX_LAYERS * MAX_BINDINGS_PER_LAYER
+   var i, macroSlots, totalSources, totalLayerSlots, totalBindings : Integer
+   macroSlots = MAX_MACROS + 1
+   totalSources = macroSlots * MAX_SOURCES_PER_MACRO
+   totalLayerSlots = macroSlots * MAX_LAYERS
+   totalBindings = macroSlots * MAX_LAYERS * MAX_BINDINGS_PER_LAYER
 
    // Source arrays
    Mac_SourceCount = []; For i = 0; i < macroSlots; i = i + 1 Do Mac_SourceCount <-- 0 End
