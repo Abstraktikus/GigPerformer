@@ -16261,8 +16261,9 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
    var newBPM : Double = 0.0; var incomingHex : String; var switchOk : Boolean 
    var regNameDecoded, regNameSlug, gpSongSlug, gpArtistSlug : String
    var foundMatch : Boolean = false; var currentSongName : String
-   var regNumber : Integer
-   
+   var regNumber, byteIdx, swIdx : Integer
+   var incomingHexFull : String = ""
+
    msgSize = SM_Length(m)
    If msgSize >= 6 Then
       byte1 = SM_GetValue(m, 1); byte2 = SM_GetValue(m, 2); byte3 = SM_GetValue(m, 3)
@@ -16273,10 +16274,9 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
           LastHardwarePulseTime = TimeSinceStartup()
       end
 
-      // ---> LAYER SWITCH MATCHING (v2) <---
+      // ---> LAYER SWITCH MATCHING <---
       // Build full hex string from incoming SysEx for comparison
-      var incomingHexFull : String = ""
-      var byteIdx : Integer
+      incomingHexFull = ""
       For byteIdx = 0; byteIdx < msgSize; byteIdx = byteIdx + 1 Do
          if byteIdx > 0 then
             incomingHexFull = incomingHexFull + " "
@@ -16285,7 +16285,6 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
       End
       incomingHexFull = Upper(incomingHexFull)
 
-      var swIdx : Integer
       For swIdx = 0; swIdx < LayerSwitch_Count; swIdx = swIdx + 1 Do
          if LayerSwitch_DevIdx[swIdx] == 0 and LayerSwitch_Type[swIdx] == "SYSEX" then
             if incomingHexFull == Upper(LayerSwitch_OnData[swIdx]) then
