@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-12.001"
+   SCRIPT_VERSION : String = "2026-04-12.002"
 
    DebugMode : Boolean = false
 
@@ -58,7 +58,6 @@ Var
    UserChordProPath : String = "C:\\Users\\marti\\OneDrive\\Keyboard\\GigPerformer\\Chords"
    UserSnapshotPath : String 
    ControllerMapFilePath : String
-   HardwareMapFilePath : String
    VstDatabaseFilePath : String
    DeviceConfigFilePath : String
    LFOConfigFilePath : String
@@ -693,11 +692,6 @@ Var
    Link_SourceIdx, Link_Type, Link_BlockIdx, Link_TargetParam : Integer Array
    Link_BlockName, Link_ExpectedPlugin, Link_ExpectedName : String Array
    Link_MinVal, Link_MaxVal : Double Array
-   
-   // --- Hardware Abstraction Layer (HAL) ---
-   HW_Count : Integer = 0
-   HW_MacroIdx, HW_Channel, HW_CC : Integer Array
-   HW_IsNote : Boolean Array
    
    // --- Dedicated Macros ---
    CF_MacroIdx : Integer = 6; CF_CCIdx : Integer = -1  
@@ -3137,7 +3131,7 @@ End
 // SECTION 17: CONTROLLER MAP ENGINE
 // ============================================================================
 
-// --- v2 Unified Macro Parser ---
+// --- Unified Macro Parser ---
 
 // Parses "DEV0:SLD3 & DEV1:SLD1" into Mac_Source* arrays for macroIdx
 Function ParseMacroSource(macroIdx : Integer, sourceStr : String) Returns Integer
@@ -3447,24 +3441,8 @@ End
 // ---------------------------------------------------------
 
 Function GetAssignedHWString(mIdx : Integer) Returns String
-   var i : Integer
-   var res : String = ""
-
-   // 1. Search for learned external controllers (MiniLab, pedals, etc.)
-   For i = 0; i < HW_Count; i = i + 1 Do
-       if HW_MacroIdx[i] == mIdx then
-           if res != "" then res = res + " | " end
-           
-           // ---> NEW: Distinguish Note vs CC <---
-           if HW_IsNote[i] then
-               res = res + "Ch" + HW_Channel[i] + ":Note" + HW_CC[i]
-           else
-               res = res + "Ch" + HW_Channel[i] + ":CC" + HW_CC[i]
-           end
-       end
-   End
-   
-   if res != "" then result = " [" + res + "]" else result = "" end
+   // Hardware assignments are now embedded in ControllerMaps_v2.txt (Source= lines)
+   result = ""
 End
 
 Function GetLinkNameHelper(idx : Integer) Returns String
@@ -3638,8 +3616,8 @@ End
 // CONTROLLER INFO DISPLAY (CLEAN, SMART & STATUS AWARE)
 // ---------------------------------------------------------
 
-// --- v2 Hierarchical Controller Info Display ---
-Function UpdateControllerInfoDisplayV2()
+// Hierarchical Controller Info Display
+Function UpdateControllerInfoDisplay()
    var m, l, b, fi, v, p : Integer
    var devName, srcDesc, targetDesc, statusStr : String
 
@@ -3790,251 +3768,6 @@ Function UpdateControllerInfoDisplayV2()
       end
    End
 
-   ScrollToCurrentCtrlScope()
-End
-
-// Wrapper: redirects all existing call-sites to v2
-Function UpdateControllerInfoDisplay()
-   UpdateControllerInfoDisplayV2()
-End
-
-// --- Legacy v1 Controller Info Display (dead code, kept for reference) ---
-Function UpdateControllerInfoDisplay_LEGACY()
-   var s, l, idx, count, vMin, vMax : Integer
-   var valStr, hwStr, mainLine, realName : String
-   var linksForThisSource : Integer Array
-   var isCC, isLooperDisp, isGroupedDisp : Boolean
-   var typeLoop : Integer
-   var hasLooperMacros, hasVelRange, hasRoot, hasOctaver, hasQuantize, hasSustain, hasHumanize : Boolean = false
-   var isSysActionSlot : Boolean = false
-   var sysActHasAny : Boolean = false
-   var sysActDispAct : Integer = 0
-   var sysActDispMac : Integer = 0
-   var sysActDispCC : Integer = 0
-   
-   var Grp_Count : Integer = Size(MacroGroup_Names)
-   var Grp_Has : Boolean Array
-   var Grp_Min : Integer Array
-   var Grp_Max : Integer Array
-   var g, grpIdx : Integer
-   
-   // Pointers to find the position by anchor.
-   var idxLooper, idxSmart, idxStrict, idxMute, idxVel, idxRoot, idxOct, idxHum, idxQuant, idxSus : Integer = -1
-   
-   // 1. Initialize arrays
-   For g = 0; g < Grp_Count; g = g + 1 Do
-       Grp_Has <-- false; Grp_Min <-- 999; Grp_Max <-- -1
-   End
-   
-   // 2. Where are the groups in the current sort order?
-   // Anchor values MUST match MacroGroup_Anchors at :59 exactly.
-   For g = 0; g < Grp_Count; g = g + 1 Do
-       if MacroGroup_Anchors[g] == 50  then idxLooper = g end
-       if MacroGroup_Anchors[g] == 66  then idxSmart = g end
-       if MacroGroup_Anchors[g] == 82  then idxStrict = g end
-       if MacroGroup_Anchors[g] == 98  then idxMute = g end
-       if MacroGroup_Anchors[g] == 114 then idxVel = g end
-       if MacroGroup_Anchors[g] == 130 then idxRoot = g end
-       if MacroGroup_Anchors[g] == 146 then idxOct = g end
-       if MacroGroup_Anchors[g] == 162 then idxHum = g end
-       if MacroGroup_Anchors[g] == 178 then idxQuant = g end
-       if MacroGroup_Anchors[g] == 194 then idxSus = g end
-   End
-   
-   CtrlInfo_Lines = [] 
-
-   // Iterate both types: first Macro (0=False), then CC (1=True)
-   For typeLoop = 0; typeLoop <= 1; typeLoop = typeLoop + 1 Do
-       isCC = (typeLoop == 1)
-       
-       // Search index 0 to 127 (covers Macros and CCs)
-       For s = 0; s < MAX_MACROS; s = s + 1 Do
-           
-           // Build hardware name upfront (e.g. "Macro 16" or "CC 4")
-           if isCC then hwStr = GetStandardCCName(s) + " [CC" + s + "]"
-           else hwStr = "Macro " + (s+1) + GetAssignedHWString(s) end
-
-           // --- GROUP FILTER (collects values into dynamic arrays) ---
-           isGroupedDisp = false
-           l = 0
-           While l < 16 and not isGroupedDisp Do
-               // Looper
-               if (not isCC and s == LOOPER_CH_MacroIdx[l]) or (isCC and s == LOOPER_CH_CCIdx[l]) then
-                   isGroupedDisp = true; if idxLooper > -1 then Grp_Has[idxLooper] = true; if not isCC then if s < Grp_Min[idxLooper] then Grp_Min[idxLooper] = s end; if s > Grp_Max[idxLooper] then Grp_Max[idxLooper] = s end end end
-               end
-               // Smart Solo
-               if (not isCC and s == SOLO_SMART_MacroIdx[l]) or (isCC and s == SOLO_SMART_CCIdx[l]) then
-                   isGroupedDisp = true; if idxSmart > -1 then Grp_Has[idxSmart] = true; if not isCC then if s < Grp_Min[idxSmart] then Grp_Min[idxSmart] = s end; if s > Grp_Max[idxSmart] then Grp_Max[idxSmart] = s end end end
-               end
-               // Strict Solo
-               if (not isCC and s == SOLO_STRICT_MacroIdx[l]) or (isCC and s == SOLO_STRICT_CCIdx[l]) then
-                   isGroupedDisp = true; if idxStrict > -1 then Grp_Has[idxStrict] = true; if not isCC then if s < Grp_Min[idxStrict] then Grp_Min[idxStrict] = s end; if s > Grp_Max[idxStrict] then Grp_Max[idxStrict] = s end end end
-               end
-               // User Mute
-               if (not isCC and s == USER_MUTE_MacroIdx[l]) or (isCC and s == USER_MUTE_CCIdx[l]) then
-                   isGroupedDisp = true; if idxMute > -1 then Grp_Has[idxMute] = true; if not isCC then if s < Grp_Min[idxMute] then Grp_Min[idxMute] = s end; if s > Grp_Max[idxMute] then Grp_Max[idxMute] = s end end end
-               end
-               // V7.4 Features
-               if (not isCC and s == VELRANGE_MacroIdx[l]) or (isCC and s == VELRANGE_CCIdx[l]) then
-                   isGroupedDisp = true; if idxVel > -1 then Grp_Has[idxVel] = true; if not isCC then if s < Grp_Min[idxVel] then Grp_Min[idxVel] = s end; if s > Grp_Max[idxVel] then Grp_Max[idxVel] = s end end end
-               end
-               if (not isCC and s == ROOT_MacroIdx[l]) or (isCC and s == ROOT_CCIdx[l]) then
-                   isGroupedDisp = true; if idxRoot > -1 then Grp_Has[idxRoot] = true; if not isCC then if s < Grp_Min[idxRoot] then Grp_Min[idxRoot] = s end; if s > Grp_Max[idxRoot] then Grp_Max[idxRoot] = s end end end
-               end
-               if (not isCC and s == OCTAVER_MacroIdx[l]) or (isCC and s == OCTAVER_CCIdx[l]) then
-                   isGroupedDisp = true; if idxOct > -1 then Grp_Has[idxOct] = true; if not isCC then if s < Grp_Min[idxOct] then Grp_Min[idxOct] = s end; if s > Grp_Max[idxOct] then Grp_Max[idxOct] = s end end end
-               end
-               if (not isCC and s == HUMANIZE_MacroIdx[l]) or (isCC and s == HUMANIZE_CCIdx[l]) then
-                   isGroupedDisp = true; if idxHum > -1 then Grp_Has[idxHum] = true; if not isCC then if s < Grp_Min[idxHum] then Grp_Min[idxHum] = s end; if s > Grp_Max[idxHum] then Grp_Max[idxHum] = s end end end
-               end
-               if (not isCC and s == QUANTIZE_MacroIdx[l]) or (isCC and s == QUANTIZE_CCIdx[l]) then
-                   isGroupedDisp = true; if idxQuant > -1 then Grp_Has[idxQuant] = true; if not isCC then if s < Grp_Min[idxQuant] then Grp_Min[idxQuant] = s end; if s > Grp_Max[idxQuant] then Grp_Max[idxQuant] = s end end end
-               end
-               if (not isCC and s == SUSTAIN_MacroIdx[l]) or (isCC and s == SUSTAIN_CCIdx[l]) then
-                   isGroupedDisp = true; if idxSus > -1 then Grp_Has[idxSus] = true; if not isCC then if s < Grp_Min[idxSus] then Grp_Min[idxSus] = s end; if s > Grp_Max[idxSus] then Grp_Max[idxSus] = s end end end
-               end
-               
-               l = l + 1
-           End
-
-           // --- SYSTEM ACTION SKIP (rendered separately in the bottom block) ---
-           isSysActionSlot = false
-           if not isCC and s >= 0 and s < MAX_MACROS then
-              if SysAction_ByMacro[s] > -1 then isSysActionSlot = true end
-           elsif isCC and s >= 0 and s < 128 then
-              if SysAction_ByCC[s] > -1 then isSysActionSlot = true end
-           end
-
-           if isSysActionSlot then
-              // Intentionally empty — rendered in the System Actions block below.
-
-           elsif isGroupedDisp then
-               // Intentionally left empty! The dynamic grouped entry is built below.
-
-           // --- CROSSFADER ---
-           elsif (not isCC and s == CF_MacroIdx) or (isCC and s == CF_CCIdx) then
-               CtrlInfo_Lines <-- hwStr + ": >> Global Audio/Expr Balance"
-               
-           // ---  SCRUBBER ---
-           elsif (not isCC and s == SCRUB_MacroIdx) or (isCC and s == SCRUB_CCIdx) then
-               CtrlInfo_Lines <-- hwStr + ": >> Timeline Scrubber & Panic Transport Stop" 
-
-           // ---  REC SONGPART (MARKER) DISPLAY ---
-           elsif (not isCC and s == REC_SONGPART_MacroIdx) or (isCC and s == REC_SONGPART_CCIdx) then
-               CtrlInfo_Lines <-- hwStr + ": >> Record: Next Songpart (Marker)"
-               
-           // --- SYSTEM TOGGLE ---
-           elsif (not isCC and s == SYSTEM_TOGGLE_MacroIdx) or (isCC and s == SYSTEM_TOGGLE_CCIdx) then
-               CtrlInfo_Lines <-- hwStr + ": >> HOLD: System Mode (Joystick Hijack)"
-               
-           // --- VST SCOPE & BROWSE DISPLAY ---
-           elsif (not isCC and s == VST_SCOPE_MacroIdx) or (isCC and s == VST_SCOPE_CCIdx) then
-               CtrlInfo_Lines <-- hwStr + ": >> VST Scope Select (Encoder)"
-           elsif (not isCC and s == SYSMODE_CYCLE_MacroIdx) or (isCC and s == SYSMODE_CYCLE_CCIdx) then
-               CtrlInfo_Lines <-- hwStr + ": >> SYS-MODE Cycle"
-           elsif (not isCC and s == SYSMODE_SELECT_MacroIdx) or (isCC and s == SYSMODE_SELECT_CCIdx) then
-               CtrlInfo_Lines <-- hwStr + ": >> SYS-MODE Select (0-4)"
-
-           elsif (not isCC and s == VST_BROWSE_MacroIdx) or (isCC and s == VST_BROWSE_CCIdx) then
-               CtrlInfo_Lines <-- hwStr + ": >> VST Preset Browse (Encoder)"
-               
-           elsif (not isCC and s == VST_SCOPE_PREV_MacroIdx) or (isCC and s == VST_SCOPE_PREV_CCIdx) then
-               CtrlInfo_Lines <-- hwStr + ": >> VST Scope [Previous]"
-               
-           elsif (not isCC and s == VST_SCOPE_NEXT_MacroIdx) or (isCC and s == VST_SCOPE_NEXT_CCIdx) then
-               CtrlInfo_Lines <-- hwStr + ": >> VST Scope [Next]"
-               
-           elsif (not isCC and s == VST_PREV_MacroIdx) or (isCC and s == VST_PREV_CCIdx) then
-               CtrlInfo_Lines <-- hwStr + ": >> VST Preset [Previous]"
-               
-           elsif (not isCC and s == VST_NEXT_MacroIdx) or (isCC and s == VST_NEXT_CCIdx) then
-               CtrlInfo_Lines <-- hwStr + ": >> VST Preset [Next]"
-           
-           else
-               // --- STANDARD LINKS CHECK ---
-               count = 0
-               linksForThisSource = []
-               For l = 0; l < Link_Count; l = l + 1 Do
-                   if Link_Active[l] and Link_SourceIdx[l] == s and Link_SourceIsCC[l] == isCC then
-                       linksForThisSource <-- l
-                       count = count + 1
-                   end
-               End
-
-               if count > 0 then
-                   // Build the line header
-                   if isCC then mainLine = GetStandardCCName(s) + " [CC" + s + "]: "
-                   else mainLine = "Macro " + (s+1) + GetAssignedHWString(s) + ": " end
-
-                   if count > 1 then mainLine = mainLine + "[" + count + " Targets] " end
-
-                   // Format links
-                   For l = 0; l < count; l = l + 1 Do
-                       idx = linksForThisSource[l]
-                       vMin = Round(Link_MinVal[idx] * 100.0); vMax = Round(Link_MaxVal[idx] * 100.0)
-                       if vMin != 0 or vMax != 100 then valStr = " {" + vMin + "%-" + vMax + "%}" else valStr = "" end
-                       
-                       realName = Link_ExpectedName[idx]
-                       if realName == "" then realName = "Param " + Link_TargetParam[idx] end
-                       
-                       // Desired format: VST1_GRS:1 Global Filt Cut
-                       if l == 0 then
-                           CtrlInfo_Lines <-- mainLine + Link_BlockName[idx] + ":" + realName + valStr
-                       else
-                           CtrlInfo_Lines <-- "  -> " + Link_BlockName[idx] + ":" + realName + valStr
-                       end
-                   End
-               end
-           end
-       End
-   End
-
-   // --- DYNAMIC GROUPED ENTRIES FOR THE LIST ---
-   // Loop iterates in the exact order defined in MacroGroup_Names
-   For g = 0; g < Grp_Count; g = g + 1 Do
-       if Grp_Has[g] then
-           CtrlInfo_Lines <-- ""
-           if Grp_Min[g] <= Grp_Max[g] then
-               CtrlInfo_Lines <-- ">> Macro " + (Grp_Min[g] + 1) + "-" + (Grp_Max[g] + 1) + ": " + MacroGroup_Names[g] + " (Ch 1-16) <<"
-           else
-               CtrlInfo_Lines <-- ">> Buttons 1-16: " + MacroGroup_Names[g] + " (Ch 1-16) <<"
-           end
-       end
-   End
-
-   // --- SYSTEM ACTIONS DISPLAY ---
-   // Walk the reverse-lookup tables and render bindings grouped by action.
-   // Multiple macro slots or CC numbers can bind the same action (redundancy).
-   sysActHasAny = false
-   For sysActDispMac = 0; sysActDispMac < MAX_MACROS; sysActDispMac = sysActDispMac + 1 Do
-      if SysAction_ByMacro[sysActDispMac] > -1 then sysActHasAny = true end
-   End
-   if not sysActHasAny then
-      For sysActDispCC = 0; sysActDispCC < 128; sysActDispCC = sysActDispCC + 1 Do
-         if SysAction_ByCC[sysActDispCC] > -1 then sysActHasAny = true end
-      End
-   end
-
-   if sysActHasAny then
-      CtrlInfo_Lines <-- ""
-      CtrlInfo_Lines <-- ">> System Actions (Virtual Roles) <<"
-      For sysActDispAct = 0; sysActDispAct < Size(SysAction_Names); sysActDispAct = sysActDispAct + 1 Do
-         // All macro slots bound to this action
-         For sysActDispMac = 0; sysActDispMac < MAX_MACROS; sysActDispMac = sysActDispMac + 1 Do
-            if SysAction_ByMacro[sysActDispMac] == sysActDispAct then
-               CtrlInfo_Lines <-- "  Macro " + (sysActDispMac + 1) + GetAssignedHWString(sysActDispMac) + ": " + SysAction_Labels[sysActDispAct]
-            end
-         End
-         // All CC numbers bound to this action
-         For sysActDispCC = 0; sysActDispCC < 128; sysActDispCC = sysActDispCC + 1 Do
-            if SysAction_ByCC[sysActDispCC] == sysActDispAct then
-               CtrlInfo_Lines <-- "  " + GetStandardCCName(sysActDispCC) + " [CC" + sysActDispCC + "]: " + SysAction_Labels[sysActDispAct]
-            end
-         End
-      End
-   end
-
-   // Update slider and render
    ScrollToCurrentCtrlScope()
 End
 
@@ -4244,110 +3977,6 @@ Function CaptureRechBaseline()
    For i = 0; i < 256; i = i + 1 Do
       Loaded_RECH_State[i] = GetParameter(RECH, i)
    End
-End
-
-// ---------------------------------------------------------
-// HARDWARE MAP MANAGER
-// ---------------------------------------------------------
-Function SaveHardwareMap()
-    var content : String = "[Assignment:Standard]" + NEW_LINE + "; Controller Bindings (Auto-Generated)" + NEW_LINE
-    var mIdx, aIdx : Integer
-    var line : String
-    var hasLinks : Boolean
-    var saved : Boolean // <--- FIX
-
-    // Write exactly this format: Macro1 = Ch1:CC74 | Ch3:CC14
-    For mIdx = 0; mIdx < MAX_MACROS; mIdx = mIdx + 1 Do
-        line = "Macro" + (mIdx + 1) + " = "
-        hasLinks = false
-        
-        For aIdx = 0; aIdx < HW_Count; aIdx = aIdx + 1 Do
-            if HW_MacroIdx[aIdx] == mIdx then
-                if hasLinks then line = line + " | " end
-                if HW_IsNote[aIdx] then
-                    line = line + "Ch" + HW_Channel[aIdx] + ":Note" + HW_CC[aIdx]
-                else
-                    line = line + "Ch" + HW_Channel[aIdx] + ":CC" + HW_CC[aIdx]
-                end
-                hasLinks = true
-            end
-        End
-        
-        if hasLinks then content = content + line + NEW_LINE end
-    End
-
-    // CAPTURE RETURN VALUE:
-    saved = SaveStringToTextFile(HardwareMapFilePath, content)
-    
-    if saved then
-        Trace("HAL: Hardware Map saved to file.")
-    else
-        Trace("HAL: ERROR - Could not save Hardware Map!")
-    end
-End
-
-// DEPRECATED: Hardware sources are now inline in ControllerMaps_v2.txt
-// Kept as stub for call-site compatibility (LoadHardwareMap still called from init)
-Function LoadHardwareMap()
-    HW_Count = 0; HW_MacroIdx = []; HW_Channel = []; HW_CC = []; HW_IsNote = []
-    Trace("HAL: LoadHardwareMap SKIPPED (v2 unified format active)")
-End
-
-// ---------------------------------------------------------
-// ASSIGN LEARNED HARDWARE TO MACRO FOR CONTROLLER MAP
-// ---------------------------------------------------------
-
-Function AssignHardware(mIdx : Integer, ch : Integer, id : Integer, isNote : Boolean)
-    var i : Integer
-    var found : Boolean = false
-    
-    For i = 0; i < HW_Count; i = i + 1 Do
-        // Overwrite if channel, ID AND type (Note/CC) are identical
-        if HW_Channel[i] == ch and HW_CC[i] == id and HW_IsNote[i] == isNote then
-            HW_MacroIdx[i] = mIdx 
-            found = true
-        end
-    End
-    
-    if not found then
-        HW_MacroIdx <-- mIdx; HW_Channel <-- ch; HW_CC <-- id; HW_IsNote <-- isNote
-        HW_Count = HW_Count + 1
-    end
-    SaveHardwareMap()
-End
-
-// ---------------------------------------------------------
-// UNLEARN MACRO FOR CONTROLLER
-// ---------------------------------------------------------
-
-Function UnlearnHardware(mIdx : Integer)
-   var i : Integer
-   var newCount : Integer = 0
-   var tempMacro : Integer Array
-   var tempCh : Integer Array
-   var tempCC : Integer Array
-   var tempIsNote : Boolean Array // <--- NEW
-
-   // Copy all entries to a new array, EXCEPT those belonging to the current macro
-   For i = 0; i < HW_Count; i = i + 1 Do
-       if HW_MacroIdx[i] != mIdx then
-           tempMacro <-- HW_MacroIdx[i]
-           tempCh <-- HW_Channel[i]
-           tempCC <-- HW_CC[i]
-           tempIsNote <-- HW_IsNote[i] // <--- NEW
-           newCount = newCount + 1
-       end
-   End
-
-   HW_MacroIdx = tempMacro
-   HW_Channel = tempCh
-   HW_CC = tempCC
-   HW_IsNote = tempIsNote // <--- NEW
-   HW_Count = newCount
-
-   SaveHardwareMap()
-   UpdateControllerInfoDisplay() // Update display immediately
-   Trace("HAL: Unlearned all external controllers for Macro " + (mIdx + 1))
 End
 
 Function RefreshCtrlMapList()
@@ -7618,7 +7247,7 @@ Function IsSystemActionMacro(paramIdx : Integer) Returns Boolean
    result = res
 End
 
-// --- v2 Unified ControllerMap Loader ---
+// --- Unified ControllerMap Loader ---
 
 // Copies all Def_Mac_* arrays into Mac_* (active) arrays
 Function CloneDefaultToActive()
@@ -7734,7 +7363,7 @@ Function RebuildReverseLookups()
 End
 
 // Main entry: loads Default on first call, song delta on subsequent calls
-Function LoadControllerMapV2(mapName : String)
+Function LoadControllerMap(mapName : String)
    var content, line, trimmedLine, currentMap : String
    var lines : String Array
    var i, eqPos : Integer; var key, val : String
@@ -7821,7 +7450,7 @@ Function LoadControllerMapV2(mapName : String)
          end
       End
    else
-      Trace("CTRLMAP_V2: File not found: " + ctrlMapFilePath)
+      Trace("CTRLMAP: File not found: " + ctrlMapFilePath)
    end
 
    ValidateMapVSTs()
@@ -7838,326 +7467,7 @@ Function LoadControllerMapV2(mapName : String)
 
    CurrentEditScope = savedEditScope
 
-   Trace("CTRLMAP_V2: Loaded [Map:" + mapName + "]")
-End
-
-// --- Legacy v1 ControllerMap (kept for reference, to be removed) ---
-
-Function LoadControllerMap(mapName : String)
-   var content, line, key, valuePart, header : String
-   var lines, parts, groupParts, blockParts, paramParts : String Array
-   var i, j, k, sliderIdx : Integer
-   var targetBlkName, pStr : String
-   var sectionFound : Boolean = false
-   
-   // Parsing Vars
-   var entryStr, scaleStr : String
-   var minV, maxV : Double = 0.0
-   var braceOpen, braceClose : Integer
-   var scaleParts : String Array
-   var expectedParamName : String 
-   var validMap : Boolean
-   var startPos, endPos : Integer
-   var remainingContent, sectionContent : String
-
-   // Temp vars for CC logic
-   var isCC : Boolean
-   var finalID : Integer
-   var isSrcCC : Boolean
-
-   // SYSACT parser temp vars
-   var actionName : String
-   var sysActParseIdx : Integer = 0
-
-   // LFO prefix parser temp vars
-   var lfoReset : Integer
-   var lfoFirstEntry : String
-   var lfoName : String
-   var lfoIdx : Integer
-   var lfoRemaining : String Array
-   var jj : Integer
-
-   Trace("LoadMap: Requesting '" + mapName + "'")
-
-   // HARD-STOP LFOs: the LFO_ByMacro[] bindings are about to be
-   // rewritten by the new map. Any LFO still running on an old
-   // slot could continue with a stale or mismatched lfoIdx and
-   // collide with the fresh sync writes.
-   HardStopAllLFOs("controller map load")
-
-   // ---------------------------------------------------------
-   // 1. ENGINE RESET (clear all arrays)
-   // ---------------------------------------------------------
-   Link_Count = 0
-   Link_Active = []; Link_SourceIdx = []; Link_Type = []; Link_BlockIdx = []; 
-   Link_TargetParam = []; Link_BlockName = []; Link_MinVal = []; Link_MaxVal = []
-   Link_ExpectedName = []; Link_IsCC = []; Link_IsSleepSwitch = []; Link_SourceIsCC = []
-   
-   CF_MacroIdx = -1; CF_CCIdx = -1
-   SCRUB_MacroIdx = -1; SCRUB_CCIdx = -1
-   VST_BROWSE_MacroIdx = -1; VST_BROWSE_CCIdx = -1
-   Last_VST_Browse_Val = -1.0
-   SYSTEM_TOGGLE_MacroIdx = -1; SYSTEM_TOGGLE_CCIdx = -1
-   
-   // ---> BUGFIX: RESET ALL MISSING SYSTEM MACROS! <---
-   VST_SCOPE_MacroIdx = -1; VST_SCOPE_CCIdx = -1
-   VST_SCOPE_PREV_MacroIdx = -1; VST_SCOPE_PREV_CCIdx = -1
-   VST_SCOPE_NEXT_MacroIdx = -1; VST_SCOPE_NEXT_CCIdx = -1
-   VST_PREV_MacroIdx = -1; VST_PREV_CCIdx = -1
-   VST_NEXT_MacroIdx = -1; VST_NEXT_CCIdx = -1
-   REC_SONGPART_MacroIdx = -1; REC_SONGPART_CCIdx = -1
-   
-   For k = 0; k < 16; k = k + 1 Do 
-       LOOPER_CH_MacroIdx[k] = DEF_LOOPER_CH_MacroIdx[k]; LOOPER_CH_CCIdx[k] = -1 
-       SOLO_STRICT_MacroIdx[k] = DEF_SOLO_STRICT_MacroIdx[k]; SOLO_STRICT_CCIdx[k] = -1
-       SOLO_SMART_MacroIdx[k] = DEF_SOLO_SMART_MacroIdx[k]; SOLO_SMART_CCIdx[k] = -1
-       USER_MUTE_MacroIdx[k] = DEF_USER_MUTE_MacroIdx[k]; USER_MUTE_CCIdx[k] = -1
-       VELRANGE_MacroIdx[k] = DEF_VELRANGE_MacroIdx[k]; VELRANGE_CCIdx[k] = -1
-       ROOT_MacroIdx[k]     = DEF_ROOT_MacroIdx[k];     ROOT_CCIdx[k] = -1
-       OCTAVER_MacroIdx[k]  = DEF_OCTAVER_MacroIdx[k];  OCTAVER_CCIdx[k] = -1
-       HUMANIZE_MacroIdx[k] = DEF_HUMANIZE_MacroIdx[k]; HUMANIZE_CCIdx[k] = -1
-       QUANTIZE_MacroIdx[k] = DEF_QUANTIZE_MacroIdx[k]; QUANTIZE_CCIdx[k] = -1
-       SUSTAIN_MacroIdx[k]  = DEF_SUSTAIN_MacroIdx[k];  SUSTAIN_CCIdx[k] = -1
-   End
-
-   // --- Reset SysAction reverse-lookup tables for this map-section load ---
-   ResetSysActionBindings()
-
-   // --- Reset LFO bindings for this map-section load ---
-   For lfoReset = 0; lfoReset < MAX_MACROS; lfoReset = lfoReset + 1 Do
-       LFO_ByMacro[lfoReset] = -1
-   End
-
-   CurrentCtrlMapName = mapName
-   LBL_CtrlConfig.SetWidgetLabel(mapName)
-   CurrentEditScope = -1
-
-   // ---------------------------------------------------------
-   // 2. LOGIC SPLIT (empty vs. load)
-   // ---------------------------------------------------------
-   if mapName == "-" or mapName == "None" or mapName == "" then
-       UpdateEditScopeDisplay()
-       SetWidgetLabel(LBL_ControllerInfo, "") 
-       Trace("LoadMap: Mappings cleared.")
-       
-   else
-       UpdateEditScopeDisplay()
-   
-       if FileExists(ControllerMapFilePath) then
-           content = LoadStringFromTextFile(ControllerMapFilePath)
-           header = "[Map:" + mapName + "]"
-           
-           // HIGH-SPEED SCAN: Only search for the header!
-           startPos = IndexOfSubstring(content, header, false)
-           
-           if startPos > -1 then
-               sectionFound = true
-               Trace("LoadMap: --- FOUND SECTION: " + header + " ---")
-               
-               // 1. Cut everything BEFORE and INCLUDING the header
-               remainingContent = CopySubstring(content, startPos + Length(header), Length(content) - (startPos + Length(header)))
-               
-               // 2. Find the start of the NEXT map
-               endPos = IndexOfSubstring(remainingContent, "[Map:", false)
-               
-               if endPos > -1 then
-                   // Cut out exactly our block
-                   sectionContent = CopySubstring(remainingContent, 0, endPos)
-               else
-                   // It was the last map in the file
-                   sectionContent = remainingContent
-               end
-               
-               // NOW SPLIT! (efficient since only ~40 lines)
-               lines = SplitString(sectionContent, NEW_LINE)
-               
-               // FAST LOOP OVER SHORT BLOCK
-               For i = 0; i < Size(lines); i = i + 1 Do
-                   line = TrimString(lines[i])
-                   
-                   // PARSE LINE
-                   if Length(line) > 0 and IndexOfSubstring(line, ";", false) != 0 and IndexOfSubstring(line, "=", false) > -1 then
-                       parts = SplitString(line, "=")
-                       
-                       if Size(parts) == 2 then
-                           key = TrimString(parts[0]) 
-                           valuePart = TrimString(parts[1])
-                           
-                           isSrcCC = false
-                           sliderIdx = -1
-                           
-                           if IndexOfSubstring(key, "Macro", false) == 0 then 
-                               sliderIdx = StringToInt(ReplaceString(key, "Macro", "", false)) - 1
-                           elsif IndexOfSubstring(key, "CC", false) == 0 then 
-                               sliderIdx = StringToInt(ReplaceString(key, "CC", "", false))
-                               isSrcCC = true
-                           end
-                           
-                           if sliderIdx >= 0 and sliderIdx <= 127 then
-                               // --- SPECIAL FUNCTIONS ---
-                               if valuePart == "CROSSFADER" then
-                                   if isSrcCC then CF_CCIdx = sliderIdx else CF_MacroIdx = sliderIdx end
-                               elsif valuePart == "VST_PREV" then
-                                   if isSrcCC then VST_PREV_CCIdx = sliderIdx else VST_PREV_MacroIdx = sliderIdx end
-                               elsif valuePart == "VST_NEXT" then
-                                   if isSrcCC then VST_NEXT_CCIdx = sliderIdx else VST_NEXT_MacroIdx = sliderIdx end
-                               elsif valuePart == "VST_BROWSE" then
-                                   if isSrcCC then VST_BROWSE_CCIdx = sliderIdx else VST_BROWSE_MacroIdx = sliderIdx end
-                               elsif valuePart == "VST_SCOPE" then
-                                   if isSrcCC then VST_SCOPE_CCIdx = sliderIdx else VST_SCOPE_MacroIdx = sliderIdx end
-                               elsif valuePart == "SYSMODE_CYCLE" then
-                                   if isSrcCC then SYSMODE_CYCLE_CCIdx = sliderIdx else SYSMODE_CYCLE_MacroIdx = sliderIdx end
-                               elsif valuePart == "SYSMODE_SELECT" then
-                                   if isSrcCC then SYSMODE_SELECT_CCIdx = sliderIdx else SYSMODE_SELECT_MacroIdx = sliderIdx end
-                               elsif valuePart == "VST_SCOPE_PREV" then
-                                   if isSrcCC then VST_SCOPE_PREV_CCIdx = sliderIdx else VST_SCOPE_PREV_MacroIdx = sliderIdx end
-                               elsif valuePart == "VST_SCOPE_NEXT" then
-                                   if isSrcCC then VST_SCOPE_NEXT_CCIdx = sliderIdx else VST_SCOPE_NEXT_MacroIdx = sliderIdx end
-                               elsif valuePart == "REC_SONGPART" then
-                                   if isSrcCC then REC_SONGPART_CCIdx = sliderIdx else REC_SONGPART_MacroIdx = sliderIdx end
-                               elsif valuePart == "SYSTEM_TOGGLE" then
-                                   if isSrcCC then SYSTEM_TOGGLE_CCIdx = sliderIdx else SYSTEM_TOGGLE_MacroIdx = sliderIdx end
-                               elsif valuePart == "SCRUBBER" then
-                                   if isSrcCC then SCRUB_CCIdx = sliderIdx else SCRUB_MacroIdx = sliderIdx end
-
-                               // --- SYSTEM ACTION (Isolation Rule: only matches single-entry valuePart) ---
-                               // Multi-assigned SYSACT lines (e.g. "SYSACT_FOO | VST1:0") fall through
-                               // to the NORMAL LINKS branch, which will silently drop the unknown SYSACT_
-                               // sub-entry and process the remaining links.
-                               elsif IndexOfSubstring(valuePart, "SYSACT_", false) == 0 and IndexOfSubstring(valuePart, "|", false) == -1 then
-                                   actionName = TrimString(ReplaceString(valuePart, "SYSACT_", "", false))
-                                   sysActParseIdx = SysActIdx(actionName)
-                                   if sysActParseIdx > -1 then
-                                       if isSrcCC then SysAction_ByCC[sliderIdx] = sysActParseIdx
-                                       else SysAction_ByMacro[sliderIdx] = sysActParseIdx end
-                                   elsif DebugMode then
-                                       Trace("SYSACT: Unknown action name '" + actionName + "' on slot " + sliderIdx)
-                                   end
-
-                               // --- NORMAL LINKS ---
-                               else
-                                   groupParts = SplitString(valuePart, "|")
-
-                                   // --- LFO PREFIX EXTRACTION ---
-                                   // If the first |-entry is "LFO:<Name>", consume it and
-                                   // register LFO_ByMacro[sliderIdx]. Whitelist: user-zone
-                                   // slot (1..50), Macro source (not CC), at least one
-                                   // VST/CC target must follow.
-                                   if Size(groupParts) > 0 then
-                                       lfoFirstEntry = TrimString(groupParts[0])
-                                       if IndexOfSubstring(lfoFirstEntry, "LFO:", false) == 0 then
-                                           lfoName = TrimString(ReplaceString(lfoFirstEntry, "LFO:", "", false))
-
-                                           if isSrcCC then
-                                               if DebugMode then Trace("LFO: rejected on CC source slot " + sliderIdx) end
-                                           elsif sliderIdx < 0 or sliderIdx >= 50 then
-                                               if DebugMode then Trace("LFO: rejected outside user zone (slot " + sliderIdx + ")") end
-                                           elsif Size(groupParts) < 2 then
-                                               if DebugMode then Trace("LFO: rejected, no VST/CC target follows LFO:" + lfoName) end
-                                           else
-                                               lfoIdx = -1
-                                               For jj = 0; jj < Size(LFO_Names); jj = jj + 1 Do
-                                                   if LFO_Names[jj] == lfoName then lfoIdx = jj end
-                                               End
-                                               if lfoIdx < 0 then
-                                                   if DebugMode then Trace("LFO: unknown name '" + lfoName + "' on slot " + sliderIdx) end
-                                               else
-                                                   LFO_ByMacro[sliderIdx] = lfoIdx
-                                                   if DebugMode then Trace("LFO: bound slot " + sliderIdx + " to LFO " + lfoName + " (idx " + lfoIdx + ")") end
-                                               end
-                                           end
-
-                                           // Strip the LFO entry from groupParts regardless of accept/reject
-                                           lfoRemaining = []
-                                           For jj = 1; jj < Size(groupParts); jj = jj + 1 Do
-                                               lfoRemaining <-- groupParts[jj]
-                                           End
-                                           groupParts = lfoRemaining
-                                       end
-                                   end
-
-                                   For j = 0; j < Size(groupParts); j = j + 1 Do
-                                       entryStr = TrimString(groupParts[j])
-                                       minV = 0.0; maxV = 1.0
-                                       
-                                       braceOpen = IndexOfSubstring(entryStr, "{", false)
-                                       braceClose = IndexOfSubstring(entryStr, "}", false)
-                                       if braceOpen > -1 and braceClose > braceOpen then
-                                           scaleStr = CopySubstring(entryStr, braceOpen + 1, braceClose - braceOpen - 1)
-                                           entryStr = TrimString(CopySubstring(entryStr, 0, braceOpen))
-                                           scaleParts = SplitString(scaleStr, ",")
-                                           if Size(scaleParts) == 2 then
-                                               minV = StringToDouble(TrimString(scaleParts[0]))
-                                               maxV = StringToDouble(TrimString(scaleParts[1]))
-                                           end
-                                       end
-                                       
-                                       blockParts = SplitString(entryStr, ":")
-                                       if Size(blockParts) >= 2 then
-                                           targetBlkName = TrimString(blockParts[0])
-                                           paramParts = SplitString(blockParts[1], ",")
-                                           expectedParamName = ""
-                                           if Size(blockParts) >= 3 then expectedParamName = TrimString(blockParts[2]) end
-                                           
-                                           For k = 0; k < Size(paramParts); k = k + 1 Do
-                                               if Link_Count < MAX_LINKS then
-                                                   pStr = TrimString(paramParts[k])
-                                                   isCC = false
-                                                   if IndexOfSubstring(pStr, "CC", false) == 0 then
-                                                       isCC = true
-                                                       finalID = StringToInt(ReplaceString(pStr, "CC", "", false))
-                                                   else
-                                                       finalID = StringToInt(pStr)
-                                                   end
-                                                   AppendLinkEncoded(targetBlkName, finalID, sliderIdx, minV, maxV, expectedParamName, isCC, isSrcCC)
-                                               end
-                                           End
-                                       end
-                                   End
-                               end
-                           end
-                       end
-                   end
-               End
-           else
-               Trace("LoadMap ERROR: Section '" + header + "' not found!") 
-           end
-           
-           // --- 3. POST PROCESSING ---
-           if sectionFound then 
-               if not IsLoadingSnapshot then
-                   HardwareSyncTimer = TimeSinceStartup() + 100.0 
-                   validMap = ValidateMapping()
-                   if not validMap then MapMismatch = true else MapMismatch = false end
-               else
-                   MapMismatch = false
-               end
-               
-               if VST_SCOPE_MacroIdx >= 0 and VST_SCOPE_MacroIdx <= 15 then
-                   ScriptWrite_ExpectedPrev[VST_SCOPE_MacroIdx] = ScriptWrite_Expected[VST_SCOPE_MacroIdx]
-                   ScriptWrite_Expected[VST_SCOPE_MacroIdx] = 0.5
-                   SetParameter(ExternalArranger, VST_SCOPE_MacroIdx, 0.5)
-               end
-               if VST_BROWSE_MacroIdx >= 0 and VST_BROWSE_MacroIdx <= 15 then
-                   ScriptWrite_ExpectedPrev[VST_BROWSE_MacroIdx] = ScriptWrite_Expected[VST_BROWSE_MacroIdx]
-                   ScriptWrite_Expected[VST_BROWSE_MacroIdx] = 0.5
-                   SetParameter(ExternalArranger, VST_BROWSE_MacroIdx, 0.5)
-               end
-               if REC_SONGPART_MacroIdx >= 0 and REC_SONGPART_MacroIdx <= 15 then
-                   ScriptWrite_ExpectedPrev[REC_SONGPART_MacroIdx] = ScriptWrite_Expected[REC_SONGPART_MacroIdx]
-                   ScriptWrite_Expected[REC_SONGPART_MacroIdx] = 0.5
-                   SetParameter(ExternalArranger, REC_SONGPART_MacroIdx, 0.5)
-               end
-               
-               UpdateControllerInfoDisplay()
-           end
-       end
-   end 
-   
-   // Index Update
-   For i = 0; i < Size(CtrlMapList); i = i + 1 Do 
-       if CtrlMapList[i] == mapName then CurrentCtrlMapIndex = i end 
-   End
+   Trace("CTRLMAP: Loaded [Map:" + mapName + "]")
 End
 
 // ---------------------------------------------------------
@@ -8184,7 +7494,7 @@ Function EvaluateSmartAdapt()
 
         // 3. ISOLATION ACTIVE: Exactly ONE VST is active! (regardless of mode)
         if activeVSTs == 1 then
-            // v2: search by plugin name instead of slot number
+            // Search by plugin name instead of slot number
             var pluginName : String
             pluginName = GetPluginName(BLK_VST[targetVstIdx])
             if Length(pluginName) > 0 then
@@ -8203,7 +7513,7 @@ Function EvaluateSmartAdapt()
                 end
                 
                 Trace("SMART ADAPT: VST " + (targetVstIdx + 1) + " playing solo. Loading " + targetMap)
-                LoadControllerMapV2(targetMap)
+                LoadControllerMap(targetMap)
                 
                 // Slightly delay hardware sync (debounce 400ms)
                 HardwareSyncTimer = TimeSinceStartup() + 400.0 
@@ -8217,7 +7527,7 @@ Function EvaluateSmartAdapt()
             if IsAutoSoloMapActive then
                 if PreSoloMapName != "" and PreSoloMapName != CurrentCtrlMapName then
                     Trace("SMART ADAPT: Isolation ended (" + activeVSTs + " VSTs active). Reverting to -> " + PreSoloMapName)
-                    LoadControllerMapV2(PreSoloMapName)
+                    LoadControllerMap(PreSoloMapName)
                     
                     HardwareSyncTimer = TimeSinceStartup() + 400.0
                     OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> MAP RESTORED <<<", Local_IP, Local_PORT)
@@ -8233,7 +7543,7 @@ Function EvaluateSmartAdapt()
         if IsAutoSoloMapActive then
             if PreSoloMapName != "" and PreSoloMapName != CurrentCtrlMapName then
                 Trace("SMART ADAPT: Feature disabled. Reverting to -> " + PreSoloMapName)
-                LoadControllerMapV2(PreSoloMapName)
+                LoadControllerMap(PreSoloMapName)
                 HardwareSyncTimer = TimeSinceStartup() + 400.0
             end
             IsAutoSoloMapActive = false
@@ -8261,7 +7571,7 @@ Function CycleCtrlMap(direction : Integer)
         
         Trace("Cycle: Index " + CurrentCtrlMapIndex + " -> " + newIdx + " (" + CtrlMapList[newIdx] + ")")
         
-        LoadControllerMapV2(CtrlMapList[newIdx])
+        LoadControllerMap(CtrlMapList[newIdx])
         RecordTimelineEvent("Map", newIdx)        
         CurrentCtrlMapIndex = newIdx
     else
@@ -8281,7 +7591,7 @@ Function AutoSwitchMapOnBypass()
     // is either "Standard" or already one of the dynamic VST maps.
     // Prevents a specifically loaded song map from being overwritten.
     if CurrentCtrlMapName == "Standard" or IndexOfSubstring(CurrentCtrlMapName, "Standard_VST", false) == 0 then
-        LoadControllerMapV2(GetDynamicStandardMap())
+        LoadControllerMap(GetDynamicStandardMap())
     end
     
     // Always sync hardware afterwards
@@ -10001,7 +9311,7 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
     elsif eventType == "Map" then
         if eventVal >= 0 and eventVal < Size(CtrlMapList) then
             Trace("TIMELINE: Auto-Switching Map to -> " + CtrlMapList[eventVal])
-            LoadControllerMapV2(CtrlMapList[eventVal])
+            LoadControllerMap(CtrlMapList[eventVal])
             HardwareSyncTimer = TimeSinceStartup() + 400.0
             OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TL-MAP: " + CtrlMapList[eventVal] + " <<<", Local_IP, Local_PORT)
             MacroFeedbackTimer = TimeSinceStartup() + 2000.0
@@ -10217,7 +9527,7 @@ Function HandleInjectBypassClick(btnIdx : Integer, val : Double)
                 // Force immediate re-evaluation
                 ExecuteSmartBypass()
 
-                // v2: Re-validate VST bindings after bypass change
+                // Re-validate VST bindings after bypass change
                 ValidateMapVSTs()
                 UpdateControllerInfoDisplay()
             end
@@ -11107,7 +10417,7 @@ Function EvaluateAutoSysMode()
 End
 
 // ---------------------------------------------------------
-// v2 OVERLAY TRIGGER ENGINE
+// OVERLAY TRIGGER ENGINE
 // ---------------------------------------------------------
 
 // Records overlay toggle events to the Timeline
@@ -11948,7 +11258,7 @@ End
 // SECTION 22: HARDWARE INPUT PROCESSING
 // ============================================================================
 
-// v2 keyword dispatcher (used by ExecuteHardwareMacroV2)
+// Keyword dispatcher (used by ExecuteHardwareMacro)
 Function ExecuteKeywordBinding(keyword : String, val : Double)
    if keyword == "CROSSFADER" then
       SetWidgetValue(SLD_Crossfader, val)
@@ -11993,26 +11303,14 @@ Function ExecuteKeywordBinding(keyword : String, val : Double)
    end
 End
 
-// v2 Layer-aware macro dispatch
-Function ExecuteHardwareMacroV2(matchedMacro : Integer, val : Double)
+// Layer-aware macro dispatch
+Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
    var l, b, fi, bindingKey : Integer
    var targetType, target, funcName : String
-   var hasV2Bindings : Boolean = false
 
-   // Check if this macro has any v2 bindings
-   For l = 0; l < MAX_LAYERS; l = l + 1 Do
-      if Mac_Layer_BindCount[MacLayerIdx(matchedMacro, l)] > 0 then
-         hasV2Bindings = true
-      end
-   End
-
-   if not hasV2Bindings then
-      // Fall back to legacy dispatch
-      ExecuteHardwareMacro(matchedMacro, val)
-   else
-      // Guard: plugin safety during init/snapshot
-      if not IsLoadingSnapshot and TimeSinceStartup() > FaderSafetyTimer then
-         For l = 0; l < MAX_LAYERS; l = l + 1 Do
+   // Guard: plugin safety during init/snapshot
+   if not IsLoadingSnapshot and TimeSinceStartup() > FaderSafetyTimer then
+      For l = 0; l < MAX_LAYERS; l = l + 1 Do
             var bindCount : Integer
             bindCount = Mac_Layer_BindCount[MacLayerIdx(matchedMacro, l)]
             if bindCount > 0 then
@@ -12105,239 +11403,6 @@ Function ExecuteHardwareMacroV2(matchedMacro : Integer, val : Double)
             end
          End
       end
-   end
-End
-
-// --- Legacy v1 Hardware Macro Dispatch ---
-Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
-   var mName : String = "" // For the System Toggle HUD
-   var looperTrigCh : Integer = -1
-   var i, cState, nState, beatsPerBar : Integer
-   var strictSoloCh, smartSoloCh, userMuteCh : Integer
-   var velRangeCh : Integer = -1; var rootCh : Integer = -1; var octCh : Integer = -1
-   var humCh : Integer = -1; var quantCh : Integer = -1; var susCh : Integer = -1
-
-   // --- CROSSFADER CHECK (Hardware assignment) ---
-   if matchedMacro == CF_MacroIdx then
-       SetWidgetValue(SLD_Crossfader, val)
-    
-   // --- VST BROWSE CHECK (BUTTONS) ---
-   elsif matchedMacro == VST_PREV_MacroIdx and val > 0.5 then TriggerVstPresetChange(-1)
-   elsif matchedMacro == VST_NEXT_MacroIdx and val > 0.5 then TriggerVstPresetChange(1)
-   elsif matchedMacro == VST_SCOPE_PREV_MacroIdx and val > 0.5 then ChangeVstScope(-1, -1)
-   elsif matchedMacro == VST_SCOPE_NEXT_MacroIdx and val > 0.5 then ChangeVstScope(1, -1)
-    
-   // --- DREHREGLER: BROWSE ---
-   elsif matchedMacro == VST_BROWSE_MacroIdx then
-       if Last_VST_Browse_Val != -1.0 then
-           if val > Last_VST_Browse_Val + 0.005 then 
-               TriggerVstPresetChange(1)
-               Last_VST_Browse_Val = val
-           elsif val < Last_VST_Browse_Val - 0.005 then 
-               TriggerVstPresetChange(-1)
-               Last_VST_Browse_Val = val
-           end
-       else
-           Last_VST_Browse_Val = val
-       end
-       
-   // --- RECORDER: NEXT SONG PART (Smart Knob/Button Detection) ---
-   elsif matchedMacro == REC_SONGPART_MacroIdx then
-       if Last_RecPart_Val != -1.0 then
-           if val > Last_RecPart_Val + 0.05 then 
-               TriggerNextSongPart()
-               Last_RecPart_Val = val
-
-               // Send auto-center for knobs/faders
-               ScriptWrite_ExpectedPrev[matchedMacro] = ScriptWrite_Expected[matchedMacro]
-               ScriptWrite_Expected[matchedMacro] = 0.5
-               SetParameter(ExternalArranger, matchedMacro, 0.5)
-               Last_RecPart_Val = 0.5 // Remember new center position!
-           elsif val < Last_RecPart_Val - 0.05 then 
-               Last_RecPart_Val = val
-           end
-       else
-           Last_RecPart_Val = val // First touch: just remember the value!
-       end
-
-   // =========================================================
-   // --- SYSTEM TOGGLE (Joystick Hijack & Master Mode) ---
-   // =========================================================
-   elsif matchedMacro == SYSTEM_TOGGLE_MacroIdx then
-       SystemModeActive = (val > 0.5)
-       
-       if SystemModeActive then
-           mName = SysModeNames[GlobalSystemMode]
-           Trace("SYS-MODE: ON -> " + mName)
-           OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + mName + " <<<", Local_IP, Local_PORT)
-           MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-           MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
-       else
-           Trace("SYS-MODE: OFF") 
-       end
-    
-   // --- ENCODERS OR DIRECT BUTTONS ---
-   elsif matchedMacro == VST_SCOPE_MacroIdx then
-       ChangeVstScope(-1, Round(val * (MAX_VSTS - 1)))                
-    
-   // --- ARRANGER MOTORS (Macro 1-16) ---
-   elsif matchedMacro >= 0 and matchedMacro <= 15 then
-       ScriptWrite_ExpectedPrev[matchedMacro] = ScriptWrite_Expected[matchedMacro]
-       ScriptWrite_Expected[matchedMacro] = val
-       SetParameter(ExternalArranger, matchedMacro, val)
-         
-   // =========================================================
-   // --- 1-BUTTON TRIGGERS (Looper, Solo, Mute) ---
-   // =========================================================
-   else      
-       looperTrigCh = -1; strictSoloCh = -1; smartSoloCh = -1; userMuteCh = -1
-       
-       For i = 0; i < 16; i = i + 1 Do
-            if matchedMacro == LOOPER_CH_MacroIdx[i] then looperTrigCh = i end
-            if matchedMacro == SOLO_STRICT_MacroIdx[i] then strictSoloCh = i end
-            if matchedMacro == SOLO_SMART_MacroIdx[i] then smartSoloCh = i end
-            if matchedMacro == USER_MUTE_MacroIdx[i] then userMuteCh = i end
-            if matchedMacro == VELRANGE_MacroIdx[i] then velRangeCh = i end
-            if matchedMacro == ROOT_MacroIdx[i]     then rootCh = i end
-            if matchedMacro == OCTAVER_MacroIdx[i]  then octCh = i end
-            if matchedMacro == HUMANIZE_MacroIdx[i] then humCh = i end
-            if matchedMacro == QUANTIZE_MacroIdx[i] then quantCh = i end
-            if matchedMacro == SUSTAIN_MacroIdx[i]  then susCh = i end
-        End
-       
-       if looperTrigCh > -1 then
-           if val > 0.5 then // Only respond when the pad is PRESSED
-               // ... (Your existing looper select block ... )
-               cState = Mem_Loop_State[looperTrigCh]
-               nState = -1
-               
-               Select
-                   cState == 0 Do 
-                       if GetWidgetValue(BTN_Loop_HostSync) > 0.5 and IsPerformanceActive then nState = 5 
-                       else
-                           nState = 1; ClearLooperArrays(looperTrigCh); LoopStartTime[looperTrigCh] = TimeSinceStartup()
-                           if Mem_Loop_Length[looperTrigCh] > 0 then
-                               beatsPerBar = GetTimeSigNumerator(); if beatsPerBar <= 0 then beatsPerBar = 4 end
-                               LoopLengthMS[looperTrigCh] = (60000.0 / GetBPM()) * IntToFloat(beatsPerBar) * IntToFloat(Mem_Loop_Length[looperTrigCh])
-                           end
-                       end
-                   cState == 1 Do 
-                       CloseLooperBuffer(looperTrigCh)
-                       if Mem_Loop_Length[looperTrigCh] == 0 then LoopLengthMS[looperTrigCh] = TimeSinceStartup() - LoopStartTime[looperTrigCh] end
-                       nState = 2; LoopStartTime[looperTrigCh] = TimeSinceStartup(); LoopNextEventIdx[looperTrigCh] = 0
-                   cState == 2 Do nState = 3
-                   cState == 3 Do nState = 2
-                   cState == 4 Do 
-                       if GetWidgetValue(BTN_Loop_HostSync) > 0.5 and IsPerformanceActive then nState = 6 
-                       else nState = 2; LoopStartTime[looperTrigCh] = TimeSinceStartup(); LoopNextEventIdx[looperTrigCh] = 0 end
-               End
-               
-               if nState != -1 then
-                   Mem_Loop_State[looperTrigCh] = nState
-                   BuildLooperConfigLines()
-                   if OutputScope[looperTrigCh] then UpdateInjectionLooperTransportUI() end
-               end
-           end
-           
-       // --- STRICT SOLO TOGGLE ---
-       elsif strictSoloCh > -1 then
-           if val > 0.5 then
-               if Mem_SoloStrict[strictSoloCh] == 1 then Mem_SoloStrict[strictSoloCh] = 0 else Mem_SoloStrict[strictSoloCh] = 1 end
-               Mem_SoloSmart[strictSoloCh] = 0 // Strict kickt Smart
-               UpdateSoloMuteState()
-               if OutputScope[strictSoloCh] then UpdateInjectionSoloDisplay() end // UI cosmetic if channel is in focus
-           end
-           
-       // --- SMART SOLO TOGGLE ---
-       elsif smartSoloCh > -1 then
-           if val > 0.5 then
-               if Mem_SoloSmart[smartSoloCh] == 1 then Mem_SoloSmart[smartSoloCh] = 0 else Mem_SoloSmart[smartSoloCh] = 1 end
-               Mem_SoloStrict[smartSoloCh] = 0 // Smart kickt Strict
-               UpdateSoloMuteState()
-               if OutputScope[smartSoloCh] then UpdateInjectionSoloDisplay() end // UI Kosmetik
-           end
-           
-       // --- USER MUTE TOGGLE ---
-       elsif userMuteCh > -1 then
-           if val > 0.5 then
-               if Mem_UserMute[userMuteCh] == 1 then Mem_UserMute[userMuteCh] = 0 else Mem_UserMute[userMuteCh] = 1 end
-               SetParameter(BLK_NoteProcessor[userMuteCh], 26, IntToFloat(Mem_UserMute[userMuteCh]))
-               if Mem_UserMute[userMuteCh] == 1 and not IsUpdatingMatrix then Trigger_NotesOff(userMuteCh + 1) end
-               UpdateMetaColors()
-               if OutputScope[userMuteCh] then UpdateInjectionMuteDisplay() end
-           end
-
-       // --- VELOCITY RANGE TOGGLE ---
-       elsif velRangeCh > -1 then
-           if val > 0.5 then
-               if Mem_NP_VelRangeActive[velRangeCh] == 1 then Mem_NP_VelRangeActive[velRangeCh] = 0 else Mem_NP_VelRangeActive[velRangeCh] = 1 end
-               SetParameter(BLK_NoteProcessor[velRangeCh], GetParamIdxByName(BLK_NoteProcessor[velRangeCh], "p_VelRangeActive"), IntToFloat(Mem_NP_VelRangeActive[velRangeCh]))
-               UpdateMetaColors()
-               if OutputScope[velRangeCh] then UpdateInjectionNPDisplay() end
-           end
-           
-       // --- ROOT / CHORD MODE TOGGLE ---
-       elsif rootCh > -1 then
-           if val > 0.5 then
-               if Mem_NP_ChordMode[rootCh] == 1 then Mem_NP_ChordMode[rootCh] = 0 else Mem_NP_ChordMode[rootCh] = 1 end
-               SetParameter(BLK_NoteProcessor[rootCh], GetParamIdxByName(BLK_NoteProcessor[rootCh], "p_ChordMode"), IntToFloat(Mem_NP_ChordMode[rootCh]))
-               if not IsUpdatingMatrix then Trigger_NotesOff(rootCh + 1) end
-               UpdateMetaColors()
-               if OutputScope[rootCh] then UpdateInjectionNPDisplay() end
-           end
-
-       // --- OCTAVER TOGGLE ---
-       elsif octCh > -1 then
-           if val > 0.5 then
-               if Mem_NP_Octaver[octCh] == 1 then Mem_NP_Octaver[octCh] = 0 else Mem_NP_Octaver[octCh] = 1 end
-               SetParameter(BLK_NoteProcessor[octCh], GetParamIdxByName(BLK_NoteProcessor[octCh], "p_Octaver"), IntToFloat(Mem_NP_Octaver[octCh]))
-               if not IsUpdatingMatrix then Trigger_NotesOff(octCh + 1) end
-               UpdateMetaColors()
-               if OutputScope[octCh] then UpdateInjectionNPDisplay() end
-           end
-
-       // --- HUMANIZER TOGGLE ---
-       elsif humCh > -1 then
-           if val > 0.5 then
-               if Mem_NP_HumanizeActive[humCh] == 1 then Mem_NP_HumanizeActive[humCh] = 0 else Mem_NP_HumanizeActive[humCh] = 1 end
-               SetParameter(BLK_NoteProcessor[humCh], GetParamIdxByName(BLK_NoteProcessor[humCh], "p_HumanizeActive"), IntToFloat(Mem_NP_HumanizeActive[humCh]))
-               UpdateMetaColors()
-               if OutputScope[humCh] then UpdateInjectionNPDisplay() end
-           end
-
-       // --- SCALE QUANTIZER TOGGLE ---
-       elsif quantCh > -1 then
-           if val > 0.5 then
-               if Mem_NP_QuantizeActive[quantCh] == 1 then Mem_NP_QuantizeActive[quantCh] = 0 else Mem_NP_QuantizeActive[quantCh] = 1 end
-               SetParameter(BLK_NoteProcessor[quantCh], GetParamIdxByName(BLK_NoteProcessor[quantCh], "p_QuantizeActive"), IntToFloat(Mem_NP_QuantizeActive[quantCh]))
-               if not IsUpdatingMatrix then Trigger_NotesOff(quantCh + 1) end
-               UpdateMetaColors()
-               if OutputScope[quantCh] then UpdateInjectionNPDisplay() end
-           end
-
-       // --- AUTO SUSTAIN TOGGLE ---
-       elsif susCh > -1 then
-           if val > 0.5 then
-               if Mem_NP_AutoSustain[susCh] == 1 then Mem_NP_AutoSustain[susCh] = 0 else Mem_NP_AutoSustain[susCh] = 1 end
-               SetParameter(BLK_NoteProcessor[susCh], GetParamIdxByName(BLK_NoteProcessor[susCh], "p_AutoSustain"), IntToFloat(Mem_NP_AutoSustain[susCh]))
-               UpdateMetaColors()
-               if OutputScope[susCh] then UpdateInjectionNPDisplay() end
-           end
-
-       // --- SYSMODE CYCLE / SELECT ---
-       elsif matchedMacro == SYSMODE_CYCLE_MacroIdx and val > 0.5 then
-           if DebugMode then Trace(">>> SYSMODE-DIAG [A1] CYCLE via MacroIdx=" + matchedMacro + " from ExecuteHardwareMacro") end
-           CycleGlobalSystemMode()
-           SystemModeActive = true
-       elsif matchedMacro == SYSMODE_SELECT_MacroIdx then
-           if DebugMode then Trace(">>> SYSMODE-DIAG [A2] SELECT via MacroIdx=" + matchedMacro + " target=" + Round(val * 4.0)) end
-           SelectGlobalSystemMode(Round(val * 4.0))
-
-       // --- EXTERNE MORPHS (ApplyEditorTest) ---
-       else
-           ApplyEditorTest(val)
-       end
-   end
 End
 
 // ---------------------------------------------------------
@@ -12477,7 +11542,7 @@ End
 // and by the existing joystick Y+ path in ProcessSystemNavigation).
 Function RestoreInitialControllerMap()
    if ExpectedMapName != "" and ExpectedMapName != "-" then
-      LoadControllerMapV2(ExpectedMapName)
+      LoadControllerMap(ExpectedMapName)
       HardwareSyncTimer = TimeSinceStartup() + 2000.0
       OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> MAP: " + ExpectedMapName + " <<<", Local_IP, Local_PORT)
       MacroFeedbackTimer = TimeSinceStartup() + 2000.0
@@ -12536,12 +11601,11 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
    // --- UNIVERSAL FEEDBACK ANFEUERN ---
    TriggerMacroFeedback(cc, true, val)
 
-   // 1. LEARN MODE
+   // 1. LEARN MODE (hardware sources are now configured in ControllerMaps_v2.txt)
    if IsHardwareLearning then
-       Trace("HAL Learn: Received Ch" + ch + ":CC" + cc + " -> Assigned to Macro " + (CurrentEditScope + 1))
-       AssignHardware(CurrentEditScope, ch, cc, false)
+       Trace("HAL Learn: CC" + cc + " Ch" + ch + " detected for Macro " + (CurrentEditScope + 1) + " (configure in ControllerMaps_v2.txt)")
        IsHardwareLearning = false
-       SetWidgetValue(BTN_MacroLearn, 0.0) 
+       SetWidgetValue(BTN_MacroLearn, 0.0)
        UpdateControllerInfoDisplay()
        
    // 2. EXECUTE MODE
@@ -12640,24 +11704,14 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
            end
        End
        
-       // --- C: v2 REVERSE LOOKUP (CC -> Macro, unified) ---
+       // --- C: REVERSE LOOKUP (CC -> Macro) ---
        var lookupIdx, macroFromLookup : Integer
        lookupIdx = ch * 128 + cc
        if lookupIdx >= 0 and lookupIdx < 2048 then
           macroFromLookup = Mac_ReverseLookup_CC[lookupIdx]
           if macroFromLookup > 0 then
-             ExecuteHardwareMacroV2(macroFromLookup, val)
+             ExecuteHardwareMacro(macroFromLookup, val)
           end
-       end
-
-       // --- C-legacy: HAL DATABASE fallback (v1 HardwareMap entries) ---
-       if macroFromLookup < 1 then
-          For i = 0; i < HW_Count; i = i + 1 Do
-              if not HW_IsNote[i] and HW_Channel[i] == ch and HW_CC[i] == cc then
-                  if DebugMode then Trace(">>> HAL-DIAG: CC=" + cc + " Ch=" + ch + " -> MacroIdx=" + HW_MacroIdx[i] + " val=" + val) end
-                  ExecuteHardwareMacro(HW_MacroIdx[i], val)
-              end
-          End
        end
 
        // --- D: PERMANENT BINDINGS (CC64=SYSTEM_TOGGLE, CC11=CROSSFADER, etc.) ---
@@ -12768,37 +11822,34 @@ Function ProcessHardwareNote(m : NoteMessage)
     var chan : Integer = GetChannel(m)
     var noteNum : Integer = GetNoteNumber(m)
     var val : Double = 0.0
-    var i : Integer
 
     // Stamp the global last-note-on time for the latch auto-release timer.
     // Runs on every hardware note-on regardless of latch state — cheap.
     if IsNoteOn(m) then Latch_LastNoteOnTime = TimeSinceStartup() end
 
-    // 1. LEARN MODE FOR NOTES
+    // 1. LEARN MODE FOR NOTES (sources are now configured in ControllerMaps_v2.txt)
     if IsHardwareLearning then
         if IsNoteOn(m) then
-            Trace("HAL Learn: Received Ch" + chan + ":Note" + noteNum + " -> Assigned to Macro " + (CurrentEditScope + 1))
-            AssignHardware(CurrentEditScope, chan, noteNum, true) // true = It's a note!
+            Trace("HAL Learn: Note" + noteNum + " Ch" + chan + " detected for Macro " + (CurrentEditScope + 1) + " (configure in ControllerMaps_v2.txt)")
             IsHardwareLearning = false
-            SetWidgetValue(BTN_MacroLearn, 0.0) 
+            SetWidgetValue(BTN_MacroLearn, 0.0)
             UpdateControllerInfoDisplay()
         end
-        
+
     // 2. EXECUTION MODE
     else
         // Convert NoteOn/Off to 1.0 and 0.0
         if IsNoteOn(m) then val = IntToFloat(GetVelocity(m)) / 127.0 else val = 0.0 end
-        
-        // Search the HAL database for this note
-        For i = 0; i < HW_Count; i = i + 1 Do
-            // IMPORTANT: Only search for notes!
-            if HW_IsNote[i] and HW_Channel[i] == chan and HW_CC[i] == noteNum then
-                Trace("HAL: Note Triggered Macro " + (HW_MacroIdx[i] + 1) + " with Val " + val)
-                
-                // Throw into the universal engine:
-                ExecuteHardwareMacro(HW_MacroIdx[i], val)
-            end
-        End
+
+        // Note-based macro dispatch uses the CC reverse lookup (Source=DEV:NoteN in ControllerMaps_v2.txt)
+        var lookupIdx, macroFromLookup : Integer
+        lookupIdx = chan * 128 + noteNum
+        if lookupIdx >= 0 and lookupIdx < 2048 then
+           macroFromLookup = Mac_ReverseLookup_CC[lookupIdx]
+           if macroFromLookup > 0 then
+              ExecuteHardwareMacro(macroFromLookup, val)
+           end
+        end
     end
 End
 
@@ -12869,7 +11920,7 @@ Function PerformSystemReset()
    else
        SyncMatrixToScriptlet()
        SetDefaultChannelScope()
-       LoadControllerMapV2("Standard")
+       LoadControllerMap("Standard")
        HardwareSyncTimer = TimeSinceStartup() + 3500.0
        
        SyncBrowserToLoadedPlugin(GetPluginInfo(BLK_VST[ReplaceableSlots[0]], 0))
@@ -14161,7 +13212,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
             
             ExpectedMapName = targetCtrlMap
             
-            LoadControllerMapV2(targetCtrlMap)
+            LoadControllerMap(targetCtrlMap)
             BuildLFOUsageIndex()  // v2: rebuild reverse index against the freshly loaded map
             HardwareSyncTimer = TimeSinceStartup() + 3500.0
             SyncInputFeedback()
@@ -14220,7 +13271,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
        
        For i = 0; i < 16; i = i + 1 Do DeactivateChannel(i) End
        
-       LoadControllerMapV2("Standard")
+       LoadControllerMap("Standard")
        BuildLFOUsageIndex()  // v2: rebuild reverse index against the freshly loaded map
        HardwareSyncTimer = TimeSinceStartup() + 100.0
 
@@ -14736,13 +13787,11 @@ Initialization
 
    if IndexOfSubstring(UserSnapshotPath, "\\", false) > -1 Then
        ControllerMapFilePath = UserSnapshotPath + "\\ControllerMaps.txt"
-       HardwareMapFilePath = UserSnapshotPath + "\\HardwareMap.txt"
        VstDatabaseFilePath = UserSnapshotPath + "\\VstDatabase.txt"
        DeviceConfigFilePath = UserSnapshotPath + "\\DeviceConfig.txt"
        LFOConfigFilePath = UserSnapshotPath + "\\LFOConfig.txt"
    Else
        ControllerMapFilePath = UserSnapshotPath + "/ControllerMaps.txt"
-       HardwareMapFilePath = UserSnapshotPath + "/HardwareMap.txt"
        VstDatabaseFilePath = UserSnapshotPath + "/VstDatabase.txt"
        DeviceConfigFilePath = UserSnapshotPath + "/DeviceConfig.txt"
        LFOConfigFilePath = UserSnapshotPath + "/LFOConfig.txt"
@@ -14792,9 +13841,8 @@ Initialization
    
    Arr_Subbar_LEDs = [LBL_Subbar_1, LBL_Subbar_2, LBL_Subbar_3, LBL_Subbar_4]
    
-   // B. Load hardware & text databases
-   LoadHardwareMap() // <- DEPRECATED: kept for v1 compat, body is stub
-   LoadControllerMapV2("DEFAULT_INIT") // <- v2: parse [Map:Default] once at startup
+   // B. Load text databases
+   LoadControllerMap("DEFAULT_INIT") // parse [Map:Default] once at startup
    LoadVstDatabase()
    BuildFilteredVstList()
 
@@ -15799,8 +14847,10 @@ End
 
 On WidgetValueChanged(val : Double) from BTN_MacroUnLearn
     if val > 0.5 then
-        if CurrentEditScope != -1 then UnlearnHardware(CurrentEditScope) end
-        SetWidgetValue(BTN_MacroUnLearn, 0.0) 
+        // Hardware unlearn is now managed via ControllerMaps_v2.txt
+        Trace("HAL: Unlearn for Macro " + (CurrentEditScope + 1) + " (edit ControllerMaps_v2.txt)")
+        UpdateControllerInfoDisplay()
+        SetWidgetValue(BTN_MacroUnLearn, 0.0)
     end
 End
 
@@ -16306,7 +15356,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Save
                //    LOCKED. mapName is always the map active when Save was clicked
                //    (captured at the top from CurrentCtrlMapName) so the reload is
                //    the same-map guarantee.
-               LoadControllerMapV2(mapName)
+               LoadControllerMap(mapName)
                CurrentEditScope = scopeSlot
                UpdateEditScopeDisplay()
                BuildLFOUsageIndex()
@@ -16407,7 +15457,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Delete
                //    as a side effect; we capture and restore it so the scope stays
                //    on the macro the user was viewing (which will now be in DRAFT
                //    because the LFO binding is gone).
-               LoadControllerMapV2(CurrentCtrlMapName)
+               LoadControllerMap(CurrentCtrlMapName)
                CurrentEditScope = scopeSlot
                UpdateEditScopeDisplay()
                BuildLFOUsageIndex()
@@ -18080,7 +17130,7 @@ On TimerTick(ms : Double)
                     End
                     // Restore configured state if STRIP made live changes
                     if StripLiveDirty then
-                        LoadControllerMapV2(CurrentCtrlMapName)
+                        LoadControllerMap(CurrentCtrlMapName)
                         StripLiveDirty = false
                         Trace("STRIP: Live changes restored via controller map reload.")
                         OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> STRIP RESTORED <<<", Local_IP, Local_PORT)
