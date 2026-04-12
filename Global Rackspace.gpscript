@@ -9275,6 +9275,8 @@ Function PartJumpPreview(dir : Integer)
 End
 
 Function FireTimelineEvent(eventType : String, eventVal : Integer)
+    var ovlFuncPlay : String
+    var ovlChPlay, ovlStatePlay : Integer
     // Origin flag: marks every macro write in this function as "from
     // Timeline replay" so On ParameterValueChanged from ExternalArranger
     // can (a) auto-start a bound LFO and (b) skip Timeline recording.
@@ -9314,7 +9316,6 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
         end
     elsif IndexOfSubstring(eventType, "OVL_", false) == 0 then
         // Overlay event playback: decode funcName, channel, state
-        var ovlFuncPlay : String; var ovlChPlay, ovlStatePlay : Integer
         ovlFuncPlay = CopySubstring(eventType, 4, Length(eventType) - 4)
         ovlChPlay = eventVal / 2
         ovlStatePlay = eventVal - (ovlChPlay * 2)
