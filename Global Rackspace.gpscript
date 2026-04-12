@@ -11907,6 +11907,167 @@ End
 // SECTION 22: HARDWARE INPUT PROCESSING
 // ============================================================================
 
+// v2 keyword dispatcher (used by ExecuteHardwareMacroV2)
+Function ExecuteKeywordBinding(keyword : String, val : Double)
+   if keyword == "CROSSFADER" then
+      SetWidgetValue(SLD_Crossfader, val)
+   elsif keyword == "SCRUBBER" then
+      SetWidgetValue(SLD_Scrubber, val)
+   elsif keyword == "VST_SCOPE" then
+      var scopeIdx : Integer
+      scopeIdx = Round(val * (MAX_VSTS - 1))
+      ChangeVstScope(scopeIdx, 0)
+   elsif keyword == "VST_BROWSE" then
+      SetWidgetValue(SLD_VSTBrowse, val)
+   elsif keyword == "VST_SCOPE_PREV" then
+      if val > 0.5 then
+         ChangeVstScope(-1, -1)
+      end
+   elsif keyword == "VST_SCOPE_NEXT" then
+      if val > 0.5 then
+         ChangeVstScope(1, -1)
+      end
+   elsif keyword == "VST_PREV" then
+      if val > 0.5 then
+         ChangeVstPreset(-1)
+      end
+   elsif keyword == "VST_NEXT" then
+      if val > 0.5 then
+         ChangeVstPreset(1)
+      end
+   elsif keyword == "SYSMODE_CYCLE" then
+      if val > 0.5 then
+         CycleGlobalSystemMode()
+      end
+   elsif keyword == "REC_SONGPART" then
+      if val > 0.5 then
+         RecordSongPart()
+      end
+   elsif keyword == "SYSTEM_TOGGLE" then
+      if val > 0.5 then
+         SystemModeActive = true
+      else
+         SystemModeActive = false
+      end
+   end
+End
+
+// v2 Layer-aware macro dispatch
+Function ExecuteHardwareMacroV2(matchedMacro : Integer, val : Double)
+   var l, b, fi, bindingKey : Integer
+   var targetType, target, funcName : String
+   var hasV2Bindings : Boolean = false
+
+   // Check if this macro has any v2 bindings
+   For l = 0; l < MAX_LAYERS; l = l + 1 Do
+      if Mac_Layer_BindCount[MacLayerIdx(matchedMacro, l)] > 0 then
+         hasV2Bindings = true
+      end
+   End
+
+   if not hasV2Bindings then
+      // Fall back to legacy dispatch
+      ExecuteHardwareMacro(matchedMacro, val)
+   else
+      // Guard: plugin safety during init/snapshot
+      if not IsLoadingSnapshot and TimeSinceStartup() > FaderSafetyTimer then
+         For l = 0; l < MAX_LAYERS; l = l + 1 Do
+            var bindCount : Integer
+            bindCount = Mac_Layer_BindCount[MacLayerIdx(matchedMacro, l)]
+            if bindCount > 0 then
+               var shouldFire : Boolean = false
+               if l == 0 then
+                  shouldFire = true
+               elsif ActiveLayer == l then
+                  shouldFire = true
+               end
+
+               if shouldFire then
+                  For b = 0; b < bindCount; b = b + 1 Do
+                     fi = MacLayerBindIdx(matchedMacro, l, b)
+                     targetType = Mac_Layer_TargetType[fi]
+                     target = Mac_Layer_Target[fi]
+
+                     if targetType == "VST" then
+                        var vstIdx, paramIdx : Integer
+                        vstIdx = Mac_Layer_VSTIdx[fi]
+                        paramIdx = Mac_Layer_ParamIdx[fi]
+                        if vstIdx >= 1 and vstIdx < MAX_VST_DECL then
+                           if MapVST_Valid[vstIdx] == 1 or MapVST_Valid[vstIdx] == 0 then
+                              var scaledVal : Double = 0.0
+                              var rMin, rMax : Double = 0.0
+                              rMin = Mac_Layer_RangeMin[fi]
+                              rMax = Mac_Layer_RangeMax[fi]
+                              scaledVal = rMin + (val * (rMax - rMin))
+                              if vstIdx <= MAX_VSTS then
+                                 SetParameter(BLK_VST[vstIdx], paramIdx, scaledVal)
+                              end
+                           end
+                        end
+
+                     elsif targetType == "CC" then
+                        // Parse Ch<c>:CC<n> from target string
+                        var ccTarget : String
+                        ccTarget = target
+                        var chPos, ccPos : Integer
+                        chPos = IndexOfSubstring(ccTarget, "Ch", false)
+                        ccPos = IndexOfSubstring(ccTarget, ":CC", false)
+                        if chPos >= 0 and ccPos > 0 then
+                           var ccCh, ccNum : Integer
+                           ccCh = StringToInt(CopySubstring(ccTarget, chPos + 2, ccPos - chPos - 2)) - 1
+                           var afterCC : String
+                           afterCC = CopySubstring(ccTarget, ccPos + 3, Length(ccTarget) - ccPos - 3)
+                           // Strip label after ":"
+                           var labelPos : Integer
+                           labelPos = IndexOfSubstring(afterCC, ":", false)
+                           if labelPos >= 0 then
+                              ccNum = StringToInt(CopySubstring(afterCC, 0, labelPos))
+                           else
+                              ccNum = StringToInt(afterCC)
+                           end
+                           var scaledCC : Double = 0.0
+                           var rMinCC, rMaxCC : Double = 0.0
+                           rMinCC = Mac_Layer_RangeMin[fi]
+                           rMaxCC = Mac_Layer_RangeMax[fi]
+                           scaledCC = rMinCC + (val * (rMaxCC - rMinCC))
+                           SendNowToMidiOutDevice(DEV_MidiOut[0], MakeControlChangeMessageEx(ccNum, Round(scaledCC * 127.0), ccCh))
+                        end
+
+                     elsif targetType == "KEYWORD" then
+                        ExecuteKeywordBinding(target, val)
+
+                     elsif targetType == "SYSACT" then
+                        if val > 0.5 then
+                           var actionName : String
+                           actionName = target
+                           if IndexOfSubstring(actionName, "SYSACT_", false) == 0 then
+                              actionName = CopySubstring(actionName, 7, Length(actionName) - 7)
+                           end
+                           var actionIdx : Integer
+                           actionIdx = SysActIdx(actionName)
+                           if actionIdx >= 0 then
+                              FireSystemAction(actionIdx)
+                           end
+                        end
+
+                     elsif targetType == "OVERLAY" then
+                        funcName = target
+                        var channel : Integer
+                        channel = Mac_Layer_Channel[fi]
+                        bindingKey = fi
+                        if bindingKey < MAX_OVERLAY_BINDINGS then
+                           FireOverlayTrigger(funcName, channel, val, Mac_Layer_RangeMin[fi], Mac_Layer_RangeMax[fi], bindingKey)
+                        end
+                     end
+                  End
+               end
+            end
+         End
+      end
+   end
+End
+
+// --- Legacy v1 Hardware Macro Dispatch ---
 Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
    var mName : String = "" // For the System Toggle HUD
    var looperTrigCh : Integer = -1
