@@ -7481,6 +7481,7 @@ Function LoadControllerMap(mapName : String)
    CurrentEditScope = savedEditScope
 
    Trace("CTRLMAP: Loaded [Map:" + mapName + "]")
+   UpdateControllerInfoDisplay()
 End
 
 // ---------------------------------------------------------
@@ -15381,6 +15382,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Save
                LoadControllerMap(mapName)
                CurrentEditScope = scopeSlot
                UpdateEditScopeDisplay()
+               UpdateControllerInfoDisplay()
                BuildLFOUsageIndex()
                RefreshLFOInspector()
            end
