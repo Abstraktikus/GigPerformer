@@ -401,8 +401,9 @@ Var
    // SECTION 6: ENGINE STATE & TIMERS
    // ========================================================================
    CurrentState : Integer = 0
-   CurrentSyncMode : Integer = 3 
-   RecordMode : Integer = 0 
+   CurrentSyncMode : Integer = 3
+   RecordMode : Integer = 0
+   SoloMuteStateDirty : Boolean = false
    GlobalSystemMode : Integer = 0
    
    IsUpdatingMatrix, IsUpdatingFilters, IsUpdatingNP, IsUpdatingBypassUI : Boolean = false
@@ -9274,6 +9275,46 @@ Function PartJumpPreview(dir : Integer)
     end
 End
 
+// Replay overlay toggle from Timeline (defined here to satisfy forward declaration
+// order — ActivateOverlay/DeactivateOverlay are defined later and call UpdateSoloMuteState
+// which has further dependencies). Sets Mem_* directly; SoloMuteStateDirty flag defers
+// the UpdateSoloMuteState call to the next TimerTick or parameter change.
+Function ReplayOverlayToggle(funcName : String, channel : Integer, state : Integer)
+   if funcName == "SMART_SOLO" then
+      Mem_SoloSmart[channel] = state
+      if state == 1 then Mem_SoloStrict[channel] = 0 end
+      SoloMuteStateDirty = true
+   elsif funcName == "STRICT_SOLO" then
+      Mem_SoloStrict[channel] = state
+      if state == 1 then Mem_SoloSmart[channel] = 0 end
+      SoloMuteStateDirty = true
+   elsif funcName == "USER_MUTE" then
+      Mem_UserMute[channel] = state
+      SoloMuteStateDirty = true
+   elsif funcName == "ROOT" then
+      Mem_NP_ChordMode[channel] = state
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ChordMode"), IntToFloat(state))
+   elsif funcName == "OCTAVER" then
+      Mem_NP_OctaverMode[channel] = state
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_OctaverMode"), IntToFloat(state))
+   elsif funcName == "HUMANIZE" then
+      Mem_NP_HumanizerMode[channel] = state
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_HumanizerMode"), IntToFloat(state))
+   elsif funcName == "SCALE" then
+      Mem_NP_ScaleMode[channel] = state
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ScaleMode"), IntToFloat(state))
+   elsif funcName == "RANGE" then
+      Mem_NP_VelRangeActive[channel] = state
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_VelRangeActive"), IntToFloat(state))
+   elsif funcName == "AUTO_SUSTAIN" then
+      Mem_NP_AutoSustain[channel] = state
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_AutoSustain"), IntToFloat(state))
+   end
+   if DebugMode then
+      Trace("TIMELINE REPLAY: " + funcName + " CH" + IntToString(channel) + " -> " + IntToString(state))
+   end
+End
+
 Function FireTimelineEvent(eventType : String, eventVal : Integer)
     var ovlFuncPlay : String
     var ovlChPlay, ovlStatePlay : Integer
@@ -9319,11 +9360,7 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
         ovlFuncPlay = CopySubstring(eventType, 4, Length(eventType) - 4)
         ovlChPlay = eventVal / 2
         ovlStatePlay = eventVal - (ovlChPlay * 2)
-        if ovlStatePlay == 1 then
-            ActivateOverlay(ovlFuncPlay, ovlChPlay)
-        else
-            DeactivateOverlay(ovlFuncPlay, ovlChPlay)
-        end
+        ReplayOverlayToggle(ovlFuncPlay, ovlChPlay, ovlStatePlay)
         Trace("TIMELINE: Overlay " + ovlFuncPlay + " CH" + IntToString(ovlChPlay) + " -> " + IntToString(ovlStatePlay))
     end
 
@@ -16601,6 +16638,12 @@ On TimerTick(ms : Double)
    if EmergencyKillSwitch and (TimeSinceStartup() - TraceLastTime) > 3000.0 then
        EmergencyKillSwitch = false
        Trace("EMERGENCY: Kill switch auto-recovered after 3s of calm")
+   end
+
+   // Deferred UpdateSoloMuteState from Timeline overlay replay
+   if SoloMuteStateDirty then
+      SoloMuteStateDirty = false
+      UpdateSoloMuteState()
    end
 
    // ========================================================================
