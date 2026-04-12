@@ -6029,6 +6029,13 @@ Function BuildRecDisplayLines()
                     else valStr = "Set: Unknown Part" end
                 elsif eType == "LoopMaster" then
                     valStr = LoopMasterActionName(DecodeLoopMasterActionCode(Arr_Rec_Val[i])) + " Ch" + (DecodeLoopMasterChIdx(Arr_Rec_Val[i]) + 1)
+                elsif IndexOfSubstring(eType, "OVL_", false) == 0 then
+                    var ovlFunc : String; var ovlCh, ovlState : Integer
+                    ovlFunc = CopySubstring(eType, 4, Length(eType) - 4)
+                    ovlCh = Arr_Rec_Val[i] / 2
+                    ovlState = Arr_Rec_Val[i] Mod 2
+                    if ovlState == 1 then valStr = "Overlay ON: " + ovlFunc + " CH" + IntToString(ovlCh)
+                    else valStr = "Overlay OFF: " + ovlFunc + " CH" + IntToString(ovlCh) end
                 else valStr = "Value: " + Arr_Rec_Val[i] end
 
                 line = IntToString(tms) + "ms | " + valStr + " [NEW]"
@@ -10017,6 +10024,18 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
             MacroFeedbackTimer = TimeSinceStartup() + 2000.0
             Trace("TIMELINE: Part -> " + Arr_SectionNames[eventVal])
         end
+    elsif IndexOfSubstring(eventType, "OVL_", false) == 0 then
+        // Overlay event playback: decode funcName, channel, state
+        var ovlFuncPlay : String; var ovlChPlay, ovlStatePlay : Integer
+        ovlFuncPlay = CopySubstring(eventType, 4, Length(eventType) - 4)
+        ovlChPlay = eventVal / 2
+        ovlStatePlay = eventVal Mod 2
+        if ovlStatePlay == 1 then
+            ActivateOverlay(ovlFuncPlay, ovlChPlay)
+        else
+            DeactivateOverlay(ovlFuncPlay, ovlChPlay)
+        end
+        Trace("TIMELINE: Overlay " + ovlFuncPlay + " CH" + IntToString(ovlChPlay) + " -> " + IntToString(ovlStatePlay))
     end
 
     Timeline_IsReplaying = false
@@ -11087,9 +11106,14 @@ End
 // v2 OVERLAY TRIGGER ENGINE
 // ---------------------------------------------------------
 
-// Stub for timeline recording — implemented in Plan C
+// Records overlay toggle events to the Timeline
+// Encodes: eventType = "OVL_<funcName>", eventVal = channel * 2 + state
 Function RecordTimelineOverlay(funcName : String, channel : Integer, state : Integer)
-   // Will call RecordTimelineEvent("OVERLAY", ...) when Timeline recording is active
+   if TimelineRecActive then
+      var encodedVal : Integer
+      encodedVal = channel * 2 + state
+      RecordTimelineEvent("OVL_" + funcName, encodedVal)
+   end
 End
 
 // Unified overlay function dispatcher — same actions as Strip Control UI
