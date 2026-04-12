@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-12
 **Status:** Design approved
-**Scope:** Major architectural change — new layer system, unified ControllerMap syntax (absorbs HardwareMap), enhanced Smart Solo, overlay trigger engine
+**Scope:** Major architectural change — new layer system, unified ControllerMap syntax (absorbs HardwareMap), enhanced Smart Solo, overlay trigger engine, VST validation, LBL_ControllerInfo redesign
 
 ---
 
@@ -370,14 +370,173 @@ MergePerLayer(active, delta):
 | **UpdateSoloMuteState** | Enhanced Smart Solo (RECH + Manual zone) |
 | **On TimerTick** | +Debounce timer management |
 | **Snapshot Load/Save** | No impact — layer state is transient |
-| **Timeline Recording** | Overlay toggles are NOT recorded (live performance actions) |
-| **LBL_ControllerInfo** | Redesign needed as hierarchical display — **to be designed separately** |
+| **Timeline Recording** | All overlay toggles ARE recorded (live performance = arrangement) |
+| **LBL_ControllerInfo** | Redesign as hierarchical display with VST validation status (see Section 8) |
 | **BTN_Capture/Export** | Captures/exports LAY0 only, layer overlays inherited from Default |
 | **LoadControllerMap side-effect** | CurrentEditScope capture/restore still required in new parser |
 
 ---
 
-## 8. Start Configuration (Test Setup)
+## 8. LBL_ControllerInfo — Hierarchical Display
+
+### 8.1 Display Structure
+
+The display uses the existing scroll-slider pattern (`LBL_ControllerInfo` + `SLD_ControllerInfo`) with pre-computed line arrays. Content is organized in sections:
+
+```
+--- MAPPING: SlowHip80erDream ---
+VST1: Omnisphere                              [OK]
+VST3: Triton Extreme                          [NOT LOADED]
+
+Macro 1 [Genos2:BTN1]:
+  LAY0: (1 Target)
+    -> VST1_GRS:48 Filter Cutoff {0.0,1.0}
+  LAY1: ROOT:CH1 {1.0,1.0}
+  LAY2: OCTAVER:CH1 {1.0,1.0}
+  LAY3: CHANNEL_BOUND_LFO
+
+Macro 6 [Genos2:BTN6]:
+  LAY0: (3 Targets)
+    -> VST1_GRS:53 Pad Level {0.0,1.0}
+    -> Ch11:CC18 Phaser {0.0,1.0}
+    -> Ch12:CC18 Phaser {0.0,1.0}
+  LAY1: ROOT:CH14 {1.0,1.0}
+  LAY2: OCTAVER:CH14 {1.0,1.0}
+  LAY3: CROSSFADER
+
+Macro 13 [Genos2:SLD1]:
+  LAY0: (1 Target)
+    -> VST1_GRS:0 Level (p1) {0.0,1.0}
+  LAY1: SMART_SOLO:CH1 {0.0,1.0}
+  LAY2: STRICT_SOLO:CH1 {0.0,1.0}
+
+Macro 16 [Genos2:SLD4]:
+  LAY0: (1 Target)
+    -> Ch13:CC7 Volume Triton       [BLOCKED: VST3 invalid]
+
+--- CC BINDINGS (Permanent) ---
+CC64: SYSTEM_TOGGLE
+CC11: CROSSFADER
+
+--- SYSTEM MACRO GROUPS ---
+>> Macro 51-66: Looper (Ch 1-16) <<
+>> Macro 67-82: Smart Solo (Ch 1-16) <<
+>> Macro 83-98: Strict Solo (Ch 1-16) <<
+>> Macro 99-114: User Mute (Ch 1-16) <<
+...
+
+--- HARDWARE ASSIGNMENTS ---
+Macro 1 = Genos2:BTN1
+Macro 2 = Genos2:BTN2
+...
+Macro 51 = Ch8:CC110
+Macro 83 = Ch6:CC110
+...
+```
+
+### 8.2 Display Rules
+
+| Element | Rendering |
+|---|---|
+| **Header** | Map name, no active layer indicator |
+| **VST status** | One line per declared VST: name + `[OK]` / `[NOT LOADED]` / `[MISMATCH]` |
+| **DEV source** | Device name from DeviceConfig (e.g., "Genos2" not "DEV0") |
+| **LAY0** | `(N Targets)` header, each target as indented `->` sub-line |
+| **LAY1-N** | Single line: function, channel, range |
+| **Parameter names** | Read from VST at runtime, stored in map (as today) |
+| **Blocked bindings** | `[BLOCKED: VSTx invalid]` suffix on affected targets |
+| **Section order** | User Macros → CC Bindings → SYS Macro Groups → HW Assignments |
+| **HW Assignments** | Separate section at bottom for BTN_ScopeSection navigation/learning |
+
+### 8.3 BTN_ScopeSection Navigation
+
+`BTN_ScopeSection_Prev` / `BTN_ScopeSection_Next` continue to navigate through the Hardware Assignments section for hardware learning (e.g., training functions onto pads). This section is always present, even though hardware sources are now inline in the macro definitions.
+
+---
+
+## 9. VST Validation & Map Naming
+
+### 9.1 Map Naming Convention
+
+Maps are named after their target VST, not the slot number:
+
+```
+Old: [Map:Standard_VST1]     → slot-based, fragile
+New: [Map:Omnisphere]         → VST-based, self-documenting
+```
+
+### 9.2 VST Declaration in Maps
+
+Each map that references VST parameters must declare expected VSTs:
+
+```ini
+[Map:Omnisphere]
+VST1=Omnisphere
+Macro1 = VST1_GRS:48
+Macro14 = VST1_GRS:0
+
+[Map:SlowHip80erDream]
+VST1=Omnisphere
+VST3=Triton Extreme
+Macro14 = VST1_GRS:1:Level (p2){0.000,0.442}
+Macro16 = Ch13:CC7:Volume Triton
+```
+
+The `[Map:Default]` also declares its expected VSTs. Song maps inherit Default's VST declarations and can override them.
+
+### 9.3 Validation at Map Load
+
+```
+On map load:
+  1. Parse VST declarations (VST1=Omnisphere, VST3=Triton Extreme)
+  2. For each declared VSTx:
+     Compare with GetPluginName(BLK_VST[x])
+  3. Result per VSTx: VALID / MISMATCH / NOT_LOADED
+  4. Store validation result for display and execution
+```
+
+### 9.4 Execution with Partial Validity
+
+Per-binding granularity — only VST-referencing bindings are affected:
+
+| Binding type | VST valid | Behavior |
+|---|---|---|
+| VST parameter | Yes | Execute normally |
+| VST parameter | No | **BLOCKED** — not executed, warning in display |
+| CC routing | — | Always execute |
+| Keyword (CROSSFADER, etc.) | — | Always execute |
+| SYSACT role | — | Always execute |
+| Overlay function | — | Always execute |
+
+If **no** VST bindings are valid, all VST macros are blocked but CC/Keyword/SYSACT/Overlay bindings continue working.
+
+### 9.5 BTN_SmartAdapt — New Logic
+
+```
+Old: SmartAdapt → search [Map:Standard_VST<currentSlot>]
+New: SmartAdapt → GetPluginName(BLK_VST[CurrentVstScope])
+     → search [Map:<PluginName>]
+     → Found: Load with validation
+     → Not found: Stay on current map, Trace warning
+```
+
+---
+
+## 10. Timeline Recording
+
+### All Overlay Toggles Are Recorded
+
+Every overlay toggle (Smart Solo, Strict Solo, Root, Octaver, User Mute, Humanize, Scale, Range, Auto Sustain) is recorded in the Timeline. This is live performance — everything played is part of the arrangement.
+
+If the user does not want a specific toggle recorded, they either:
+- Don't play it during recording
+- Delete it from the Timeline file afterwards
+
+No per-function recording filter. No `IsRecordableOverlay()` check. Every `ActivateOverlay()` / `DeactivateOverlay()` call triggers `RecordTimelineEvent()`.
+
+---
+
+## 11. Start Configuration (Test Setup)
 
 ### Layer Switch Assignment
 
@@ -418,14 +577,14 @@ BTN/SLD 1→CH1, 2→CH2, 3→CH3, 4→CH11, 5→CH12, 6→CH14
 
 ---
 
-## 9. Example Files
+## 12. Example Files
 
 See `examples/DeviceConfig_v2.txt` and `examples/ControllerMaps_v2.txt` for the complete reference configuration.
 
 ---
 
-## 10. Open Items
+## 13. Open Items
 
-- **LBL_ControllerInfo:** Hierarchical display design — to be discussed separately
 - **LAYERSWITCH SysEx signatures:** Exact OnData/OffData for Harmony and Talk to be validated on running hardware
 - **CHANNEL_BOUND_LFO / SYSACT_TRANSPORT_TOGGLE:** New system actions, implementation details TBD
+- **Existing ControllerMaps_v2.txt:** Needs update for VST-named maps (e.g., `[Map:Omnisphere]` instead of `[Map:Standard_VST1]`) and VST declarations
