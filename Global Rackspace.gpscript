@@ -3998,14 +3998,9 @@ Function RefreshCtrlMapList()
                         "; Format: [Map:Name]" + NEW_LINE + 
                         "; Source = BlockAlias : ParameterIndex" + NEW_LINE + 
                         NEW_LINE + 
-                        "[Map:Standard]" + NEW_LINE +
-                        "; Default Layout for multiple VSTs" + NEW_LINE +
-                        NEW_LINE +
-                        "[Map:Standard_VST1]" + NEW_LINE +
-                        "[Map:Standard_VST2]" + NEW_LINE +
-                        "[Map:Standard_VST3]" + NEW_LINE +
-                        "[Map:Standard_VST4]" + NEW_LINE +
-                        "[Map:Standard_VST5]" + NEW_LINE
+                        "[Map:Default]" + NEW_LINE +
+                        "; Base configuration" + NEW_LINE +
+                        NEW_LINE
                         
        if SaveStringToTextFile(ControllerMapFilePath, initialContent) then
            Trace("RefreshList: File created successfully.")
@@ -4309,7 +4304,7 @@ Function PreviewActiveControllerMaps(direction : Integer)
     if ExpectedMapName != "" and ExpectedMapName != "-" then validMaps <-- ExpectedMapName else validMaps <-- "Standard" end
     For i = 0; i < MAX_VSTS; i = i + 1 Do
         if not IsPluginBypassed(BLK_VST[i]) and GetPluginInfo(BLK_VST[i], 0) != "Element" then
-            validMaps <-- "Standard_VST" + (i + 1)
+            validMaps <-- GetPluginInfo(BLK_VST[i], 0)
         end
     End
     
@@ -7138,8 +7133,14 @@ Function GetDynamicStandardMap() Returns String
     
     // Decision logic
     if activeCount == 1 then
-        // Only one VST is active -> Load Map: Standard_VSTx
-        result = "Standard_VST" + IntToString(lastActiveIdx + 1)
+        // Only one VST is active -> Load Map by plugin name
+        var pName : String
+        pName = GetPluginInfo(BLK_VST[lastActiveIdx], 0)
+        if Length(pName) > 0 then
+            result = pName
+        else
+            result = "Standard"
+        end
     else
         // Multiple or none active -> Load Map: Standard
         result = "Standard"
@@ -7501,7 +7502,7 @@ Function EvaluateSmartAdapt()
             if Length(pluginName) > 0 then
                targetMap = pluginName
             else
-               targetMap = "Standard_VST" + IntToString(targetVstIdx + 1)  // fallback
+               targetMap = "Standard"  // fallback if plugin name is empty
             end
             
             // Only switch if we are not already on this map
@@ -7591,7 +7592,8 @@ Function AutoSwitchMapOnBypass()
     // Only auto-switch if the current map
     // is either "Standard" or already one of the dynamic VST maps.
     // Prevents a specifically loaded song map from being overwritten.
-    if CurrentCtrlMapName == "Standard" or IndexOfSubstring(CurrentCtrlMapName, "Standard_VST", false) == 0 then
+    // Auto-switch if current map is Default, Standard, or a VST plugin name
+    if CurrentCtrlMapName == "Standard" or CurrentCtrlMapName == "Default" or IsAutoSoloMapActive then
         LoadControllerMap(GetDynamicStandardMap())
     end
     
