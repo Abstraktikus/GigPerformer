@@ -3171,9 +3171,9 @@ End
 // Parses one binding token, stores at flat index. Returns detected layer index.
 Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx : Integer, bindIdx : Integer) Returns Integer
    var trimmed, rest, targetType, label, vstPart, rangeStr : String
-   var layerIdx, flatIdx, colonPos, colonPos2, bracePos, commaPos, closeBrace, underPos : Integer
-   var rangeMin, rangeMax : Double; rangeMin = 0.0; rangeMax = 1.0
-   var vstIdx, paramIdx : Integer
+   var layerIdx, flatIdx, colonPos, colonPos2, bracePos, commaPos, closeBrace, underPos, vstIdx, paramIdx : Integer
+   var rangeMin, rangeMax : Double = 0.0
+   rangeMax = 1.0
 
    trimmed = TrimString(token)
    layerIdx = targetLayerIdx
