@@ -224,7 +224,7 @@ Var
    LayerSwitch_State : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0]
 
    // --- Layer Map (switch combination → layer number) ---
-   MAX_LAYERS : Integer = 16
+   MAX_LAYERS : Integer = 4
    LayerMap_Count : Integer = 0
    LayerMap_DevIdx : Integer Array = [-1, -1, -1, -1]
    LayerMap_LayerIdx : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -744,8 +744,8 @@ Var
 
    // --- Unified Macro System (v2) ---
    MAX_SOURCES_PER_MACRO : Integer = 4
-   MAX_BINDINGS_PER_LAYER : Integer = 8
-   MAX_OVERLAY_BINDINGS : Integer = 512
+   MAX_BINDINGS_PER_LAYER : Integer = 4
+   MAX_OVERLAY_BINDINGS : Integer = 128
 
    // Source arrays: which hardware controls feed each macro
    Mac_SourceCount : Integer Array       // [MAX_MACROS]
