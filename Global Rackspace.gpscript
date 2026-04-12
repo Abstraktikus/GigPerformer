@@ -11281,12 +11281,20 @@ Function ExecuteKeywordBinding(keyword : String, val : Double)
    if keyword == "CROSSFADER" then
       SetWidgetValue(SLD_Crossfader, val)
    elsif keyword == "SCRUBBER" then
-      SetWidgetValue(SLD_Scrubber, val)
+      if SCRUB_MacroIdx >= 0 then
+         ScriptWrite_ExpectedPrev[SCRUB_MacroIdx] = ScriptWrite_Expected[SCRUB_MacroIdx]
+         ScriptWrite_Expected[SCRUB_MacroIdx] = val
+         SetParameter(ExternalArranger, SCRUB_MacroIdx, val)
+      end
    elsif keyword == "VST_SCOPE" then
       scopeIdx = Round(val * (MAX_VSTS - 1))
       ChangeVstScope(scopeIdx, 0)
    elsif keyword == "VST_BROWSE" then
-      SetWidgetValue(SLD_VSTBrowse, val)
+      if val > 0.5 then
+         TriggerVstPresetChange(1)
+      elsif val < 0.5 then
+         TriggerVstPresetChange(-1)
+      end
    elsif keyword == "VST_SCOPE_PREV" then
       if val > 0.5 then
          ChangeVstScope(-1, -1)
