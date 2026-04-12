@@ -1827,7 +1827,76 @@ Function ParseDeviceConfig()
 End
 
 // ----------------------------------------------------------------------------
-// 14b: Device Lookup
+// 14b: Layer State Machine
+// ----------------------------------------------------------------------------
+
+// Fires a layer-level overlay action (from DeviceConfig OVERLAY section)
+Function FireOverlayAction(action : String)
+   if action == "SYSTEM_TOGGLE_ON" then
+      SystemModeActive = true
+      if DebugMode then
+         Trace("OVERLAY ACTION: SYSTEM_TOGGLE_ON activated")
+      end
+   end
+End
+
+Function DeactivateOverlayAction(action : String)
+   if action == "SYSTEM_TOGGLE_ON" then
+      SystemModeActive = false
+      if DebugMode then
+         Trace("OVERLAY ACTION: SYSTEM_TOGGLE_ON deactivated")
+      end
+   end
+End
+
+// Computes active layer from switch states via LAYERMAP bitmask
+Function UpdateActiveLayer()
+   var oldLayer, bits, sw, ov : Integer
+   oldLayer = ActiveLayer
+
+   // Compute bitmask from switch states
+   bits = 0
+   For sw = 0; sw < LayerSwitch_Count; sw = sw + 1 Do
+      if LayerSwitch_State[sw] == 1 then
+         // bit shift: 2^sw
+         var bitVal : Integer = 1
+         var shift : Integer
+         For shift = 0; shift < sw; shift = shift + 1 Do
+            bitVal = bitVal * 2
+         End
+         bits = bits + bitVal
+      end
+   End
+
+   // Lookup in LAYERMAP
+   if bits < 16 then
+      ActiveLayer = LayerMap_LayerIdx[bits]
+   else
+      ActiveLayer = 0
+   end
+
+   // Fire/deactivate OVERLAY actions on layer change
+   if ActiveLayer <> oldLayer then
+      if DebugMode then
+         Trace("LAYER: " + IntToString(oldLayer) + " -> " + IntToString(ActiveLayer))
+      end
+      // Deactivate old layer overlays
+      For ov = 0; ov < Overlay_Count; ov = ov + 1 Do
+         if Overlay_Layer[ov] == oldLayer and Overlay_Layer[ov] <> ActiveLayer then
+            DeactivateOverlayAction(Overlay_Action[ov])
+         end
+      End
+      // Activate new layer overlays
+      For ov = 0; ov < Overlay_Count; ov = ov + 1 Do
+         if Overlay_Layer[ov] == ActiveLayer then
+            FireOverlayAction(Overlay_Action[ov])
+         end
+      End
+   end
+End
+
+// ----------------------------------------------------------------------------
+// 14c: Device Lookup
 // ----------------------------------------------------------------------------
 
 Function DeviceHasCap(devIdx : Integer, cap : Integer) Returns Boolean
