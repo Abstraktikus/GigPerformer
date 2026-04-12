@@ -46,7 +46,9 @@ A dual-zone crossfader blending VST audio outputs (up to 16 channels) against MI
 
 ### Controller Maps & Scene Morphing
 
-Define named controller maps per song that assign hardware knobs/sliders to VST parameters and MIDI CCs. Includes macro learning, scene morphing with min/max capture, and Smart Adapt for automatic parameter linking.
+Controller Maps use a unified format that combines hardware sources and parameter bindings in one file. A `[Map:Default]` section provides a base configuration; song-specific maps inherit from Default and only override what changes, keeping per-song definitions minimal.
+
+The system supports a **Layer System**: binary switches (SysEx, Note, or CC triggers configured in DeviceConfig) multiply physical controls across layers. Two layer switches on a Genos2 yield 4 layers -- 6 physical encoders become 24 virtual controls, 9 faders become 27. Any control can additionally act as an **Overlay Trigger Zone (OTZ)** -- a position- or movement-based trigger for overlay functions (Smart Solo, Root, Octaver, etc.), so a volume fader simultaneously triggers a solo when pushed past a threshold. Controls are referenced by DeviceConfig labels (e.g., `Enc1`, `Fader3`) rather than raw MIDI values, keeping maps hardware-neutral. Scene morphing with BTN_Capture_Min/Max and Smart Adapt for automatic VST-based map selection remain available on top of this.
 
 ![Controller Maps — Macro assignments with scene morphing](images/Controller%20Map.png)
 
@@ -62,7 +64,7 @@ The LFO Inspector is scope-driven: select a macro, see its bound LFO (or draft a
 
 ### Hardware Abstraction Layer (HAL)
 
-All hardware is configured via `DeviceConfig.txt` — no hardcoded MIDI devices in the script. Supports multiple devices with capability flags (transport sync, SysEx, joystick, crossfader targets, feedback). Switch your entire hardware setup by editing one text file.
+All hardware is configured via `DeviceConfig.txt` -- no hardcoded MIDI devices in the script. Supports multiple devices with capability flags (transport sync, SysEx, joystick, crossfader targets, feedback), layer switches for multiplying physical controls, and permanent bindings for controls that never change across maps. Switch your entire hardware setup by editing one text file.
 
 ### AnchorPlayback — Chord-Based Part Detection
 
@@ -74,6 +76,10 @@ A passive observer that detects where you actually are in a song by matching pla
 - **Timeline Integration** — updates the prompter display, fires marker events, and optionally corrects the timeline position via TimeJump
 
 Controlled by three buttons: `BTN_MIDIAnchorPlayback` (master switch), `BTN_TimeJump` (allow timeline correction), and `BTN_Autopilot` (fat-finger correction for RegMem).
+
+### Smart Solo Enhanced
+
+Smart Solo now considers both RECH input routing and the Manual zone setting (Upper/Lower/None) for each channel. This allows soloing the left hand while the right hand continues playing full accompaniment -- useful for exposing a bass line or pad without cutting the melody layer.
 
 ### SYS-MODE Navigation
 
@@ -107,10 +113,9 @@ Planned features, roughly in order of implementation:
 
 1. **Clone or download** this repository
 2. **Copy example configs** from `examples/` to your Gig Performer user folder:
-   - `DeviceConfig.txt` — edit to match your hardware
-   - `HardwareMap.txt` — map physical controls to functions
-   - `VstDatabase.txt` — register your VST plugins
-   - `ControllerMaps.txt` — define controller assignments
+   - `DeviceConfig.txt` -- edit to match your hardware
+   - `VstDatabase.txt` -- register your VST plugins
+   - `ControllerMaps.txt` -- define controller maps (`[Map:Default]` + song-specific overrides)
    - `GenosMapping.txt` — Genos voice mappings (if applicable)
 3. **Open** `examples/Test.gig` in Gig Performer
 4. **Paste** the Global Rackspace script (`Global Rackspace.gpscript`) into the Global Rackspace script editor
@@ -122,13 +127,13 @@ Planned features, roughly in order of implementation:
 
 ```
 ├── Global Rackspace.gpscript   # Main script (current version)
+├── Local Rackspace.gpscript    # Per-rackspace local script
 ├── Note Prozessor.gpscript     # Per-rackspace note processing
 ├── Genos2_Control V2.gpscript      # Genos2 integration script
 ├── examples/                       # Ready-to-use test data
-│   ├── DeviceConfig.txt            # Hardware configuration (INI format)
-│   ├── HardwareMap.txt             # Physical control mappings
+│   ├── DeviceConfig.txt            # Hardware + layer switches (INI format)
 │   ├── VstDatabase.txt             # VST plugin database
-│   ├── ControllerMaps.txt          # Controller map definitions
+│   ├── ControllerMaps.txt          # Controller maps (Default + song overrides)
 │   ├── GenosMapping.txt            # Genos voice/program mappings
 │   ├── System_Standard.ini         # System default snapshot
 │   ├── SlowHip80erDream.ini/.gpchord  # Example song
@@ -142,20 +147,26 @@ Planned features, roughly in order of implementation:
 
 ### DeviceConfig.txt
 
-Define your MIDI devices in INI format with capabilities:
+Define your MIDI devices in INI format with capabilities, controls, and layer switches:
 
 ```ini
-[Device:Genos]
-MidiIn=Genos2 Main
-MidiOut=Genos2 Main
-Channel=1
-Capabilities=TRANSPORT_SYNC, SYSEX_TRIGGER, CROSSFADER_TARGETS, JOYSTICK, MIDI_OUT
+[DEVICE:0]
+Name=Genos2
+MidiIn=Digital Keyboard-1
+MidiOut=Digital Keyboard-1
 
-[Control:MainFader]
-Device=Genos
-Type=FADER
-CC=7
-Feedback=CC
+[CONTROL:4]
+Device=0
+Label=Enc1
+Type=ENCODER
+CC=16
+
+[LAYERSWITCH:0]
+Device=0
+Label=Harmony
+Type=SYSEX
+OnData=F0 43 10 4C 04 00 0C 40 F7
+OffData=F0 43 10 4C 04 00 0C 7F F7
 ```
 
 ### Song Files (.ini)
@@ -167,7 +178,22 @@ Each song is a snapshot file with per-channel settings:
 Song=MySong.ini
 Type=DynamicRef
 Global_Crossfade=0.5
-ControllerMap=Standard_VST1
+ControllerMap=SlowHip80erDream
+```
+
+### ControllerMaps.txt
+
+Maps use a `[Map:Default]` base; song-specific maps inherit from it and only override what changes:
+
+```ini
+[Map:Default]
+Macro1 = DEV0:LAY0:Enc1; VST1_GRS:48{0.0,1.0}
+Macro2 = DEV0:LAY1:Enc1; ROOT:CH1{OTZ,1.0,1.0}
+Macro13 = DEV0:LAY0:Fader1; VST1_GRS:0{0.0,1.0}
+Macro22 = DEV0:LAY1:Fader1; VST1_GRS:0{0.0,1.0} | SMART_SOLO:CH1{OTZ,0.0,1.0}
+
+[Map:SlowHip80erDream]
+Macro1 = Ch11:CC74{0.0,1.0}
 ```
 
 ## Status
