@@ -7425,6 +7425,231 @@ Function IsSystemActionMacro(paramIdx : Integer) Returns Boolean
    result = res
 End
 
+// --- v2 Unified ControllerMap Loader ---
+
+// Copies all Def_Mac_* arrays into Mac_* (active) arrays
+Function CloneDefaultToActive()
+   var m, s, l, b, fi : Integer
+   For m = 1; m <= MAX_MACROS; m = m + 1 Do
+      Mac_SourceCount[m] = Def_Mac_SourceCount[m]
+      For s = 0; s < MAX_SOURCES_PER_MACRO; s = s + 1 Do
+         Mac_SourceDev[MacSourceIdx(m, s)] = Def_Mac_SourceDev[MacSourceIdx(m, s)]
+         Mac_SourceType[MacSourceIdx(m, s)] = Def_Mac_SourceType[MacSourceIdx(m, s)]
+         Mac_SourceCtrl[MacSourceIdx(m, s)] = Def_Mac_SourceCtrl[MacSourceIdx(m, s)]
+      End
+      For l = 0; l < MAX_LAYERS; l = l + 1 Do
+         Def_Mac_Layer_BindCount[MacLayerIdx(m, l)] = Def_Mac_Layer_BindCount[MacLayerIdx(m, l)]
+         For b = 0; b < MAX_BINDINGS_PER_LAYER; b = b + 1 Do
+            fi = MacLayerBindIdx(m, l, b)
+            Mac_Layer_TargetType[fi] = Def_Mac_Layer_TargetType[fi]
+            Mac_Layer_Target[fi] = Def_Mac_Layer_Target[fi]
+            Mac_Layer_RangeMin[fi] = Def_Mac_Layer_RangeMin[fi]
+            Mac_Layer_RangeMax[fi] = Def_Mac_Layer_RangeMax[fi]
+            Mac_Layer_Channel[fi] = Def_Mac_Layer_Channel[fi]
+            Mac_Layer_VSTIdx[fi] = Def_Mac_Layer_VSTIdx[fi]
+            Mac_Layer_ParamIdx[fi] = Def_Mac_Layer_ParamIdx[fi]
+            Mac_Layer_ParamLabel[fi] = Def_Mac_Layer_ParamLabel[fi]
+         End
+      End
+   End
+   // Clone VST declarations
+   For m = 0; m < MAX_VST_DECL; m = m + 1 Do
+      MapVST_Name[m] = DefMapVST_Name[m]
+   End
+End
+
+// Validates declared VSTs against loaded plugins
+Function ValidateMapVSTs()
+   var v : Integer; var loadedName : String
+   For v = 1; v < MAX_VST_DECL; v = v + 1 Do
+      if Length(MapVST_Name[v]) > 0 then
+         if MapVST_Name[v] == "*" then
+            MapVST_Valid[v] = 1  // wildcard = always valid
+         else
+            if v <= MAX_VSTS then
+               loadedName = GetPluginName(BLK_VST[v])
+            else
+               loadedName = ""
+            end
+            if Length(loadedName) == 0 then
+               MapVST_Valid[v] = 3  // not loaded
+            elsif loadedName == MapVST_Name[v] then
+               MapVST_Valid[v] = 1  // valid match
+            else
+               MapVST_Valid[v] = 2  // mismatch
+            end
+         end
+      else
+         MapVST_Valid[v] = 0  // not declared
+      end
+   End
+End
+
+// Rebuilds CC and SysAction reverse lookups from active Mac_* arrays
+Function RebuildReverseLookups()
+   var m, b, fi, lookupIdx : Integer
+
+   // Clear reverse lookups
+   For m = 0; m < 2048; m = m + 1 Do
+      Mac_ReverseLookup_CC[m] = -1
+   End
+   For m = 0; m <= MAX_MACROS; m = m + 1 Do
+      Mac_ReverseLookup_SysAct[m] = -1
+   End
+
+   // Build SysAction lookup from LAY0 bindings (isolation rule: must be sole binding)
+   For m = 1; m <= MAX_MACROS; m = m + 1 Do
+      var bindCount : Integer
+      bindCount = Mac_Layer_BindCount[MacLayerIdx(m, 0)]
+      if bindCount == 1 then
+         fi = MacLayerBindIdx(m, 0, 0)
+         if Mac_Layer_TargetType[fi] == "SYSACT" then
+            var actionName : String
+            actionName = Mac_Layer_Target[fi]
+            if IndexOfSubstring(actionName, "SYSACT_", false) == 0 then
+               actionName = CopySubstring(actionName, 7, Length(actionName) - 7)
+            end
+            var actionIdx : Integer
+            actionIdx = SysActIdx(actionName)
+            if actionIdx >= 0 then
+               Mac_ReverseLookup_SysAct[m] = actionIdx
+            end
+         end
+      end
+   End
+
+   // Build source-to-macro CC lookup
+   For m = 1; m <= MAX_MACROS; m = m + 1 Do
+      var srcCount : Integer
+      srcCount = Mac_SourceCount[m]
+      For b = 0; b < srcCount; b = b + 1 Do
+         var devIdx, ctrlIdx : Integer; var srcType : String
+         devIdx = Mac_SourceDev[MacSourceIdx(m, b)]
+         srcType = Mac_SourceType[MacSourceIdx(m, b)]
+         ctrlIdx = Mac_SourceCtrl[MacSourceIdx(m, b)]
+         var physCC, physCh : Integer
+         physCC = ResolveControlCC(devIdx, srcType, ctrlIdx)
+         physCh = ResolveControlChannel(devIdx, srcType, ctrlIdx)
+         if physCC >= 0 and physCh >= 0 then
+            lookupIdx = physCh * 128 + physCC
+            if lookupIdx >= 0 and lookupIdx < 2048 then
+               Mac_ReverseLookup_CC[lookupIdx] = m
+            end
+         end
+      End
+   End
+End
+
+// Main entry: loads Default on first call, song delta on subsequent calls
+Function LoadControllerMapV2(mapName : String)
+   var content, line, trimmedLine, currentMap : String
+   var lines : String Array
+   var i, eqPos : Integer; var key, val : String
+   var inDefaultMap, inTargetMap, isFirstLoad : Boolean
+   var savedEditScope : Integer
+   var ctrlMapFilePath : String
+
+   savedEditScope = CurrentEditScope
+   ctrlMapFilePath = UserSnapshotPath + "/ControllerMaps_v2.txt"
+
+   if mapName == "DEFAULT_INIT" then
+      isFirstLoad = true
+   else
+      isFirstLoad = false
+      CloneDefaultToActive()
+   end
+
+   if FileExists(ctrlMapFilePath) then
+      content = LoadStringFromTextFile(ctrlMapFilePath)
+      lines = SplitString(content, NEW_LINE)
+      inDefaultMap = false
+      inTargetMap = false
+      currentMap = ""
+
+      For i = 0; i < Size(lines); i = i + 1 Do
+         trimmedLine = TrimString(lines[i])
+
+         if Length(trimmedLine) > 0 and IndexOfSubstring(trimmedLine, ";", false) <> 0 then
+
+            // Section header
+            if IndexOfSubstring(trimmedLine, "[Map:Default]", false) == 0 then
+               inDefaultMap = true
+               inTargetMap = false
+               currentMap = "Default"
+
+            elsif IndexOfSubstring(trimmedLine, "[Map:", false) == 0 then
+               var closeBracket : Integer
+               closeBracket = IndexOfSubstring(trimmedLine, "]", false)
+               currentMap = CopySubstring(trimmedLine, 5, closeBracket - 5)
+               inDefaultMap = false
+               if not isFirstLoad and currentMap == mapName then
+                  inTargetMap = true
+               else
+                  inTargetMap = false
+               end
+
+            // Content lines
+            elsif inDefaultMap and isFirstLoad then
+               eqPos = IndexOfSubstring(trimmedLine, "=", false)
+               if eqPos > 0 then
+                  key = TrimString(CopySubstring(trimmedLine, 0, eqPos))
+                  val = TrimString(CopySubstring(trimmedLine, eqPos + 1, Length(trimmedLine) - eqPos - 1))
+                  // VST declarations
+                  if IndexOfSubstring(key, "VST", false) == 0 and IndexOfSubstring(key, "Macro", false) <> 0 then
+                     var vstDeclIdx : Integer
+                     vstDeclIdx = StringToInt(CopySubstring(key, 3, Length(key) - 3))
+                     if vstDeclIdx >= 1 and vstDeclIdx < MAX_VST_DECL then
+                        DefMapVST_Name[vstDeclIdx] = val
+                     end
+                  // Macro lines
+                  elsif IndexOfSubstring(key, "Macro", false) == 0 then
+                     ParseMacroLine(trimmedLine, true)
+                  end
+               end
+
+            elsif inTargetMap and not isFirstLoad then
+               eqPos = IndexOfSubstring(trimmedLine, "=", false)
+               if eqPos > 0 then
+                  key = TrimString(CopySubstring(trimmedLine, 0, eqPos))
+                  val = TrimString(CopySubstring(trimmedLine, eqPos + 1, Length(trimmedLine) - eqPos - 1))
+                  // VST declarations (override default)
+                  if IndexOfSubstring(key, "VST", false) == 0 and IndexOfSubstring(key, "Macro", false) <> 0 then
+                     var vstDeclIdx2 : Integer
+                     vstDeclIdx2 = StringToInt(CopySubstring(key, 3, Length(key) - 3))
+                     if vstDeclIdx2 >= 1 and vstDeclIdx2 < MAX_VST_DECL then
+                        MapVST_Name[vstDeclIdx2] = val
+                     end
+                  // Macro lines (per-layer merge)
+                  elsif IndexOfSubstring(key, "Macro", false) == 0 then
+                     ParseMacroLine(trimmedLine, false)
+                  end
+               end
+            end
+         end
+      End
+   else
+      Trace("CTRLMAP_V2: File not found: " + ctrlMapFilePath)
+   end
+
+   ValidateMapVSTs()
+   RebuildReverseLookups()
+   CurrentCtrlMapName = mapName
+
+   // Reset debounce timers
+   var dbIdx : Integer
+   For dbIdx = 0; dbIdx < MAX_OVERLAY_BINDINGS; dbIdx = dbIdx + 1 Do
+      Debounce_Active[dbIdx] = false
+      Debounce_Timer[dbIdx] = 0.0
+      Debounce_State[dbIdx] = 0
+   End
+
+   CurrentEditScope = savedEditScope
+
+   Trace("CTRLMAP_V2: Loaded [Map:" + mapName + "]")
+End
+
+// --- Legacy v1 ControllerMap (kept for reference, to be removed) ---
+
 Function LoadControllerMap(mapName : String)
    var content, line, key, valuePart, header : String
    var lines, parts, groupParts, blockParts, paramParts : String Array
