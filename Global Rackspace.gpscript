@@ -17518,6 +17518,19 @@ On TimerTick(ms : Double)
    anyLooperActive = false
 
    // ========================================================================
+   // OVERLAY DEBOUNCE TIMER CHECK (v2)
+   // ========================================================================
+   var dbIdx : Integer; var nowDb : Double = 0.0
+   nowDb = TimeSinceStartup()
+   For dbIdx = 0; dbIdx < MAX_OVERLAY_BINDINGS; dbIdx = dbIdx + 1 Do
+      if Debounce_Active[dbIdx] then
+         if nowDb - Debounce_Timer[dbIdx] > DEBOUNCE_TIMEOUT then
+            Debounce_Active[dbIdx] = false
+         end
+      end
+   End
+
+   // ========================================================================
    // EMERGENCY KILL SWITCH AUTO-RECOVERY
    // ========================================================================
    // The Trace() watchdog at line ~845 flips EmergencyKillSwitch when it
