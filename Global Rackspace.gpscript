@@ -10451,14 +10451,14 @@ Function ActivateOverlay(funcName : String, channel : Integer)
    if funcName == "SMART_SOLO" then
       Mem_SoloSmart[channel] = 1
       Mem_SoloStrict[channel] = 0
-      UpdateSoloMuteState()
+      SoloMuteStateDirty = true
    elsif funcName == "STRICT_SOLO" then
       Mem_SoloStrict[channel] = 1
       Mem_SoloSmart[channel] = 0
-      UpdateSoloMuteState()
+      SoloMuteStateDirty = true
    elsif funcName == "USER_MUTE" then
       Mem_UserMute[channel] = 1
-      UpdateSoloMuteState()
+      SoloMuteStateDirty = true
    elsif funcName == "ROOT" then
       Mem_NP_ChordMode[channel] = 1
       SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ChordMode"), 1.0)
@@ -10487,13 +10487,13 @@ End
 Function DeactivateOverlay(funcName : String, channel : Integer)
    if funcName == "SMART_SOLO" then
       Mem_SoloSmart[channel] = 0
-      UpdateSoloMuteState()
+      SoloMuteStateDirty = true
    elsif funcName == "STRICT_SOLO" then
       Mem_SoloStrict[channel] = 0
-      UpdateSoloMuteState()
+      SoloMuteStateDirty = true
    elsif funcName == "USER_MUTE" then
       Mem_UserMute[channel] = 0
-      UpdateSoloMuteState()
+      SoloMuteStateDirty = true
    elsif funcName == "ROOT" then
       Mem_NP_ChordMode[channel] = 0
       SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ChordMode"), 0.0)
