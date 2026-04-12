@@ -11305,11 +11305,11 @@ Function ExecuteKeywordBinding(keyword : String, val : Double)
       end
    elsif keyword == "VST_PREV" then
       if val > 0.5 then
-         ChangeVstPreset(-1)
+         TriggerVstPresetChange(-1)
       end
    elsif keyword == "VST_NEXT" then
       if val > 0.5 then
-         ChangeVstPreset(1)
+         TriggerVstPresetChange(1)
       end
    elsif keyword == "SYSMODE_CYCLE" then
       if val > 0.5 then
@@ -11317,7 +11317,7 @@ Function ExecuteKeywordBinding(keyword : String, val : Double)
       end
    elsif keyword == "REC_SONGPART" then
       if val > 0.5 then
-         RecordSongPart()
+         ExecuteRecSongpart()
       end
    elsif keyword == "SYSTEM_TOGGLE" then
       if val > 0.5 then
