@@ -7454,6 +7454,7 @@ End
 Function EvaluateSmartAdapt()
     var i, activeVSTs, targetVstIdx : Integer
     var targetMap : String = ""
+    var pluginName : String = ""
 
     // 1. GUARD: Is the feature enabled?
     if GetWidgetValue(BTN_SmartAdapt) > 0.5 then
@@ -7473,7 +7474,6 @@ Function EvaluateSmartAdapt()
         // 3. ISOLATION ACTIVE: Exactly ONE VST is active! (regardless of mode)
         if activeVSTs == 1 then
             // Search by plugin name instead of slot number
-            var pluginName : String
             pluginName = GetPluginName(BLK_VST[targetVstIdx])
             if Length(pluginName) > 0 then
                targetMap = pluginName
