@@ -7350,7 +7350,7 @@ Function LoadControllerMap(mapName : String)
    var lines : String Array
    var i, eqPos, closeBracket, vstDeclIdx, vstDeclIdx2 : Integer; var key, val : String
    var inDefaultMap, inTargetMap, isFirstLoad : Boolean
-   var savedEditScope : Integer
+   var savedEditScope, dbIdx : Integer
    var ctrlMapFilePath : String
 
    savedEditScope = CurrentEditScope
@@ -7437,7 +7437,6 @@ Function LoadControllerMap(mapName : String)
    CurrentCtrlMapName = mapName
 
    // Reset debounce timers
-   var dbIdx : Integer
    For dbIdx = 0; dbIdx < MAX_OVERLAY_BINDINGS; dbIdx = dbIdx + 1 Do
       Debounce_Active[dbIdx] = false
       Debounce_Timer[dbIdx] = 0.0
