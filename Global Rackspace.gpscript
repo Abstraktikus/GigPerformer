@@ -7119,6 +7119,7 @@ End
 // ---------------------------------------------------------
 Function GetDynamicStandardMap() Returns String
     var i, activeCount, lastActiveIdx : Integer
+    var pName : String = ""
     activeCount = 0
     lastActiveIdx = -1
     
@@ -7134,7 +7135,6 @@ Function GetDynamicStandardMap() Returns String
     // Decision logic
     if activeCount == 1 then
         // Only one VST is active -> Load Map by plugin name
-        var pName : String
         pName = GetPluginInfo(BLK_VST[lastActiveIdx], 0)
         if Length(pName) > 0 then
             result = pName
