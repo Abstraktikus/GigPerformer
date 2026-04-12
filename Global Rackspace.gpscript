@@ -5649,7 +5649,7 @@ Function BuildRecDisplayLines()
                 elsif IndexOfSubstring(eType, "OVL_", false) == 0 then
                     ovlFunc = CopySubstring(eType, 4, Length(eType) - 4)
                     ovlCh = Arr_Rec_Val[i] / 2
-                    ovlState = Arr_Rec_Val[i] Mod 2
+                    ovlState = Arr_Rec_Val[i] - (ovlCh * 2)
                     if ovlState == 1 then valStr = "Overlay ON: " + ovlFunc + " CH" + IntToString(ovlCh)
                     else valStr = "Overlay OFF: " + ovlFunc + " CH" + IntToString(ovlCh) end
                 else valStr = "Value: " + Arr_Rec_Val[i] end
@@ -9318,7 +9318,7 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
         var ovlFuncPlay : String; var ovlChPlay, ovlStatePlay : Integer
         ovlFuncPlay = CopySubstring(eventType, 4, Length(eventType) - 4)
         ovlChPlay = eventVal / 2
-        ovlStatePlay = eventVal Mod 2
+        ovlStatePlay = eventVal - (ovlChPlay * 2)
         if ovlStatePlay == 1 then
             ActivateOverlay(ovlFuncPlay, ovlChPlay)
         else
