@@ -1658,6 +1658,7 @@ Function ParseDeviceConfig()
    var content, line, key, val, section : String
    var lines : String Array
    var i, eqPos, currentDevIdx, currentCtrlIdx, currentSysExIdx : Integer
+   var currentSwitchIdx, currentMapIdx, currentPermIdx, currentOvlIdx : Integer
 
    if not FileExists(DeviceConfigFilePath) then
       Trace("HAL: No DeviceConfig.txt found at " + DeviceConfigFilePath + ". Running in fallback mode.")
@@ -1668,6 +1669,14 @@ Function ParseDeviceConfig()
       currentDevIdx = -1
       currentCtrlIdx = -1
       currentSysExIdx = -1
+      currentSwitchIdx = -1
+      currentMapIdx = -1
+      currentPermIdx = -1
+      currentOvlIdx = -1
+      LayerSwitch_Count = 0
+      Permanent_Count = 0
+      Overlay_Count = 0
+      LayerMap_Count = 0
 
       CTRL_DevIdx = []; CTRL_Type = []; CTRL_CC = []; CTRL_Channel = []
       CTRL_RangeMin = []; CTRL_RangeMax = []; CTRL_Feedback = []; CTRL_Label = []
@@ -1703,6 +1712,32 @@ Function ParseDeviceConfig()
             SYSEX_DevIdx <-- 0; SYSEX_Purpose <-- ""; SYSEX_Data <-- ""
             SYSEX_Count = SYSEX_Count + 1
 
+         elsif IndexOfSubstring(line, "[LAYERSWITCH:", false) == 0 then
+            section = "LAYERSWITCH"
+            currentSwitchIdx = StringToInt(CopySubstring(line, 13, 1))
+            if currentSwitchIdx >= 0 and currentSwitchIdx < MAX_SWITCHES then
+               if currentSwitchIdx >= LayerSwitch_Count then
+                  LayerSwitch_Count = currentSwitchIdx + 1
+               end
+            end
+
+         elsif IndexOfSubstring(line, "[LAYERMAP:", false) == 0 then
+            section = "LAYERMAP"
+            currentMapIdx = StringToInt(CopySubstring(line, 10, 1))
+            if currentMapIdx >= LayerMap_Count then
+               LayerMap_Count = currentMapIdx + 1
+            end
+
+         elsif IndexOfSubstring(line, "[PERMANENT:", false) == 0 then
+            section = "PERMANENT"
+            currentPermIdx = Permanent_Count
+            Permanent_Count = Permanent_Count + 1
+
+         elsif IndexOfSubstring(line, "[OVERLAY:", false) == 0 then
+            section = "OVERLAY"
+            currentOvlIdx = Overlay_Count
+            Overlay_Count = Overlay_Count + 1
+
          else
             eqPos = IndexOfSubstring(line, "=", false)
             if eqPos > 0 then
@@ -1736,12 +1771,58 @@ Function ParseDeviceConfig()
                      key == "Purpose"  Do SYSEX_Purpose[currentSysExIdx] = val
                      key == "Data"     Do SYSEX_Data[currentSysExIdx] = val
                   End
+
+               elsif section == "LAYERSWITCH" and currentSwitchIdx >= 0 and currentSwitchIdx < MAX_SWITCHES then
+                  Select
+                     key == "Device"   Do LayerSwitch_DevIdx[currentSwitchIdx] = StringToInt(val)
+                     key == "Label"    Do LayerSwitch_Label[currentSwitchIdx] = val
+                     key == "Type"     Do LayerSwitch_Type[currentSwitchIdx] = val
+                     key == "OnData"   Do LayerSwitch_OnData[currentSwitchIdx] = val
+                     key == "OffData"  Do LayerSwitch_OffData[currentSwitchIdx] = val
+                  End
+
+               elsif section == "LAYERMAP" and currentMapIdx >= 0 then
+                  if key == "Device" then
+                     LayerMap_DevIdx[currentMapIdx] = StringToInt(val)
+                  elsif IndexOfSubstring(key, "State_", false) == 0 then
+                     var stateNum : Integer
+                     stateNum = StringToInt(CopySubstring(key, 6, Length(key) - 6))
+                     // Parse "LAY3" → 3
+                     if IndexOfSubstring(val, "LAY", false) == 0 then
+                        LayerMap_LayerIdx[stateNum] = StringToInt(CopySubstring(val, 3, Length(val) - 3))
+                     end
+                  end
+
+               elsif section == "PERMANENT" and currentPermIdx >= 0 and currentPermIdx < MAX_PERMANENT then
+                  Select
+                     key == "Device"    Do Permanent_DevIdx[currentPermIdx] = StringToInt(val)
+                     key == "Source"    Do
+                        // Parse "CC64" → 64
+                        if IndexOfSubstring(val, "CC", false) == 0 then
+                           Permanent_SourceCC[currentPermIdx] = StringToInt(CopySubstring(val, 2, Length(val) - 2))
+                        end
+                     key == "Function"  Do Permanent_Function[currentPermIdx] = val
+                  End
+
+               elsif section == "OVERLAY" and currentOvlIdx >= 0 and currentOvlIdx < MAX_OVERLAYS then
+                  Select
+                     key == "Device"   Do Overlay_DevIdx[currentOvlIdx] = StringToInt(val)
+                     key == "Layer"    Do Overlay_Layer[currentOvlIdx] = StringToInt(val)
+                     key == "Action"   Do Overlay_Action[currentOvlIdx] = val
+                  End
                end
             end
          end
       End
 
       Trace("HAL: Loaded " + IntToString(CTRL_Count) + " controls, " + IntToString(SYSEX_Count) + " SysEx commands.")
+      if LayerSwitch_Count > 0 then
+         Trace("HAL: " + IntToString(LayerSwitch_Count) + " layer switches, " + IntToString(Permanent_Count) + " permanent bindings, " + IntToString(Overlay_Count) + " overlay actions")
+         var sw : Integer
+         For sw = 0; sw < LayerSwitch_Count; sw = sw + 1 Do
+            Trace("  Switch " + IntToString(sw) + ": " + LayerSwitch_Label[sw] + " [" + LayerSwitch_Type[sw] + "]")
+         End
+      end
    end
 End
 
