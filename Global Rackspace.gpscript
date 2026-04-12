@@ -3197,54 +3197,95 @@ Function AppendBoolN(arr : Boolean Array, count : Integer, val : Boolean) Return
    result = arr
 End
 
-Function InitMacroArrays()
-   // +1 because macroIdx is 1-based (Macro1..Macro256 → index 1..256)
-   // GP limits ~256 appends per loop, so we use nested loops: outer * inner >= needed size
-   // macroSlots=257, totalSources=257*4=1028, totalLayerSlots=257*4=1028, totalBindings=257*4*4=4112
+// Split into sub-functions to work around potential GP per-function append limits
+Function InitMacroArrays_Sources()
    var o, i : Integer
-
-   // Source arrays (need 257 and 1028 elements)
    Mac_SourceCount = []; For o = 0; o < 2; o = o + 1 Do For i = 0; i < 129; i = i + 1 Do Mac_SourceCount <-- 0 End End
    Mac_SourceDev = []; For o = 0; o < 5; o = o + 1 Do For i = 0; i < 206; i = i + 1 Do Mac_SourceDev <-- -1 End End
    Mac_SourceType = []; For o = 0; o < 5; o = o + 1 Do For i = 0; i < 206; i = i + 1 Do Mac_SourceType <-- "" End End
    Mac_SourceCtrl = []; For o = 0; o < 5; o = o + 1 Do For i = 0; i < 206; i = i + 1 Do Mac_SourceCtrl <-- -1 End End
-
-   // Per-layer binding arrays (need 1028 and 4112 elements)
-   Mac_Layer_BindCount = []; For o = 0; o < 5; o = o + 1 Do For i = 0; i < 206; i = i + 1 Do Mac_Layer_BindCount <-- 0 End End
-   Mac_Layer_TargetType = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_TargetType <-- "" End End
-   Mac_Layer_Target = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_Target <-- "" End End
-   Mac_Layer_RangeMin = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_RangeMin <-- 0.0 End End
-   Mac_Layer_RangeMax = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_RangeMax <-- 1.0 End End
-   Mac_Layer_Channel = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_Channel <-- -1 End End
-   Mac_Layer_VSTIdx = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_VSTIdx <-- -1 End End
-   Mac_Layer_ParamIdx = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_ParamIdx <-- -1 End End
-   Mac_Layer_ParamLabel = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_ParamLabel <-- "" End End
-
-   // Default map arrays (same sizes)
    Def_Mac_SourceCount = []; For o = 0; o < 2; o = o + 1 Do For i = 0; i < 129; i = i + 1 Do Def_Mac_SourceCount <-- 0 End End
    Def_Mac_SourceDev = []; For o = 0; o < 5; o = o + 1 Do For i = 0; i < 206; i = i + 1 Do Def_Mac_SourceDev <-- -1 End End
    Def_Mac_SourceType = []; For o = 0; o < 5; o = o + 1 Do For i = 0; i < 206; i = i + 1 Do Def_Mac_SourceType <-- "" End End
    Def_Mac_SourceCtrl = []; For o = 0; o < 5; o = o + 1 Do For i = 0; i < 206; i = i + 1 Do Def_Mac_SourceCtrl <-- -1 End End
+End
+
+Function InitMacroArrays_BindCount()
+   var o, i : Integer
+   Mac_Layer_BindCount = []; For o = 0; o < 5; o = o + 1 Do For i = 0; i < 206; i = i + 1 Do Mac_Layer_BindCount <-- 0 End End
    Def_Mac_Layer_BindCount = []; For o = 0; o < 5; o = o + 1 Do For i = 0; i < 206; i = i + 1 Do Def_Mac_Layer_BindCount <-- 0 End End
+End
+
+Function InitMacroArrays_Bindings1()
+   var o, i : Integer
+   Mac_Layer_TargetType = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_TargetType <-- "" End End
+   Mac_Layer_Target = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_Target <-- "" End End
+End
+
+Function InitMacroArrays_Bindings2()
+   var o, i : Integer
+   Mac_Layer_RangeMin = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_RangeMin <-- 0.0 End End
+   Mac_Layer_RangeMax = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_RangeMax <-- 1.0 End End
+End
+
+Function InitMacroArrays_Bindings3()
+   var o, i : Integer
+   Mac_Layer_Channel = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_Channel <-- -1 End End
+   Mac_Layer_VSTIdx = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_VSTIdx <-- -1 End End
+End
+
+Function InitMacroArrays_Bindings4()
+   var o, i : Integer
+   Mac_Layer_ParamIdx = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_ParamIdx <-- -1 End End
+   Mac_Layer_ParamLabel = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Mac_Layer_ParamLabel <-- "" End End
+End
+
+Function InitMacroArrays_DefBindings1()
+   var o, i : Integer
    Def_Mac_Layer_TargetType = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Def_Mac_Layer_TargetType <-- "" End End
    Def_Mac_Layer_Target = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Def_Mac_Layer_Target <-- "" End End
+End
+
+Function InitMacroArrays_DefBindings2()
+   var o, i : Integer
    Def_Mac_Layer_RangeMin = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Def_Mac_Layer_RangeMin <-- 0.0 End End
    Def_Mac_Layer_RangeMax = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Def_Mac_Layer_RangeMax <-- 1.0 End End
+End
+
+Function InitMacroArrays_DefBindings3()
+   var o, i : Integer
    Def_Mac_Layer_Channel = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Def_Mac_Layer_Channel <-- -1 End End
    Def_Mac_Layer_VSTIdx = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Def_Mac_Layer_VSTIdx <-- -1 End End
+End
+
+Function InitMacroArrays_DefBindings4()
+   var o, i : Integer
    Def_Mac_Layer_ParamIdx = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Def_Mac_Layer_ParamIdx <-- -1 End End
    Def_Mac_Layer_ParamLabel = []; For o = 0; o < 21; o = o + 1 Do For i = 0; i < 196; i = i + 1 Do Def_Mac_Layer_ParamLabel <-- "" End End
+End
 
-   // Reverse lookups (2048 = 11 * 187 = 2057 >= 2048, 257 = 2 * 129 = 258 >= 257)
+Function InitMacroArrays_Lookups()
+   var o, i : Integer
    Mac_ReverseLookup_CC = []; For o = 0; o < 11; o = o + 1 Do For i = 0; i < 187; i = i + 1 Do Mac_ReverseLookup_CC <-- -1 End End
    Mac_ReverseLookup_SysAct = []; For o = 0; o < 2; o = o + 1 Do For i = 0; i < 129; i = i + 1 Do Mac_ReverseLookup_SysAct <-- -1 End End
-
-   // Debounce (128 elements, fits in single loop)
    Debounce_Active = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_Active <-- false End
    Debounce_Timer = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_Timer <-- 0.0 End
    Debounce_State = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_State <-- 0 End
+End
 
-   Trace("MACRO INIT: Arrays initialized (VSTIdx=" + IntToString(Size(Mac_Layer_VSTIdx)) + " SourceDev=" + IntToString(Size(Mac_SourceDev)) + ")")
+Function InitMacroArrays()
+   InitMacroArrays_Sources()
+   InitMacroArrays_BindCount()
+   InitMacroArrays_Bindings1()
+   InitMacroArrays_Bindings2()
+   InitMacroArrays_Bindings3()
+   InitMacroArrays_Bindings4()
+   InitMacroArrays_DefBindings1()
+   InitMacroArrays_DefBindings2()
+   InitMacroArrays_DefBindings3()
+   InitMacroArrays_DefBindings4()
+   InitMacroArrays_Lookups()
+   Trace("MACRO INIT: VSTIdx=" + IntToString(Size(Mac_Layer_VSTIdx)) + " SourceDev=" + IntToString(Size(Mac_SourceDev)) + " CC_Lookup=" + IntToString(Size(Mac_ReverseLookup_CC)))
 End
 
 // --- Unified Macro Parser ---
