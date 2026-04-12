@@ -16908,7 +16908,38 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
       if byte1 == 0x43 then
           LastHardwarePulseTime = TimeSinceStartup()
       end
-      
+
+      // ---> LAYER SWITCH MATCHING (v2) <---
+      // Build full hex string from incoming SysEx for comparison
+      var incomingHexFull : String = ""
+      var byteIdx : Integer
+      For byteIdx = 0; byteIdx < msgSize; byteIdx = byteIdx + 1 Do
+         if byteIdx > 0 then
+            incomingHexFull = incomingHexFull + " "
+         end
+         incomingHexFull = incomingHexFull + IntToHexString(SM_GetValue(m, byteIdx))
+      End
+      incomingHexFull = Upper(incomingHexFull)
+
+      var swIdx : Integer
+      For swIdx = 0; swIdx < LayerSwitch_Count; swIdx = swIdx + 1 Do
+         if LayerSwitch_DevIdx[swIdx] == 0 and LayerSwitch_Type[swIdx] == "SYSEX" then
+            if incomingHexFull == Upper(LayerSwitch_OnData[swIdx]) then
+               LayerSwitch_State[swIdx] = 1
+               UpdateActiveLayer()
+               if DebugMode then
+                  Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): ON")
+               end
+            elsif incomingHexFull == Upper(LayerSwitch_OffData[swIdx]) then
+               LayerSwitch_State[swIdx] = 0
+               UpdateActiveLayer()
+               if DebugMode then
+                  Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): OFF")
+               end
+            end
+         end
+      End
+
       // 1. BPM SYNC
       if byte1 == 0x43 and byte2 == 0x7E and byte3 == 0x01 Then
           IncomingFromArranger = true; LoopSafetyTimer = TimeSinceStartup()
