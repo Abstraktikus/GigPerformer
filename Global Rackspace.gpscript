@@ -11558,7 +11558,7 @@ Function FireSystemAction(actionIdx : Integer)
 End
 
 Function ProcessHardwareCC(m : ControlChangeMessage)
-   var ch, cc, i : Integer
+   var ch, cc, i, lookupIdx, macroFromLookup, pIdx : Integer
    var val : Double = 0.0
    var mName : String = ""
 
@@ -11675,7 +11675,6 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
        End
        
        // --- C: REVERSE LOOKUP (CC -> Macro) ---
-       var lookupIdx, macroFromLookup : Integer
        lookupIdx = ch * 128 + cc
        if lookupIdx >= 0 and lookupIdx < 2048 then
           macroFromLookup = Mac_ReverseLookup_CC[lookupIdx]
@@ -11685,7 +11684,6 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
        end
 
        // --- D: PERMANENT BINDINGS (CC64=SYSTEM_TOGGLE, CC11=CROSSFADER, etc.) ---
-       var pIdx : Integer
        For pIdx = 0; pIdx < Permanent_Count; pIdx = pIdx + 1 Do
           if Permanent_SourceCC[pIdx] == cc then
              ExecuteKeywordBinding(Permanent_Function[pIdx], val)
