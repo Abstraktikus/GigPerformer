@@ -3068,6 +3068,237 @@ End
 // SECTION 17: CONTROLLER MAP ENGINE
 // ============================================================================
 
+// --- v2 Unified Macro Parser ---
+
+// Parses "DEV0:SLD3 & DEV1:SLD1" into Mac_Source* arrays for macroIdx
+Function ParseMacroSource(macroIdx : Integer, sourceStr : String) Returns Integer
+   var count, devNum, ctrlNum, colonPos, ampPos : Integer
+   var remaining, onePart, typePart : String
+   count = 0
+   remaining = TrimString(sourceStr)
+
+   var iteration : Integer
+   For iteration = 0; iteration < MAX_SOURCES_PER_MACRO; iteration = iteration + 1 Do
+      if Length(remaining) > 0 then
+         ampPos = IndexOfSubstring(remaining, "&", false)
+         if ampPos < 0 then
+            onePart = TrimString(remaining)
+            remaining = ""
+         else
+            onePart = TrimString(CopySubstring(remaining, 0, ampPos))
+            remaining = TrimString(CopySubstring(remaining, ampPos + 1, Length(remaining) - ampPos - 1))
+         end
+         // Pattern: DEV<n>:<TYPE><n>
+         if IndexOfSubstring(onePart, "DEV", false) == 0 then
+            colonPos = IndexOfSubstring(onePart, ":", false)
+            if colonPos > 0 then
+               devNum = StringToInt(CopySubstring(onePart, 3, colonPos - 3))
+               typePart = CopySubstring(onePart, colonPos + 1, 3)
+               ctrlNum = StringToInt(CopySubstring(onePart, colonPos + 4, Length(onePart) - colonPos - 4))
+               Mac_SourceDev[MacSourceIdx(macroIdx, count)] = devNum
+               Mac_SourceType[MacSourceIdx(macroIdx, count)] = typePart
+               Mac_SourceCtrl[MacSourceIdx(macroIdx, count)] = ctrlNum
+               count = count + 1
+            end
+         end
+      end
+   End
+   Mac_SourceCount[macroIdx] = count
+   Result = count
+End
+
+// Parses one binding token, stores at flat index. Returns detected layer index.
+Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx : Integer, bindIdx : Integer) Returns Integer
+   var trimmed, rest, targetType, label : String
+   var layerIdx, flatIdx, colonPos, colonPos2, bracePos : Integer
+   var rangeMin, rangeMax : Double; rangeMin = 0.0; rangeMax = 1.0
+   var vstIdx, paramIdx : Integer
+
+   trimmed = TrimString(token)
+   layerIdx = targetLayerIdx
+
+   // Check for LAY prefix: "LAY1:..."
+   if IndexOfSubstring(trimmed, "LAY", false) == 0 then
+      colonPos = IndexOfSubstring(trimmed, ":", false)
+      if colonPos > 0 then
+         layerIdx = StringToInt(CopySubstring(trimmed, 3, colonPos - 3))
+         trimmed = CopySubstring(trimmed, colonPos + 1, Length(trimmed) - colonPos - 1)
+      end
+   end
+
+   // Extract range {min,max} if present
+   bracePos = IndexOfSubstring(trimmed, "{", false)
+   if bracePos >= 0 then
+      var rangeStr : String; var commaPos, closeBrace : Integer
+      closeBrace = IndexOfSubstring(trimmed, "}", false)
+      rangeStr = CopySubstring(trimmed, bracePos + 1, closeBrace - bracePos - 1)
+      commaPos = IndexOfSubstring(rangeStr, ",", false)
+      if commaPos > 0 then
+         rangeMin = StringToDouble(TrimString(CopySubstring(rangeStr, 0, commaPos)))
+         rangeMax = StringToDouble(TrimString(CopySubstring(rangeStr, commaPos + 1, Length(rangeStr) - commaPos - 1)))
+      end
+      trimmed = TrimString(CopySubstring(trimmed, 0, bracePos))
+   end
+
+   flatIdx = MacLayerBindIdx(macroIdx, layerIdx, bindIdx)
+
+   // Classify target type
+   if IndexOfSubstring(trimmed, "VST", false) == 0 and IndexOfSubstring(trimmed, ":", false) > 0 then
+      targetType = "VST"
+      colonPos = IndexOfSubstring(trimmed, ":", false)
+      if colonPos > 0 then
+         var vstPart : String
+         vstPart = CopySubstring(trimmed, 0, colonPos)
+         rest = CopySubstring(trimmed, colonPos + 1, Length(trimmed) - colonPos - 1)
+         // Extract VST index from "VST1" or "VST1_GRS"
+         var underPos : Integer
+         underPos = IndexOfSubstring(vstPart, "_", false)
+         if underPos > 0 then
+            vstIdx = StringToInt(CopySubstring(vstPart, 3, underPos - 3))
+         else
+            vstIdx = StringToInt(CopySubstring(vstPart, 3, Length(vstPart) - 3))
+         end
+         // Parse paramIdx and optional label
+         colonPos2 = IndexOfSubstring(rest, ":", false)
+         if colonPos2 >= 0 then
+            paramIdx = StringToInt(CopySubstring(rest, 0, colonPos2))
+            label = CopySubstring(rest, colonPos2 + 1, Length(rest) - colonPos2 - 1)
+         else
+            paramIdx = StringToInt(rest)
+            label = ""
+         end
+         Mac_Layer_VSTIdx[flatIdx] = vstIdx
+         Mac_Layer_ParamIdx[flatIdx] = paramIdx
+         Mac_Layer_ParamLabel[flatIdx] = label
+      end
+
+   elsif IndexOfSubstring(trimmed, "Ch", false) == 0 and IndexOfSubstring(trimmed, ":CC", false) > 0 then
+      targetType = "CC"
+
+   elsif IndexOfSubstring(trimmed, "SYSACT_", false) == 0 then
+      targetType = "SYSACT"
+
+   elsif IndexOfSubstring(trimmed, ":CH", false) > 0 then
+      // Overlay function: SMART_SOLO:CH3, ROOT:CH11, etc.
+      targetType = "OVERLAY"
+      colonPos = IndexOfSubstring(trimmed, ":CH", false)
+      Mac_Layer_Channel[flatIdx] = StringToInt(CopySubstring(trimmed, colonPos + 3, Length(trimmed) - colonPos - 3))
+      trimmed = CopySubstring(trimmed, 0, colonPos)
+
+   else
+      // Keyword (CROSSFADER, SCRUBBER, VST_SCOPE, CHANNEL_BOUND_LFO, etc.)
+      targetType = "KEYWORD"
+   end
+
+   Mac_Layer_TargetType[flatIdx] = targetType
+   Mac_Layer_Target[flatIdx] = trimmed
+   Mac_Layer_RangeMin[flatIdx] = rangeMin
+   Mac_Layer_RangeMax[flatIdx] = rangeMax
+
+   Result = layerIdx
+End
+
+// Parses one complete "MacroN = DEV0:BTN1; VST1_GRS:48 | LAY1:ROOT:CH1{1.0,1.0}" line
+Function ParseMacroLine(line : String, isDefault : Boolean)
+   var eqPos, semiPos, pipePos, macroIdx : Integer
+   var leftPart, rightPart, sourceStr, bindingsStr : String
+   var hasSource : Boolean = false
+   var token, remaining : String
+   var iteration, li, bi, si, fi : Integer
+
+   eqPos = IndexOfSubstring(line, "=", false)
+   if eqPos > 0 then
+      leftPart = TrimString(CopySubstring(line, 0, eqPos))
+      rightPart = TrimString(CopySubstring(line, eqPos + 1, Length(line) - eqPos - 1))
+
+      if IndexOfSubstring(leftPart, "Macro", false) == 0 then
+         macroIdx = StringToInt(CopySubstring(leftPart, 5, Length(leftPart) - 5))
+      end
+
+      if macroIdx >= 1 and macroIdx <= MAX_MACROS then
+         // Check for DEV source (before ";")
+         semiPos = IndexOfSubstring(rightPart, ";", false)
+         if semiPos >= 0 then
+            sourceStr = TrimString(CopySubstring(rightPart, 0, semiPos))
+            bindingsStr = TrimString(CopySubstring(rightPart, semiPos + 1, Length(rightPart) - semiPos - 1))
+            hasSource = true
+         else
+            bindingsStr = rightPart
+         end
+
+         // Parse source if present
+         if hasSource then
+            var dummy : Integer
+            dummy = ParseMacroSource(macroIdx, sourceStr)
+         end
+
+         // Track bind counts per layer
+         var layerBindCounts : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+         var hasLayerData : Boolean Array = [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]
+
+         // Parse pipe-separated bindings
+         remaining = bindingsStr
+         For iteration = 0; iteration < 24; iteration = iteration + 1 Do
+            if Length(remaining) > 0 then
+               pipePos = IndexOfSubstring(remaining, "|", false)
+               if pipePos < 0 then
+                  token = TrimString(remaining)
+                  remaining = ""
+               else
+                  token = TrimString(CopySubstring(remaining, 0, pipePos))
+                  remaining = TrimString(CopySubstring(remaining, pipePos + 1, Length(remaining) - pipePos - 1))
+               end
+               if Length(token) > 0 then
+                  var detectedLayer : Integer
+                  if IndexOfSubstring(TrimString(token), "LAY", false) == 0 then
+                     var tmpColonPos : Integer
+                     tmpColonPos = IndexOfSubstring(TrimString(token), ":", false)
+                     detectedLayer = StringToInt(CopySubstring(TrimString(token), 3, tmpColonPos - 3))
+                  else
+                     detectedLayer = 0
+                  end
+                  var parsedL : Integer
+                  parsedL = ParseSingleBinding(macroIdx, token, detectedLayer, layerBindCounts[detectedLayer])
+                  layerBindCounts[detectedLayer] = layerBindCounts[detectedLayer] + 1
+                  hasLayerData[detectedLayer] = true
+               end
+            end
+         End
+
+         // Update bind counts for layers that had data
+         For li = 0; li < MAX_LAYERS; li = li + 1 Do
+            if hasLayerData[li] then
+               Mac_Layer_BindCount[MacLayerIdx(macroIdx, li)] = layerBindCounts[li]
+            end
+         End
+
+         // If storing to default, copy to Def_* arrays
+         if isDefault then
+            Def_Mac_SourceCount[macroIdx] = Mac_SourceCount[macroIdx]
+            For si = 0; si < Mac_SourceCount[macroIdx]; si = si + 1 Do
+               Def_Mac_SourceDev[MacSourceIdx(macroIdx, si)] = Mac_SourceDev[MacSourceIdx(macroIdx, si)]
+               Def_Mac_SourceType[MacSourceIdx(macroIdx, si)] = Mac_SourceType[MacSourceIdx(macroIdx, si)]
+               Def_Mac_SourceCtrl[MacSourceIdx(macroIdx, si)] = Mac_SourceCtrl[MacSourceIdx(macroIdx, si)]
+            End
+            For li = 0; li < MAX_LAYERS; li = li + 1 Do
+               Def_Mac_Layer_BindCount[MacLayerIdx(macroIdx, li)] = Mac_Layer_BindCount[MacLayerIdx(macroIdx, li)]
+               For bi = 0; bi < layerBindCounts[li]; bi = bi + 1 Do
+                  fi = MacLayerBindIdx(macroIdx, li, bi)
+                  Def_Mac_Layer_TargetType[fi] = Mac_Layer_TargetType[fi]
+                  Def_Mac_Layer_Target[fi] = Mac_Layer_Target[fi]
+                  Def_Mac_Layer_RangeMin[fi] = Mac_Layer_RangeMin[fi]
+                  Def_Mac_Layer_RangeMax[fi] = Mac_Layer_RangeMax[fi]
+                  Def_Mac_Layer_Channel[fi] = Mac_Layer_Channel[fi]
+                  Def_Mac_Layer_VSTIdx[fi] = Mac_Layer_VSTIdx[fi]
+                  Def_Mac_Layer_ParamIdx[fi] = Mac_Layer_ParamIdx[fi]
+                  Def_Mac_Layer_ParamLabel[fi] = Mac_Layer_ParamLabel[fi]
+               End
+            End
+         end
+      end
+   end
+End
+
 Function RefreshCtrlInfoDisplay()
     var scrollVal : Double = GetWidgetValue(SLD_ControllerInfo)
     var totalLines : Integer = Size(CtrlInfo_Lines)
