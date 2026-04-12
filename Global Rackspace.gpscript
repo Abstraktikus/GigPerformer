@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-12.002"
+   SCRIPT_VERSION : String = "2026-04-12.003"
 
    DebugMode : Boolean = false
 
@@ -964,13 +964,14 @@ End
 
 // Resolve physical CC number from DeviceConfig CONTROL registry
 Function ResolveControlCC(devIdx : Integer, srcType : String, ctrlIdx : Integer) Returns Integer
-   var c, matchCount : Integer
+   var c, matchCount, ctrlType : Integer
+   var typeMatch : Boolean = false
    matchCount = 0
-   For c = 0; c < CTRL_Count; c = c + 1
+   Result = -1
+   For c = 0; c < CTRL_Count; c = c + 1 Do
       if CTRL_DevIdx[c] == devIdx then
-         var ctrlType : Integer
          ctrlType = CTRL_Type[c]
-         var typeMatch : Boolean = false
+         typeMatch = false
          if srcType == "SLD" and ctrlType == CTYPE_FADER then
             typeMatch = true
          elsif srcType == "BTN" and ctrlType == CTYPE_BUTTON then
@@ -990,18 +991,18 @@ Function ResolveControlCC(devIdx : Integer, srcType : String, ctrlIdx : Integer)
          end
       end
    End
-   Result = -1
 End
 
 // Resolve physical MIDI channel from DeviceConfig CONTROL registry
 Function ResolveControlChannel(devIdx : Integer, srcType : String, ctrlIdx : Integer) Returns Integer
-   var c, matchCount : Integer
+   var c, matchCount, ctrlType : Integer
+   var typeMatch : Boolean = false
    matchCount = 0
-   For c = 0; c < CTRL_Count; c = c + 1
+   Result = -1
+   For c = 0; c < CTRL_Count; c = c + 1 Do
       if CTRL_DevIdx[c] == devIdx then
-         var ctrlType : Integer
          ctrlType = CTRL_Type[c]
-         var typeMatch : Boolean = false
+         typeMatch = false
          if srcType == "SLD" and ctrlType == CTYPE_FADER then
             typeMatch = true
          elsif srcType == "BTN" and ctrlType == CTYPE_BUTTON then
@@ -1021,7 +1022,6 @@ Function ResolveControlChannel(devIdx : Integer, srcType : String, ctrlIdx : Int
          end
       end
    End
-   Result = -1
 End
 
 Function Trace(msg : String)
@@ -1846,6 +1846,7 @@ End
 // Computes active layer from switch states via LAYERMAP bitmask
 Function UpdateActiveLayer()
    var oldLayer, bits, sw, ov : Integer
+   var bitVal, shift : Integer
    oldLayer = ActiveLayer
 
    // Compute bitmask from switch states
@@ -1853,8 +1854,7 @@ Function UpdateActiveLayer()
    For sw = 0; sw < LayerSwitch_Count; sw = sw + 1 Do
       if LayerSwitch_State[sw] == 1 then
          // bit shift: 2^sw
-         var bitVal : Integer = 1
-         var shift : Integer
+         bitVal = 1
          For shift = 0; shift < sw; shift = shift + 1 Do
             bitVal = bitVal * 2
          End
@@ -3135,12 +3135,11 @@ End
 
 // Parses "DEV0:SLD3 & DEV1:SLD1" into Mac_Source* arrays for macroIdx
 Function ParseMacroSource(macroIdx : Integer, sourceStr : String) Returns Integer
-   var count, devNum, ctrlNum, colonPos, ampPos : Integer
+   var count, devNum, ctrlNum, colonPos, ampPos, iteration : Integer
    var remaining, onePart, typePart : String
    count = 0
    remaining = TrimString(sourceStr)
 
-   var iteration : Integer
    For iteration = 0; iteration < MAX_SOURCES_PER_MACRO; iteration = iteration + 1 Do
       if Length(remaining) > 0 then
          ampPos = IndexOfSubstring(remaining, "&", false)
@@ -3172,8 +3171,8 @@ End
 
 // Parses one binding token, stores at flat index. Returns detected layer index.
 Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx : Integer, bindIdx : Integer) Returns Integer
-   var trimmed, rest, targetType, label : String
-   var layerIdx, flatIdx, colonPos, colonPos2, bracePos : Integer
+   var trimmed, rest, targetType, label, vstPart, rangeStr : String
+   var layerIdx, flatIdx, colonPos, colonPos2, bracePos, commaPos, closeBrace, underPos : Integer
    var rangeMin, rangeMax : Double; rangeMin = 0.0; rangeMax = 1.0
    var vstIdx, paramIdx : Integer
 
@@ -3192,7 +3191,6 @@ Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx :
    // Extract range {min,max} if present
    bracePos = IndexOfSubstring(trimmed, "{", false)
    if bracePos >= 0 then
-      var rangeStr : String; var commaPos, closeBrace : Integer
       closeBrace = IndexOfSubstring(trimmed, "}", false)
       rangeStr = CopySubstring(trimmed, bracePos + 1, closeBrace - bracePos - 1)
       commaPos = IndexOfSubstring(rangeStr, ",", false)
@@ -3210,11 +3208,9 @@ Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx :
       targetType = "VST"
       colonPos = IndexOfSubstring(trimmed, ":", false)
       if colonPos > 0 then
-         var vstPart : String
          vstPart = CopySubstring(trimmed, 0, colonPos)
          rest = CopySubstring(trimmed, colonPos + 1, Length(trimmed) - colonPos - 1)
          // Extract VST index from "VST1" or "VST1_GRS"
-         var underPos : Integer
          underPos = IndexOfSubstring(vstPart, "_", false)
          if underPos > 0 then
             vstIdx = StringToInt(CopySubstring(vstPart, 3, underPos - 3))
@@ -3263,11 +3259,13 @@ End
 
 // Parses one complete "MacroN = DEV0:BTN1; VST1_GRS:48 | LAY1:ROOT:CH1{1.0,1.0}" line
 Function ParseMacroLine(line : String, isDefault : Boolean)
-   var eqPos, semiPos, pipePos, macroIdx : Integer
+   var eqPos, semiPos, pipePos, macroIdx, dummy, detectedLayer, tmpColonPos, parsedL : Integer
    var leftPart, rightPart, sourceStr, bindingsStr : String
    var hasSource : Boolean = false
    var token, remaining : String
    var iteration, li, bi, si, fi : Integer
+   var layerBindCounts : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+   var hasLayerData : Boolean Array = [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]
 
    eqPos = IndexOfSubstring(line, "=", false)
    if eqPos > 0 then
@@ -3291,13 +3289,12 @@ Function ParseMacroLine(line : String, isDefault : Boolean)
 
          // Parse source if present
          if hasSource then
-            var dummy : Integer
             dummy = ParseMacroSource(macroIdx, sourceStr)
          end
 
-         // Track bind counts per layer
-         var layerBindCounts : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-         var hasLayerData : Boolean Array = [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]
+         // Track bind counts per layer — reset arrays for this macro
+         layerBindCounts = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+         hasLayerData = [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]
 
          // Parse pipe-separated bindings
          remaining = bindingsStr
@@ -3312,15 +3309,12 @@ Function ParseMacroLine(line : String, isDefault : Boolean)
                   remaining = TrimString(CopySubstring(remaining, pipePos + 1, Length(remaining) - pipePos - 1))
                end
                if Length(token) > 0 then
-                  var detectedLayer : Integer
                   if IndexOfSubstring(TrimString(token), "LAY", false) == 0 then
-                     var tmpColonPos : Integer
                      tmpColonPos = IndexOfSubstring(TrimString(token), ":", false)
                      detectedLayer = StringToInt(CopySubstring(TrimString(token), 3, tmpColonPos - 3))
                   else
                      detectedLayer = 0
                   end
-                  var parsedL : Integer
                   parsedL = ParseSingleBinding(macroIdx, token, detectedLayer, layerBindCounts[detectedLayer])
                   layerBindCounts[detectedLayer] = layerBindCounts[detectedLayer] + 1
                   hasLayerData[detectedLayer] = true
@@ -3618,8 +3612,9 @@ End
 
 // Hierarchical Controller Info Display
 Function UpdateControllerInfoDisplay()
-   var m, l, b, fi, v, p : Integer
-   var devName, srcDesc, targetDesc, statusStr : String
+   var m, l, b, fi, v, p, devIdx, lay0Count, layBindCount, vstV, devIdx2, s2 : Integer
+   var devName, srcDesc, targetDesc, statusStr, overlayDesc, hwDesc : String
+   var hasAny : Boolean = false
 
    CtrlInfo_Lines = []
 
@@ -3645,7 +3640,7 @@ Function UpdateControllerInfoDisplay()
 
    // User Macros (1-50) with hierarchy
    For m = 1; m <= 50; m = m + 1 Do
-      var hasAny : Boolean = false
+      hasAny = false
       For l = 0; l < MAX_LAYERS; l = l + 1 Do
          if Mac_Layer_BindCount[MacLayerIdx(m, l)] > 0 then
             hasAny = true
@@ -3654,7 +3649,6 @@ Function UpdateControllerInfoDisplay()
       if hasAny or Mac_SourceCount[m] > 0 then
          // Source description
          if Mac_SourceCount[m] > 0 then
-            var devIdx : Integer
             devIdx = Mac_SourceDev[MacSourceIdx(m, 0)]
             if devIdx >= 0 and devIdx < MAX_DEVICES then
                devName = DEV_Name[devIdx]
@@ -3668,7 +3662,6 @@ Function UpdateControllerInfoDisplay()
          CtrlInfo_Lines <-- "Macro " + IntToString(m) + " [" + srcDesc + "]:"
 
          // LAY0: show as "(N Targets)" with sub-lines
-         var lay0Count : Integer
          lay0Count = Mac_Layer_BindCount[MacLayerIdx(m, 0)]
          if lay0Count > 0 then
             if lay0Count == 1 then
@@ -3687,7 +3680,6 @@ Function UpdateControllerInfoDisplay()
                end
                // Check VST validity
                if Mac_Layer_TargetType[fi] == "VST" then
-                  var vstV : Integer
                   vstV = Mac_Layer_VSTIdx[fi]
                   if vstV >= 1 and vstV < MAX_VST_DECL then
                      if MapVST_Valid[vstV] > 1 then
@@ -3701,11 +3693,9 @@ Function UpdateControllerInfoDisplay()
 
          // LAY1-N: single line each
          For l = 1; l < MAX_LAYERS; l = l + 1 Do
-            var layBindCount : Integer
             layBindCount = Mac_Layer_BindCount[MacLayerIdx(m, l)]
             if layBindCount > 0 then
                fi = MacLayerBindIdx(m, l, 0)
-               var overlayDesc : String
                overlayDesc = Mac_Layer_Target[fi]
                if Mac_Layer_TargetType[fi] == "OVERLAY" then
                   overlayDesc = overlayDesc + ":CH" + IntToString(Mac_Layer_Channel[fi])
@@ -3745,7 +3735,6 @@ Function UpdateControllerInfoDisplay()
    CtrlInfo_Lines <-- "--- HARDWARE ASSIGNMENTS ---"
    For m = 1; m <= MAX_MACROS; m = m + 1 Do
       if Mac_SourceCount[m] > 0 then
-         var hwDesc : String; var devIdx2, s2 : Integer
          devIdx2 = Mac_SourceDev[MacSourceIdx(m, 0)]
          if devIdx2 >= 0 and devIdx2 < MAX_DEVICES then
             hwDesc = DEV_Name[devIdx2]
@@ -7260,7 +7249,7 @@ Function CloneDefaultToActive()
          Mac_SourceCtrl[MacSourceIdx(m, s)] = Def_Mac_SourceCtrl[MacSourceIdx(m, s)]
       End
       For l = 0; l < MAX_LAYERS; l = l + 1 Do
-         Def_Mac_Layer_BindCount[MacLayerIdx(m, l)] = Def_Mac_Layer_BindCount[MacLayerIdx(m, l)]
+         Mac_Layer_BindCount[MacLayerIdx(m, l)] = Def_Mac_Layer_BindCount[MacLayerIdx(m, l)]
          For b = 0; b < MAX_BINDINGS_PER_LAYER; b = b + 1 Do
             fi = MacLayerBindIdx(m, l, b)
             Mac_Layer_TargetType[fi] = Def_Mac_Layer_TargetType[fi]
@@ -7309,7 +7298,8 @@ End
 
 // Rebuilds CC and SysAction reverse lookups from active Mac_* arrays
 Function RebuildReverseLookups()
-   var m, b, fi, lookupIdx : Integer
+   var m, b, fi, lookupIdx, bindCount, actionIdx, srcCount, devIdx, ctrlIdx, physCC, physCh : Integer
+   var actionName, srcType : String
 
    // Clear reverse lookups
    For m = 0; m < 2048; m = m + 1 Do
@@ -7321,17 +7311,14 @@ Function RebuildReverseLookups()
 
    // Build SysAction lookup from LAY0 bindings (isolation rule: must be sole binding)
    For m = 1; m <= MAX_MACROS; m = m + 1 Do
-      var bindCount : Integer
       bindCount = Mac_Layer_BindCount[MacLayerIdx(m, 0)]
       if bindCount == 1 then
          fi = MacLayerBindIdx(m, 0, 0)
          if Mac_Layer_TargetType[fi] == "SYSACT" then
-            var actionName : String
             actionName = Mac_Layer_Target[fi]
             if IndexOfSubstring(actionName, "SYSACT_", false) == 0 then
                actionName = CopySubstring(actionName, 7, Length(actionName) - 7)
             end
-            var actionIdx : Integer
             actionIdx = SysActIdx(actionName)
             if actionIdx >= 0 then
                Mac_ReverseLookup_SysAct[m] = actionIdx
@@ -7342,14 +7329,11 @@ Function RebuildReverseLookups()
 
    // Build source-to-macro CC lookup
    For m = 1; m <= MAX_MACROS; m = m + 1 Do
-      var srcCount : Integer
       srcCount = Mac_SourceCount[m]
       For b = 0; b < srcCount; b = b + 1 Do
-         var devIdx, ctrlIdx : Integer; var srcType : String
          devIdx = Mac_SourceDev[MacSourceIdx(m, b)]
          srcType = Mac_SourceType[MacSourceIdx(m, b)]
          ctrlIdx = Mac_SourceCtrl[MacSourceIdx(m, b)]
-         var physCC, physCh : Integer
          physCC = ResolveControlCC(devIdx, srcType, ctrlIdx)
          physCh = ResolveControlChannel(devIdx, srcType, ctrlIdx)
          if physCC >= 0 and physCh >= 0 then
@@ -7366,7 +7350,7 @@ End
 Function LoadControllerMap(mapName : String)
    var content, line, trimmedLine, currentMap : String
    var lines : String Array
-   var i, eqPos : Integer; var key, val : String
+   var i, eqPos, closeBracket, vstDeclIdx, vstDeclIdx2 : Integer; var key, val : String
    var inDefaultMap, inTargetMap, isFirstLoad : Boolean
    var savedEditScope : Integer
    var ctrlMapFilePath : String
@@ -7400,7 +7384,6 @@ Function LoadControllerMap(mapName : String)
                currentMap = "Default"
 
             elsif IndexOfSubstring(trimmedLine, "[Map:", false) == 0 then
-               var closeBracket : Integer
                closeBracket = IndexOfSubstring(trimmedLine, "]", false)
                currentMap = CopySubstring(trimmedLine, 5, closeBracket - 5)
                inDefaultMap = false
@@ -7418,7 +7401,6 @@ Function LoadControllerMap(mapName : String)
                   val = TrimString(CopySubstring(trimmedLine, eqPos + 1, Length(trimmedLine) - eqPos - 1))
                   // VST declarations
                   if IndexOfSubstring(key, "VST", false) == 0 and IndexOfSubstring(key, "Macro", false) <> 0 then
-                     var vstDeclIdx : Integer
                      vstDeclIdx = StringToInt(CopySubstring(key, 3, Length(key) - 3))
                      if vstDeclIdx >= 1 and vstDeclIdx < MAX_VST_DECL then
                         DefMapVST_Name[vstDeclIdx] = val
@@ -7436,7 +7418,6 @@ Function LoadControllerMap(mapName : String)
                   val = TrimString(CopySubstring(trimmedLine, eqPos + 1, Length(trimmedLine) - eqPos - 1))
                   // VST declarations (override default)
                   if IndexOfSubstring(key, "VST", false) == 0 and IndexOfSubstring(key, "Macro", false) <> 0 then
-                     var vstDeclIdx2 : Integer
                      vstDeclIdx2 = StringToInt(CopySubstring(key, 3, Length(key) - 3))
                      if vstDeclIdx2 >= 1 and vstDeclIdx2 < MAX_VST_DECL then
                         MapVST_Name[vstDeclIdx2] = val
@@ -10423,8 +10404,8 @@ End
 // Records overlay toggle events to the Timeline
 // Encodes: eventType = "OVL_<funcName>", eventVal = channel * 2 + state
 Function RecordTimelineOverlay(funcName : String, channel : Integer, state : Integer)
+   var encodedVal : Integer
    if TimelineRecActive then
-      var encodedVal : Integer
       encodedVal = channel * 2 + state
       RecordTimelineEvent("OVL_" + funcName, encodedVal)
    end
@@ -10505,6 +10486,7 @@ End
 
 // Range-based overlay trigger with positional and movement-toggle support
 Function FireOverlayTrigger(funcName : String, channel : Integer, value : Double, rangeMin : Double, rangeMax : Double, bindingKey : Integer)
+   var isInRange : Boolean = false
    if rangeMin == 0.0 and rangeMax == 1.0 then
       // FULL RANGE -> Movement-Toggle with 10s debounce
       if not Debounce_Active[bindingKey] then
@@ -10520,7 +10502,7 @@ Function FireOverlayTrigger(funcName : String, channel : Integer, value : Double
       end
    else
       // POSITIONAL - ON when value in [min,max], OFF otherwise
-      var isInRange : Boolean = false
+      isInRange = false
       if rangeMin == rangeMax then
          // Point trigger: exact match with small tolerance
          if Abs(value - rangeMin) < 0.02 then
@@ -11260,12 +11242,12 @@ End
 
 // Keyword dispatcher (used by ExecuteHardwareMacro)
 Function ExecuteKeywordBinding(keyword : String, val : Double)
+   var scopeIdx : Integer
    if keyword == "CROSSFADER" then
       SetWidgetValue(SLD_Crossfader, val)
    elsif keyword == "SCRUBBER" then
       SetWidgetValue(SLD_Scrubber, val)
    elsif keyword == "VST_SCOPE" then
-      var scopeIdx : Integer
       scopeIdx = Round(val * (MAX_VSTS - 1))
       ChangeVstScope(scopeIdx, 0)
    elsif keyword == "VST_BROWSE" then
@@ -11305,16 +11287,17 @@ End
 
 // Layer-aware macro dispatch
 Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
-   var l, b, fi, bindingKey : Integer
-   var targetType, target, funcName : String
+   var l, b, fi, bindingKey, bindCount, vstIdx, paramIdx, chPos, ccPos, ccCh, ccNum, labelPos, actionIdx, channel : Integer
+   var targetType, target, funcName, ccTarget, afterCC, actionName : String
+   var shouldFire : Boolean = false
+   var scaledVal, rMin, rMax, scaledCC, rMinCC, rMaxCC : Double = 0.0
 
    // Guard: plugin safety during init/snapshot
    if not IsLoadingSnapshot and TimeSinceStartup() > FaderSafetyTimer then
       For l = 0; l < MAX_LAYERS; l = l + 1 Do
-            var bindCount : Integer
             bindCount = Mac_Layer_BindCount[MacLayerIdx(matchedMacro, l)]
             if bindCount > 0 then
-               var shouldFire : Boolean = false
+               shouldFire = false
                if l == 0 then
                   shouldFire = true
                elsif ActiveLayer == l then
@@ -11328,13 +11311,11 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
                      target = Mac_Layer_Target[fi]
 
                      if targetType == "VST" then
-                        var vstIdx, paramIdx : Integer
                         vstIdx = Mac_Layer_VSTIdx[fi]
                         paramIdx = Mac_Layer_ParamIdx[fi]
                         if vstIdx >= 1 and vstIdx < MAX_VST_DECL then
                            if MapVST_Valid[vstIdx] == 1 or MapVST_Valid[vstIdx] == 0 then
-                              var scaledVal : Double = 0.0
-                              var rMin, rMax : Double = 0.0
+                              scaledVal = 0.0
                               rMin = Mac_Layer_RangeMin[fi]
                               rMax = Mac_Layer_RangeMax[fi]
                               scaledVal = rMin + (val * (rMax - rMin))
@@ -11346,26 +11327,20 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
 
                      elsif targetType == "CC" then
                         // Parse Ch<c>:CC<n> from target string
-                        var ccTarget : String
                         ccTarget = target
-                        var chPos, ccPos : Integer
                         chPos = IndexOfSubstring(ccTarget, "Ch", false)
                         ccPos = IndexOfSubstring(ccTarget, ":CC", false)
                         if chPos >= 0 and ccPos > 0 then
-                           var ccCh, ccNum : Integer
                            ccCh = StringToInt(CopySubstring(ccTarget, chPos + 2, ccPos - chPos - 2)) - 1
-                           var afterCC : String
                            afterCC = CopySubstring(ccTarget, ccPos + 3, Length(ccTarget) - ccPos - 3)
                            // Strip label after ":"
-                           var labelPos : Integer
                            labelPos = IndexOfSubstring(afterCC, ":", false)
                            if labelPos >= 0 then
                               ccNum = StringToInt(CopySubstring(afterCC, 0, labelPos))
                            else
                               ccNum = StringToInt(afterCC)
                            end
-                           var scaledCC : Double = 0.0
-                           var rMinCC, rMaxCC : Double = 0.0
+                           scaledCC = 0.0
                            rMinCC = Mac_Layer_RangeMin[fi]
                            rMaxCC = Mac_Layer_RangeMax[fi]
                            scaledCC = rMinCC + (val * (rMaxCC - rMinCC))
@@ -11377,12 +11352,10 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
 
                      elsif targetType == "SYSACT" then
                         if val > 0.5 then
-                           var actionName : String
                            actionName = target
                            if IndexOfSubstring(actionName, "SYSACT_", false) == 0 then
                               actionName = CopySubstring(actionName, 7, Length(actionName) - 7)
                            end
-                           var actionIdx : Integer
                            actionIdx = SysActIdx(actionName)
                            if actionIdx >= 0 then
                               FireSystemAction(actionIdx)
@@ -11391,7 +11364,6 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
 
                      elsif targetType == "OVERLAY" then
                         funcName = target
-                        var channel : Integer
                         channel = Mac_Layer_Channel[fi]
                         bindingKey = fi
                         if bindingKey < MAX_OVERLAY_BINDINGS then
