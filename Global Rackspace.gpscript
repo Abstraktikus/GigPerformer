@@ -945,21 +945,21 @@ End
 Function MacLayerBindIdx(macroIdx : Integer, layerIdx : Integer, bindIdx : Integer) Returns Integer
    var idx : Integer
    idx = (macroIdx * MAX_LAYERS * MAX_BINDINGS_PER_LAYER) + (layerIdx * MAX_BINDINGS_PER_LAYER) + bindIdx
-   Result = idx
+   result = idx
 End
 
 // Flat index into Mac_Layer_BindCount
 Function MacLayerIdx(macroIdx : Integer, layerIdx : Integer) Returns Integer
    var idx : Integer
    idx = (macroIdx * MAX_LAYERS) + layerIdx
-   Result = idx
+   result = idx
 End
 
 // Flat index into Mac_Source* arrays
 Function MacSourceIdx(macroIdx : Integer, srcIdx : Integer) Returns Integer
    var idx : Integer
    idx = (macroIdx * MAX_SOURCES_PER_MACRO) + srcIdx
-   Result = idx
+   result = idx
 End
 
 // Resolve physical CC number from DeviceConfig CONTROL registry
@@ -967,7 +967,7 @@ Function ResolveControlCC(devIdx : Integer, srcType : String, ctrlIdx : Integer)
    var c, matchCount, ctrlType : Integer
    var typeMatch : Boolean = false
    matchCount = 0
-   Result = -1
+   result = -1
    For c = 0; c < CTRL_Count; c = c + 1 Do
       if CTRL_DevIdx[c] == devIdx then
          ctrlType = CTRL_Type[c]
@@ -985,7 +985,7 @@ Function ResolveControlCC(devIdx : Integer, srcType : String, ctrlIdx : Integer)
          end
          if typeMatch then
             if matchCount == ctrlIdx then
-               Result = CTRL_CC[c]
+               result = CTRL_CC[c]
             end
             matchCount = matchCount + 1
          end
@@ -998,7 +998,7 @@ Function ResolveControlChannel(devIdx : Integer, srcType : String, ctrlIdx : Int
    var c, matchCount, ctrlType : Integer
    var typeMatch : Boolean = false
    matchCount = 0
-   Result = -1
+   result = -1
    For c = 0; c < CTRL_Count; c = c + 1 Do
       if CTRL_DevIdx[c] == devIdx then
          ctrlType = CTRL_Type[c]
@@ -1016,7 +1016,7 @@ Function ResolveControlChannel(devIdx : Integer, srcType : String, ctrlIdx : Int
          end
          if typeMatch then
             if matchCount == ctrlIdx then
-               Result = CTRL_Channel[c]
+               result = CTRL_Channel[c]
             end
             matchCount = matchCount + 1
          end
@@ -3165,7 +3165,7 @@ Function ParseMacroSource(macroIdx : Integer, sourceStr : String) Returns Intege
       end
    End
    Mac_SourceCount[macroIdx] = count
-   Result = count
+   result = count
 End
 
 // Parses one binding token, stores at flat index. Returns detected layer index.
@@ -3253,7 +3253,7 @@ Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx :
    Mac_Layer_RangeMin[flatIdx] = rangeMin
    Mac_Layer_RangeMax[flatIdx] = rangeMax
 
-   Result = layerIdx
+   result = layerIdx
 End
 
 // Parses one complete "MacroN = DEV0:BTN1; VST1_GRS:48 | LAY1:ROOT:CH1{1.0,1.0}" line
