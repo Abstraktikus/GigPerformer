@@ -3571,7 +3571,13 @@ Function ScrollToCurrentCtrlScope()
             if CurrentEditScope == SOLO_SMART_MacroIdx[l] then searchStr = "Smart Solo"; isGrouped = true
             elsif CurrentEditScope == SOLO_STRICT_MacroIdx[l] then searchStr = "Strict Solo"; isGrouped = true
             elsif CurrentEditScope == USER_MUTE_MacroIdx[l] then searchStr = "User Mute"; isGrouped = true
-            elsif CurrentEditScope == LOOPER_CH_MacroIdx[l] then searchStr = "Looper Triggers"; isGrouped = true
+            elsif CurrentEditScope == LOOPER_CH_MacroIdx[l] then searchStr = "Looper"; isGrouped = true
+            elsif CurrentEditScope == VELRANGE_MacroIdx[l] then searchStr = "Velocity Range"; isGrouped = true
+            elsif CurrentEditScope == ROOT_MacroIdx[l] then searchStr = "Root"; isGrouped = true
+            elsif CurrentEditScope == OCTAVER_MacroIdx[l] then searchStr = "Octaver"; isGrouped = true
+            elsif CurrentEditScope == HUMANIZE_MacroIdx[l] then searchStr = "Humanizer"; isGrouped = true
+            elsif CurrentEditScope == QUANTIZE_MacroIdx[l] then searchStr = "Scale Quantizer"; isGrouped = true
+            elsif CurrentEditScope == SUSTAIN_MacroIdx[l] then searchStr = "Auto Sustain"; isGrouped = true
             end
             l = l + 1
         End
@@ -7433,6 +7439,16 @@ Function LoadControllerMap(mapName : String)
    CurrentEditScope = savedEditScope
 
    Trace("CTRLMAP: Loaded [Map:" + mapName + "]")
+
+   // Update LBL_CtrlConfig with map name
+   if mapName <> "DEFAULT_INIT" then
+      if Length(BaseConfigName) > 0 then
+         LBL_CtrlConfig.SetWidgetLabel(BaseConfigName + " | " + mapName)
+      else
+         LBL_CtrlConfig.SetWidgetLabel(mapName)
+      end
+   end
+
    UpdateControllerInfoDisplay()
 End
 
