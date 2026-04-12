@@ -1,0 +1,116 @@
+Var
+   // 16 Parameter für die Anzeige
+   Vel_Ch_01 : Parameter = 0.0
+   Vel_Ch_02 : Parameter = 0.0
+   Vel_Ch_03 : Parameter = 0.0
+   Vel_Ch_04 : Parameter = 0.0
+   Vel_Ch_05 : Parameter = 0.0
+   Vel_Ch_06 : Parameter = 0.0
+   Vel_Ch_07 : Parameter = 0.0
+   Vel_Ch_08 : Parameter = 0.0
+   Vel_Ch_09 : Parameter = 0.0
+   Vel_Ch_10 : Parameter = 0.0
+   Vel_Ch_11 : Parameter = 0.0
+   Vel_Ch_12 : Parameter = 0.0
+   Vel_Ch_13 : Parameter = 0.0
+   Vel_Ch_14 : Parameter = 0.0
+   Vel_Ch_15 : Parameter = 0.0
+   Vel_Ch_16 : Parameter = 0.0
+
+   // Internes Speicher-Array
+   midiLevels : Double[16]
+
+   // Konfiguration
+   DECAY_FACTOR : Double = 0.55  
+
+// ---------------------------------------------------------
+// HELPER: Mapping von Index auf Variable
+// ---------------------------------------------------------
+// Da wir "SetParameter(i)" im Scriptlet nicht nutzen können,
+// machen wir das Mapping hier manuell. Das ist sehr schnell.
+Function UpdateFaderUI(idx : Integer, val : Double)
+   If    idx == 0  Then Vel_Ch_01 = val
+   Elsif idx == 1  Then Vel_Ch_02 = val
+   Elsif idx == 2  Then Vel_Ch_03 = val
+   Elsif idx == 3  Then Vel_Ch_04 = val
+   Elsif idx == 4  Then Vel_Ch_05 = val
+   Elsif idx == 5  Then Vel_Ch_06 = val
+   Elsif idx == 6  Then Vel_Ch_07 = val
+   Elsif idx == 7  Then Vel_Ch_08 = val
+   Elsif idx == 8  Then Vel_Ch_09 = val
+   Elsif idx == 9  Then Vel_Ch_10 = val
+   Elsif idx == 10 Then Vel_Ch_11 = val
+   Elsif idx == 11 Then Vel_Ch_12 = val
+   Elsif idx == 12 Then Vel_Ch_13 = val
+   Elsif idx == 13 Then Vel_Ch_14 = val
+   Elsif idx == 14 Then Vel_Ch_15 = val
+   Elsif idx == 15 Then Vel_Ch_16 = val
+   End
+End
+
+Initialization
+   var i : Integer
+   // Array nullen
+   For i = 0; i < 16; i = i + 1 Do
+      midiLevels[i] = 0.0
+   End
+   SetTimersRunning(true)
+End
+
+// ---------------------------------------------------------
+// TIMER: Decay Berechnung
+// ---------------------------------------------------------
+On TimerTick(ms : Double)
+   Var i : Integer
+   
+   // Wir loopen durch das interne Array
+   For i = 0; i < 16; i = i + 1 Do
+      
+      If midiLevels[i] > 0.001 Then
+         // Wert verringern
+         midiLevels[i] = midiLevels[i] * DECAY_FACTOR
+         
+         // UI Update aufrufen
+         UpdateFaderUI(i, midiLevels[i])
+         
+      Else
+         // Aufräumen (nur wenn noch nicht 0)
+         If midiLevels[i] > 0.0 Then 
+            midiLevels[i] = 0.0
+            UpdateFaderUI(i, 0.0)
+         End
+      End
+   End
+End
+
+// ---------------------------------------------------------
+// NOTE EVENT
+// ---------------------------------------------------------
+On NoteEvent(m : NoteMessage)
+   Var ch : Integer
+   Var vel : Integer
+   Var newVal : Double = 0.0
+   var idx : Integer
+   
+   SendNow(m)
+   
+   If IsNoteOn(m) Then
+      ch = GetChannel(m)
+      vel = GetVelocity(m)
+      
+      If ch >= 1 and ch <= 16 Then
+         idx = ch - 1
+         newVal = IntToFloat(vel) / 127.0
+         
+         // Peak-Hold: Nur aktualisieren, wenn neuer Wert lauter ist
+         If newVal > midiLevels[idx] Then
+            midiLevels[idx] = newVal
+            UpdateFaderUI(idx, newVal)
+         End
+      End
+   End
+End
+
+On MidiEvent(m : MidiMessage)
+   SendNow(m)
+End

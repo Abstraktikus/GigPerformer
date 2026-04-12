@@ -1,0 +1,116 @@
+// ------------------------------------------------------------------
+// LOCAL RACKSPACE: THIN CLIENT (PROMPTER DISPLAY ONLY)
+// ------------------------------------------------------------------
+
+Var
+   // --- UI WIDGETS (REINE ANZEIGE) ---
+   SLD_BarScrubber : Widget         
+   LBL_ChordViewer_Header : Widget  
+   LBL_ChordViewer_Footer : Widget  
+   LBL_Lyrics : Widget              
+   LBL_Chords : Widget              
+   LBL_ChordViewBackground : Widget 
+   LBL_BarCount : Widget            
+   LBL_MacroFeedback : Widget
+   LBL_SysModeFeedback : Widget
+   LBL_LayerFeedback : Widget
+
+   // --- OSC CONFIG ---
+   OSC_IP : String = "127.0.0.1"
+   OSC_PORT : Integer = 54344
+
+   // --- STATE ---
+   IsAutoMoving : Boolean = false
+
+// ---------------------------------------------------------
+// HELPER: DISPLAY RESET
+// ---------------------------------------------------------
+
+Function ClearDisplay()
+   LBL_Chords.SetWidgetLabel("")
+   LBL_Lyrics.SetWidgetLabel("")
+   LBL_ChordViewer_Header.SetWidgetLabel("")
+   LBL_ChordViewer_Footer.SetWidgetLabel("")
+   LBL_BarCount.SetWidgetLabel("")
+   LBL_MacroFeedback.SetWidgetLabel("")
+   LBL_SysModeFeedback.SetWidgetLabel("")
+   LBL_LayerFeedback.SetWidgetLabel("")
+   
+   IsAutoMoving = true
+   SLD_BarScrubber.SetWidgetValue(1.0)
+   IsAutoMoving = false
+End
+
+// ---------------------------------------------------------
+// STARTUP & ACTIVATION
+// ---------------------------------------------------------
+
+// Wird 1x beim Laden des Gig-Files oder beim Kompilieren aufgerufen
+Initialization
+   ClearDisplay()
+End
+
+// Wird jedes Mal aufgerufen, wenn du zu diesem Rackspace wechselst
+On Activate
+   ClearDisplay()
+   
+   // Fordere beim Aktivieren sofort ein frisches Bild vom Global an
+   OSC_SendIntegerSpecific("/Command/RequestUIUpdate", 1, OSC_IP, OSC_PORT)
+End
+
+// ---------------------------------------------------------
+// OSC RECEIVER (VOM GLOBAL RACKSPACE)
+// ---------------------------------------------------------
+
+On OSCMessageReceived(m : OSCMessage) Matching "/UI/SetChords"
+   LBL_Chords.SetWidgetLabel(OSC_GetArgAsString(m, 0))
+End
+
+On OSCMessageReceived(m : OSCMessage) Matching "/UI/SetLyrics"
+   LBL_Lyrics.SetWidgetLabel(OSC_GetArgAsString(m, 0))
+End
+
+On OSCMessageReceived(m : OSCMessage) Matching "/UI/SetHeader"
+   LBL_ChordViewer_Header.SetWidgetLabel(OSC_GetArgAsString(m, 0))
+End
+
+On OSCMessageReceived(m : OSCMessage) Matching "/UI/SetFooter"
+   LBL_ChordViewer_Footer.SetWidgetLabel(OSC_GetArgAsString(m, 0))
+End
+
+On OSCMessageReceived(m : OSCMessage) Matching "/UI/SetBarCount"
+   LBL_BarCount.SetWidgetLabel(OSC_GetArgAsString(m, 0))
+End
+
+// --- HUD FEEDBACK RECEIVERS (3 dedicated channels) ---
+
+// Macro actions: Map changes, fader values, preset switches
+On OSCMessageReceived(m : OSCMessage) Matching "/UI/SetMacroFeedback"
+   LBL_MacroFeedback.SetWidgetLabel(OSC_GetArgAsString(m, 0))
+End
+
+// SYSMODE status: active mode + joystick actions
+On OSCMessageReceived(m : OSCMessage) Matching "/UI/SetSysModeFeedback"
+   LBL_SysModeFeedback.SetWidgetLabel(OSC_GetArgAsString(m, 0))
+End
+
+// Layer status: active layer + overlay actions (Root, Solo, Octaver, etc.)
+On OSCMessageReceived(m : OSCMessage) Matching "/UI/SetLayerFeedback"
+   LBL_LayerFeedback.SetWidgetLabel(OSC_GetArgAsString(m, 0))
+End
+
+On OSCMessageReceived(m : OSCMessage) Matching "/UI/SetScrubber"
+   IsAutoMoving = true
+   SLD_BarScrubber.SetWidgetValue(OSC_GetArgAsDouble(m, 0))
+   IsAutoMoving = false
+End
+
+// ---------------------------------------------------------
+// SCRUBBER SENDER (Manuelles Ziehen in der Timeline)
+// ---------------------------------------------------------
+
+On WidgetValueChanged(newValue : Double) from SLD_BarScrubber
+   If not IsAutoMoving Then
+       OSC_SendDoubleSpecific("/Command/Scrub", newValue, OSC_IP, OSC_PORT)
+   End
+End
