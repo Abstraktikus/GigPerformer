@@ -12599,12 +12599,32 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
            end
        End
        
-       // --- C: HAL DATABASE (translation from CC -> Macro) ---
-       For i = 0; i < HW_Count; i = i + 1 Do
-           if not HW_IsNote[i] and HW_Channel[i] == ch and HW_CC[i] == cc then
-               if DebugMode then Trace(">>> HAL-DIAG: CC=" + cc + " Ch=" + ch + " -> MacroIdx=" + HW_MacroIdx[i] + " val=" + val) end
-               ExecuteHardwareMacro(HW_MacroIdx[i], val)
-           end
+       // --- C: v2 REVERSE LOOKUP (CC -> Macro, unified) ---
+       var lookupIdx, macroFromLookup : Integer
+       lookupIdx = ch * 128 + cc
+       if lookupIdx >= 0 and lookupIdx < 2048 then
+          macroFromLookup = Mac_ReverseLookup_CC[lookupIdx]
+          if macroFromLookup > 0 then
+             ExecuteHardwareMacroV2(macroFromLookup, val)
+          end
+       end
+
+       // --- C-legacy: HAL DATABASE fallback (v1 HardwareMap entries) ---
+       if macroFromLookup < 1 then
+          For i = 0; i < HW_Count; i = i + 1 Do
+              if not HW_IsNote[i] and HW_Channel[i] == ch and HW_CC[i] == cc then
+                  if DebugMode then Trace(">>> HAL-DIAG: CC=" + cc + " Ch=" + ch + " -> MacroIdx=" + HW_MacroIdx[i] + " val=" + val) end
+                  ExecuteHardwareMacro(HW_MacroIdx[i], val)
+              end
+          End
+       end
+
+       // --- D: PERMANENT BINDINGS (CC64=SYSTEM_TOGGLE, CC11=CROSSFADER, etc.) ---
+       var pIdx : Integer
+       For pIdx = 0; pIdx < Permanent_Count; pIdx = pIdx + 1 Do
+          if Permanent_SourceCC[pIdx] == cc then
+             ExecuteKeywordBinding(Permanent_Function[pIdx], val)
+          end
        End
    end
 End
