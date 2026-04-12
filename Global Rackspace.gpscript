@@ -16338,17 +16338,17 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
          end
          incomingHexFull = incomingHexFull + IntToHexString(SM_GetValue(m, byteIdx))
       End
-      incomingHexFull = Upper(incomingHexFull)
+      incomingHexFull = MyToUpper(incomingHexFull)
 
       For swIdx = 0; swIdx < LayerSwitch_Count; swIdx = swIdx + 1 Do
          if LayerSwitch_DevIdx[swIdx] == 0 and LayerSwitch_Type[swIdx] == "SYSEX" then
-            if incomingHexFull == Upper(LayerSwitch_OnData[swIdx]) then
+            if incomingHexFull == MyToUpper(LayerSwitch_OnData[swIdx]) then
                LayerSwitch_State[swIdx] = 1
                UpdateActiveLayer()
                if DebugMode then
                   Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): ON")
                end
-            elsif incomingHexFull == Upper(LayerSwitch_OffData[swIdx]) then
+            elsif incomingHexFull == MyToUpper(LayerSwitch_OffData[swIdx]) then
                LayerSwitch_State[swIdx] = 0
                UpdateActiveLayer()
                if DebugMode then
