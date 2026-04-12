@@ -13216,15 +13216,21 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
             // 4. RESTLICHES SETUP
             SyncMatrixToScriptlet()
             
+            // Migrate old Standard_VST<N> names from snapshots to plugin names
+            if IndexOfSubstring(targetCtrlMap, "Standard_VST", false) == 0 then
+                targetCtrlMap = GetDynamicStandardMap()
+                Trace("SONG LOAD: Migrated old map name to -> " + targetCtrlMap)
+            end
+
             if targetCtrlMap == "" or targetCtrlMap == "-" then
                 targetCtrlMap = GetDynamicStandardMap()
                 found = false
                 for j = 0; j < Size(CtrlMapList); j = j + 1 do if CtrlMapList[j] == targetCtrlMap then found = true end end
                 if not found then targetCtrlMap = "Standard" end
             end
-            
+
             ExpectedMapName = targetCtrlMap
-            
+
             LoadControllerMap(targetCtrlMap)
             BuildLFOUsageIndex()  // v2: rebuild reverse index against the freshly loaded map
             HardwareSyncTimer = TimeSinceStartup() + 3500.0
