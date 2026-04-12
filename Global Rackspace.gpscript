@@ -7355,7 +7355,7 @@ Function LoadControllerMap(mapName : String)
    var content, line, trimmedLine, currentMap : String
    var lines : String Array
    var i, eqPos, closeBracket, vstDeclIdx, vstDeclIdx2 : Integer; var key, val : String
-   var inDefaultMap, inTargetMap, isFirstLoad : Boolean
+   var inDefaultMap, inTargetMap, isFirstLoad, targetMapFound : Boolean
    var savedEditScope, dbIdx : Integer
    var ctrlMapFilePath : String
 
@@ -7393,6 +7393,7 @@ Function LoadControllerMap(mapName : String)
                inDefaultMap = false
                if not isFirstLoad and currentMap == mapName then
                   inTargetMap = true
+                  targetMapFound = true
                else
                   inTargetMap = false
                end
@@ -7440,7 +7441,16 @@ Function LoadControllerMap(mapName : String)
 
    ValidateMapVSTs()
    RebuildReverseLookups()
-   CurrentCtrlMapName = mapName
+
+   // Only update map name if song map was actually found
+   if isFirstLoad then
+      CurrentCtrlMapName = "Default"
+   elsif targetMapFound then
+      CurrentCtrlMapName = mapName
+   else
+      Trace("CTRLMAP: WARNING - [Map:" + mapName + "] not found, staying on Default")
+      CurrentCtrlMapName = "Default"
+   end
 
    // Reset debounce timers
    For dbIdx = 0; dbIdx < MAX_OVERLAY_BINDINGS; dbIdx = dbIdx + 1 Do
