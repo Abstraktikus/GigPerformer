@@ -1652,7 +1652,7 @@ Function ParseDeviceConfig()
    var content, line, key, val, section : String
    var lines : String Array
    var i, eqPos, currentDevIdx, currentCtrlIdx, currentSysExIdx : Integer
-   var currentSwitchIdx, currentMapIdx, currentPermIdx, currentOvlIdx : Integer
+   var currentSwitchIdx, currentMapIdx, currentPermIdx, currentOvlIdx, stateNum : Integer
 
    if not FileExists(DeviceConfigFilePath) then
       Trace("HAL: No DeviceConfig.txt found at " + DeviceConfigFilePath + ". Running in fallback mode.")
@@ -1779,7 +1779,6 @@ Function ParseDeviceConfig()
                   if key == "Device" then
                      LayerMap_DevIdx[currentMapIdx] = StringToInt(val)
                   elsif IndexOfSubstring(key, "State_", false) == 0 then
-                     var stateNum : Integer
                      stateNum = StringToInt(CopySubstring(key, 6, Length(key) - 6))
                      // Parse "LAY3" → 3
                      if IndexOfSubstring(val, "LAY", false) == 0 then
