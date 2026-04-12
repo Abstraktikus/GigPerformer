@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-12.006"
+   SCRIPT_VERSION : String = "2026-04-12.007"
 
    DebugMode : Boolean = false
 
@@ -83,24 +83,24 @@ Var
    LatchTimeoutFallbackMs  : Double = 4000.0   // Used when GetBPM() <= 1.0
 
    // --- Global Default Macro Assignments (start indices for 16-element blocks) ---
-   DEF_LOOPER_CH_MacroIdx   : Integer Array = [50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65]
-   DEF_SOLO_SMART_MacroIdx  : Integer Array = [66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81]
-   DEF_SOLO_STRICT_MacroIdx : Integer Array = [82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97]
-   DEF_USER_MUTE_MacroIdx   : Integer Array = [98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113]
-   DEF_VELRANGE_MacroIdx    : Integer Array = [114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129]
-   DEF_ROOT_MacroIdx        : Integer Array = [130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145]
-   DEF_OCTAVER_MacroIdx     : Integer Array = [146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161]
-   DEF_HUMANIZE_MacroIdx    : Integer Array = [162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177]
-   DEF_QUANTIZE_MacroIdx    : Integer Array = [178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193]
-   DEF_SUSTAIN_MacroIdx     : Integer Array = [194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209]
+   DEF_LOOPER_CH_MacroIdx   : Integer Array = [96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111]
+   DEF_SOLO_SMART_MacroIdx  : Integer Array = [112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127]
+   DEF_SOLO_STRICT_MacroIdx : Integer Array = [128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143]
+   DEF_USER_MUTE_MacroIdx   : Integer Array = [144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159]
+   DEF_VELRANGE_MacroIdx    : Integer Array = [160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175]
+   DEF_ROOT_MacroIdx        : Integer Array = [176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191]
+   DEF_OCTAVER_MacroIdx     : Integer Array = [192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207]
+   DEF_HUMANIZE_MacroIdx    : Integer Array = [208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223]
+   DEF_QUANTIZE_MacroIdx    : Integer Array = [224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239]
+   DEF_SUSTAIN_MacroIdx     : Integer Array = [240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255]
    
    // --- DISPLAY & NAVIGATION ORDER (display order is configurable) ---
    MacroGroup_Names   : String Array  = ["Global Scope", "Hardware Sliders", "Looper", "Smart Solo", "Strict Solo", "User Mute", "Velocity Range", "Root/Chord", "Octaver", "Humanizer", "Scale Quantizer", "Auto Sustain"]
-   MacroGroup_Anchors : Integer Array = [-1,             0,                  50,       66,           82,            98,          114,              130,          146,       162,         178,               194]
+   MacroGroup_Anchors : Integer Array = [-1,             0,                  96,       112,          128,           144,          160,              176,          192,       208,         224,               240]
 
    // --- SYSTEM ACTIONS (Virtual Role Dispatch) ---
    // Central registry: add new system actions here, then add a case to FireSystemAction().
-   // These are ROLES, not reserved macro slots. They live in the user's 0-49 macro space
+   // These are ROLES, not reserved macro slots. They live in the user's 0-95 macro space
    // and are assigned via ControllerMaps.txt (e.g. "Macro5 = SYSACT_VST_SCOPE_UP").
    // Excluded from Timeline Record/Playback by the Isolation Rule.
    SysAction_Names : String Array = [
@@ -221,6 +221,7 @@ Var
    LayerSwitch_OnData : String Array = ["", "", "", "", "", "", "", ""]
    LayerSwitch_OffData : String Array = ["", "", "", "", "", "", "", ""]
    LayerSwitch_State : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0]
+   IgnoreVHOffUntil : Double = 0.0  // Cross-talk guard: TALK ON suppresses VH OFF for 200ms
 
    // --- Layer Map (switch combination → layer number) ---
    MAX_LAYERS : Integer = 4
@@ -3782,7 +3783,7 @@ Function UpdateControllerInfoDisplay()
    End
    CtrlInfo_Lines <-- ""
 
-   // User Macros (1-99) — layer-in-source model
+   // User Macros (1-95) — layer-in-source model
    For m = 1; m < MAX_LAYER_MACROS; m = m + 1 Do
       lay0Count = Mac_Layer_BindCount[m]
       if lay0Count > 0 or Mac_SourceCount[m] > 0 then
@@ -3838,16 +3839,16 @@ Function UpdateControllerInfoDisplay()
    // System Macro Groups
    CtrlInfo_Lines <-- ""
    CtrlInfo_Lines <-- "--- SYSTEM MACRO GROUPS ---"
-   CtrlInfo_Lines <-- ">> Macro 51-66: Looper (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 67-82: Smart Solo (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 83-98: Strict Solo (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 99-114: User Mute (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 115-130: Velocity Range (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 131-146: Root/Chord (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 147-162: Octaver (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 163-178: Humanizer (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 179-194: Scale Quantizer (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 195-210: Auto Sustain (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 97-112: Looper (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 113-128: Smart Solo (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 129-144: Strict Solo (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 145-160: User Mute (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 161-176: Velocity Range (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 177-192: Root/Chord (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 193-208: Octaver (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 209-224: Humanizer (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 225-240: Scale Quantizer (Ch 1-16) <<"
+   CtrlInfo_Lines <-- ">> Macro 241-256: Auto Sustain (Ch 1-16) <<"
 
    // Hardware Assignments
    CtrlInfo_Lines <-- ""
@@ -6508,7 +6509,7 @@ Function BuildLFOUsageIndex()
 
                              if lfoIdx < 0 then
                                  if DebugMode then Trace("LFO v2: orphan binding '" + lfoName + "' in [" + mapName + "] Macro" + (macroSlot + 1) + ", not in registry") end
-                             elsif macroSlot < 0 or macroSlot >= 50 then
+                             elsif macroSlot < 0 or macroSlot >= 96 then
                                  if DebugMode then Trace("LFO v2: binding '" + lfoName + "' in [" + mapName + "] Macro" + (macroSlot + 1) + " outside user zone, skipped") end
                              elsif mapIdx < 0 then
                                  if DebugMode then Trace("LFO v2: binding '" + lfoName + "' in unknown map '" + mapName + "', skipped") end
@@ -6954,7 +6955,7 @@ End
 // of CurrentEditScope and the registry / LFO_ByMacro state.
 //
 // Five states:
-//   LOCKED          — scope is -1 or >= 50 (not a user macro)
+//   LOCKED          — scope is -1 or >= 96 (not a user macro)
 //   EDIT            — scope has a real LFO bound (LFO_ByMacro[slot] >= 0)
 //   DRAFT_EXISTING  — scope has no LFO, but draft-name already in registry
 //                     (auto-adopt that entry's Type/Rate/Cycles + show its
@@ -6984,14 +6985,14 @@ Function RefreshLFOInspector()
        Trace("METER: METER_LFO_V <- 0.0 (inspector refresh)")
    end
 
-   if scopeSlot < 0 or scopeSlot >= 50 then
+   if scopeSlot < 0 or scopeSlot >= 96 then
        // LOCKED state
        SetWidgetLabel(LBL_LFO, "-")
        SetWidgetLabel(LBL_LFO_Type, "-")
        SetWidgetLabel(LBL_LFO_Rate, "-")
        SetWidgetLabel(LBL_LFO_Cycles, "-")
        LFOBind_Lines = []
-       LFOBind_Lines <-- "Only User Macros allowed (scope 1-50)"
+       LFOBind_Lines <-- "Only User Macros allowed (scope 1-96)"
        LFO_Draft_Active = false
        if DebugMode then
            Trace("LFO v2: inspector LOCKED (scope=" + scopeSlot + ")")
@@ -7185,8 +7186,8 @@ Function ValidateMapping() Returns Boolean
    var mismatchDetails : String = ""
    var linkOk : Boolean
 
-   // Validate Mac_Layer_* VST bindings (macros 1..50)
-   For macIdx = 1; macIdx < 51; macIdx = macIdx + 1 Do
+   // Validate Mac_Layer_* VST bindings (macros 1..96)
+   For macIdx = 1; macIdx < 96; macIdx = macIdx + 1 Do
       bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
       if bc > 0 then
          fi = MacLayerBindIdx(macIdx, 0, 0)
@@ -13264,7 +13265,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
 
             // v2: smart auto-jump — land on the first macro with an LFO bound
             jumpSlot = -1
-            For j = 0; j < 50; j = j + 1 Do
+            For j = 0; j < 96; j = j + 1 Do
                if LFO_ByMacro[j] >= 0 and jumpSlot == -1 then jumpSlot = j end
             End
             if jumpSlot >= 0 then
@@ -13322,7 +13323,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
 
        // v2: smart auto-jump — land on the first macro with an LFO bound
        jumpSlot = -1
-       For j = 0; j < 50; j = j + 1 Do
+       For j = 0; j < 96; j = j + 1 Do
           if LFO_ByMacro[j] >= 0 and jumpSlot == -1 then jumpSlot = j end
        End
        if jumpSlot >= 0 then
@@ -15036,7 +15037,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Type_Next
            t = LFO_Draft_Type + 1
            if t > 5 then t = 0 end
            LFO_Draft_Type = t
-       elsif CurrentEditScope >= 0 and CurrentEditScope < 50 then
+       elsif CurrentEditScope >= 0 and CurrentEditScope < 96 then
            lfoIdx = LFO_ByMacro[CurrentEditScope]
            if lfoIdx >= 0 then
                t = LFO_Types[lfoIdx] + 1
@@ -15057,7 +15058,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Type_Prev
            t = LFO_Draft_Type - 1
            if t < 0 then t = 5 end
            LFO_Draft_Type = t
-       elsif CurrentEditScope >= 0 and CurrentEditScope < 50 then
+       elsif CurrentEditScope >= 0 and CurrentEditScope < 96 then
            lfoIdx = LFO_ByMacro[CurrentEditScope]
            if lfoIdx >= 0 then
                t = LFO_Types[lfoIdx] - 1
@@ -15078,7 +15079,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Rate_Next
            r = LFO_Draft_Rate + 1
            if r > 8 then r = 0 end
            LFO_Draft_Rate = r
-       elsif CurrentEditScope >= 0 and CurrentEditScope < 50 then
+       elsif CurrentEditScope >= 0 and CurrentEditScope < 96 then
            lfoIdx = LFO_ByMacro[CurrentEditScope]
            if lfoIdx >= 0 then
                r = LFO_Rates[lfoIdx] + 1
@@ -15099,7 +15100,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Rate_Prev
            r = LFO_Draft_Rate - 1
            if r < 0 then r = 8 end
            LFO_Draft_Rate = r
-       elsif CurrentEditScope >= 0 and CurrentEditScope < 50 then
+       elsif CurrentEditScope >= 0 and CurrentEditScope < 96 then
            lfoIdx = LFO_ByMacro[CurrentEditScope]
            if lfoIdx >= 0 then
                r = LFO_Rates[lfoIdx] - 1
@@ -15122,7 +15123,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Cycles_Next
            elsif c == 0 then c = 1
            else c = c + 1 end
            LFO_Draft_Cycles = c
-       elsif CurrentEditScope >= 0 and CurrentEditScope < 50 then
+       elsif CurrentEditScope >= 0 and CurrentEditScope < 96 then
            lfoIdx = LFO_ByMacro[CurrentEditScope]
            if lfoIdx >= 0 then
                c = LFO_Cycles[lfoIdx]
@@ -15148,7 +15149,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Cycles_Prev
            elsif c == 1 then c = 0
            else c = c - 1 end
            LFO_Draft_Cycles = c
-       elsif CurrentEditScope >= 0 and CurrentEditScope < 50 then
+       elsif CurrentEditScope >= 0 and CurrentEditScope < 96 then
            lfoIdx = LFO_ByMacro[CurrentEditScope]
            if lfoIdx >= 0 then
                c = LFO_Cycles[lfoIdx]
@@ -15178,7 +15179,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Run
 
    scopeSlot = CurrentEditScope
 
-   if scopeSlot < 0 or scopeSlot >= 50 then
+   if scopeSlot < 0 or scopeSlot >= 96 then
        // LOCKED — ignore
        SetWidgetValue(BTN_LFO_Run, 0.0)
    else
@@ -15212,7 +15213,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Run
                    Trace("METER: METER_LFO_V <- 0.0 (draft preview stopped)")
                    Trace("LFO v2: draft preview stopped, snapped back")
                end
-           elsif scopeSlot >= 0 and scopeSlot < 50 then
+           elsif scopeSlot >= 0 and scopeSlot < 96 then
                lfoIdx = LFO_ByMacro[scopeSlot]
                if lfoIdx >= 0 and LFO_Active[scopeSlot] then
                    StopLFO(scopeSlot)
@@ -15225,7 +15226,7 @@ End
 
 On WidgetValueChanged(val : Double) from BTN_LFO_Save
    // v2 unified Save — handles three states:
-   //   LOCKED (scope < 0 or >= 50) → flash help message, no-op
+   //   LOCKED (scope < 0 or >= 96) → flash help message, no-op
    //   DRAFT (scope has no LFO)    → create-or-update registry entry +
    //                                  add LFO:<name> | prefix to the
    //                                  current scope's macro line
@@ -15259,7 +15260,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Save
        mapName = CurrentCtrlMapName
 
        // LOCKED state → user help flash, nothing else
-       if scopeSlot < 0 or scopeSlot >= 50 then
+       if scopeSlot < 0 or scopeSlot >= 96 then
            LFOFlashMsg = "Select a User Macro first (Scope Prev/Next)"
            LFOFlashTimer = TimeSinceStartup() + 1500.0
            RefreshLFOInspector()
@@ -15410,7 +15411,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Delete
        scopeSlot = CurrentEditScope
 
        // EDIT state only
-       if scopeSlot < 0 or scopeSlot >= 50 or LFO_Draft_Active then
+       if scopeSlot < 0 or scopeSlot >= 96 or LFO_Draft_Active then
            if DebugMode then Trace("LFO v2: BTN_LFO_Delete ignored (not in EDIT state)") end
        else
            lfoIdx = LFO_ByMacro[scopeSlot]
@@ -16295,14 +16296,26 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0
             if incomingHexFull == MyToUpper(LayerSwitch_OnData[swIdx]) then
                LayerSwitch_State[swIdx] = 1
                UpdateActiveLayer()
+               // Cross-talk guard: TALK ON triggers a phantom VH OFF burst.
+               // Set a 200ms ignore window so the VH OFF is suppressed.
+               if MyToUpper(LayerSwitch_Label[swIdx]) == "TALK" then
+                  IgnoreVHOffUntil = TimeSinceStartup() + 200.0
+               end
                if DebugMode then
                   Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): ON")
                end
             elsif incomingHexFull == MyToUpper(LayerSwitch_OffData[swIdx]) then
-               LayerSwitch_State[swIdx] = 0
-               UpdateActiveLayer()
-               if DebugMode then
-                  Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): OFF")
+               // Cross-talk guard: suppress VH OFF within the ignore window
+               if MyToUpper(LayerSwitch_Label[swIdx]) == "HARMONY" and TimeSinceStartup() < IgnoreVHOffUntil then
+                  if DebugMode then
+                     Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): OFF suppressed (TALK cross-talk)")
+                  end
+               else
+                  LayerSwitch_State[swIdx] = 0
+                  UpdateActiveLayer()
+                  if DebugMode then
+                     Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): OFF")
+                  end
                end
             end
          end
