@@ -7481,8 +7481,10 @@ Function EvaluateSmartAdapt()
     var targetMap : String = ""
     var pluginName : String = ""
 
-    // 1. GUARD: Is the feature enabled?
-    if GetWidgetValue(BTN_SmartAdapt) > 0.5 then
+    // 1. GUARD: Skip during snapshot load (bypass changes fire this via UpdateSoloMuteState)
+    if IsLoadingSnapshot then
+       // Do nothing — song switch is in progress, SmartAdapt will be evaluated after
+    elsif GetWidgetValue(BTN_SmartAdapt) > 0.5 then
         
         // 2. HOW MANY VSTS ARE CURRENTLY ACTIVE? (Definitive count)
         activeVSTs = 0
