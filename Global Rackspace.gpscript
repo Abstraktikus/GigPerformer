@@ -4056,55 +4056,11 @@ Function SaveHardwareMap()
     end
 End
 
+// DEPRECATED: Hardware sources are now inline in ControllerMaps_v2.txt
+// Kept as stub for call-site compatibility (LoadHardwareMap still called from init)
 Function LoadHardwareMap()
-    var content, line, key, valPart, entry : String
-    var lines, parts, entries, subParts : String Array
-    var i, j, mIdx, ch, cc : Integer
-
-    HW_Count = 0; HW_MacroIdx = []; HW_Channel = []; HW_CC = []
-
-    if FileExists(HardwareMapFilePath) then
-        content = LoadStringFromTextFile(HardwareMapFilePath)
-        lines = SplitString(content, NEW_LINE)
-        
-        For i = 0; i < Size(lines); i = i + 1 Do
-            line = TrimString(lines[i])
-            if IndexOfSubstring(line, "Macro", false) == 0 then
-                parts = SplitString(line, "=")
-                if Size(parts) == 2 then
-                    key = TrimString(parts[0]); valPart = TrimString(parts[1])
-                    mIdx = StringToInt(ReplaceString(key, "Macro", "", false)) - 1
-                    
-                    if mIdx >= 0 and mIdx < MAX_MACROS then
-                        entries = SplitString(valPart, "|")
-                        For j = 0; j < Size(entries); j = j + 1 Do
-                            entry = TrimString(entries[j])
-                            subParts = SplitString(entry, ":")
-                            if Size(subParts) == 2 then
-                                ch = StringToInt(ReplaceString(TrimString(subParts[0]), "Ch", "", false))
-                                cc = StringToInt(ReplaceString(TrimString(subParts[1]), "CC", "", false))
-                                
-                                // --- DETECT CC OR NOTE ---
-                                if IndexOfSubstring(TrimString(subParts[1]), "Note", true) == 0 then
-                                    cc = StringToInt(ReplaceString(TrimString(subParts[1]), "Note", "", true))
-                                    HW_IsNote <-- true
-                                else
-                                    cc = StringToInt(ReplaceString(TrimString(subParts[1]), "CC", "", true))
-                                    HW_IsNote <-- false
-                                end
-                                
-                                HW_MacroIdx <-- mIdx; HW_Channel <-- ch; HW_CC <-- cc
-                                HW_Count = HW_Count + 1
-                            end
-                        End
-                    end
-                end
-            end
-        End
-        Trace("HAL: Loaded " + HW_Count + " Hardware Assignments.")
-    else
-        Trace("HAL: No HardwareMap.txt found. Starting blank.")
-    end
+    HW_Count = 0; HW_MacroIdx = []; HW_Channel = []; HW_CC = []; HW_IsNote = []
+    Trace("HAL: LoadHardwareMap SKIPPED (v2 unified format active)")
 End
 
 // ---------------------------------------------------------
@@ -8003,7 +7959,7 @@ Function EvaluateSmartAdapt()
                 end
                 
                 Trace("SMART ADAPT: VST " + (targetVstIdx + 1) + " playing solo. Loading " + targetMap)
-                LoadControllerMap(targetMap)
+                LoadControllerMapV2(targetMap)
                 
                 // Slightly delay hardware sync (debounce 400ms)
                 HardwareSyncTimer = TimeSinceStartup() + 400.0 
@@ -8017,7 +7973,7 @@ Function EvaluateSmartAdapt()
             if IsAutoSoloMapActive then
                 if PreSoloMapName != "" and PreSoloMapName != CurrentCtrlMapName then
                     Trace("SMART ADAPT: Isolation ended (" + activeVSTs + " VSTs active). Reverting to -> " + PreSoloMapName)
-                    LoadControllerMap(PreSoloMapName)
+                    LoadControllerMapV2(PreSoloMapName)
                     
                     HardwareSyncTimer = TimeSinceStartup() + 400.0
                     OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> MAP RESTORED <<<", Local_IP, Local_PORT)
@@ -8033,7 +7989,7 @@ Function EvaluateSmartAdapt()
         if IsAutoSoloMapActive then
             if PreSoloMapName != "" and PreSoloMapName != CurrentCtrlMapName then
                 Trace("SMART ADAPT: Feature disabled. Reverting to -> " + PreSoloMapName)
-                LoadControllerMap(PreSoloMapName)
+                LoadControllerMapV2(PreSoloMapName)
                 HardwareSyncTimer = TimeSinceStartup() + 400.0
             end
             IsAutoSoloMapActive = false
@@ -8061,7 +8017,7 @@ Function CycleCtrlMap(direction : Integer)
         
         Trace("Cycle: Index " + CurrentCtrlMapIndex + " -> " + newIdx + " (" + CtrlMapList[newIdx] + ")")
         
-        LoadControllerMap(CtrlMapList[newIdx])
+        LoadControllerMapV2(CtrlMapList[newIdx])
         RecordTimelineEvent("Map", newIdx)        
         CurrentCtrlMapIndex = newIdx
     else
@@ -8081,7 +8037,7 @@ Function AutoSwitchMapOnBypass()
     // is either "Standard" or already one of the dynamic VST maps.
     // Prevents a specifically loaded song map from being overwritten.
     if CurrentCtrlMapName == "Standard" or IndexOfSubstring(CurrentCtrlMapName, "Standard_VST", false) == 0 then
-        LoadControllerMap(GetDynamicStandardMap())
+        LoadControllerMapV2(GetDynamicStandardMap())
     end
     
     // Always sync hardware afterwards
@@ -9801,7 +9757,7 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
     elsif eventType == "Map" then
         if eventVal >= 0 and eventVal < Size(CtrlMapList) then
             Trace("TIMELINE: Auto-Switching Map to -> " + CtrlMapList[eventVal])
-            LoadControllerMap(CtrlMapList[eventVal])
+            LoadControllerMapV2(CtrlMapList[eventVal])
             HardwareSyncTimer = TimeSinceStartup() + 400.0
             OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TL-MAP: " + CtrlMapList[eventVal] + " <<<", Local_IP, Local_PORT)
             MacroFeedbackTimer = TimeSinceStartup() + 2000.0
@@ -11958,7 +11914,7 @@ End
 // and by the existing joystick Y+ path in ProcessSystemNavigation).
 Function RestoreInitialControllerMap()
    if ExpectedMapName != "" and ExpectedMapName != "-" then
-      LoadControllerMap(ExpectedMapName)
+      LoadControllerMapV2(ExpectedMapName)
       HardwareSyncTimer = TimeSinceStartup() + 2000.0
       OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> MAP: " + ExpectedMapName + " <<<", Local_IP, Local_PORT)
       MacroFeedbackTimer = TimeSinceStartup() + 2000.0
@@ -12330,7 +12286,7 @@ Function PerformSystemReset()
    else
        SyncMatrixToScriptlet()
        SetDefaultChannelScope()
-       LoadControllerMap("Standard")
+       LoadControllerMapV2("Standard")
        HardwareSyncTimer = TimeSinceStartup() + 3500.0
        
        SyncBrowserToLoadedPlugin(GetPluginInfo(BLK_VST[ReplaceableSlots[0]], 0))
@@ -13622,7 +13578,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
             
             ExpectedMapName = targetCtrlMap
             
-            LoadControllerMap(targetCtrlMap)
+            LoadControllerMapV2(targetCtrlMap)
             BuildLFOUsageIndex()  // v2: rebuild reverse index against the freshly loaded map
             HardwareSyncTimer = TimeSinceStartup() + 3500.0
             SyncInputFeedback()
@@ -13681,7 +13637,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
        
        For i = 0; i < 16; i = i + 1 Do DeactivateChannel(i) End
        
-       LoadControllerMap("Standard")
+       LoadControllerMapV2("Standard")
        BuildLFOUsageIndex()  // v2: rebuild reverse index against the freshly loaded map
        HardwareSyncTimer = TimeSinceStartup() + 100.0
 
@@ -14254,7 +14210,8 @@ Initialization
    Arr_Subbar_LEDs = [LBL_Subbar_1, LBL_Subbar_2, LBL_Subbar_3, LBL_Subbar_4]
    
    // B. Load hardware & text databases
-   LoadHardwareMap() // <- Now safely near the top!
+   LoadHardwareMap() // <- DEPRECATED: kept for v1 compat, body is stub
+   LoadControllerMapV2("DEFAULT_INIT") // <- v2: parse [Map:Default] once at startup
    LoadVstDatabase()
    BuildFilteredVstList()
 
@@ -15766,7 +15723,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Save
                //    LOCKED. mapName is always the map active when Save was clicked
                //    (captured at the top from CurrentCtrlMapName) so the reload is
                //    the same-map guarantee.
-               LoadControllerMap(mapName)
+               LoadControllerMapV2(mapName)
                CurrentEditScope = scopeSlot
                UpdateEditScopeDisplay()
                BuildLFOUsageIndex()
@@ -15867,7 +15824,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Delete
                //    as a side effect; we capture and restore it so the scope stays
                //    on the macro the user was viewing (which will now be in DRAFT
                //    because the LFO binding is gone).
-               LoadControllerMap(CurrentCtrlMapName)
+               LoadControllerMapV2(CurrentCtrlMapName)
                CurrentEditScope = scopeSlot
                UpdateEditScopeDisplay()
                BuildLFOUsageIndex()
@@ -17496,7 +17453,7 @@ On TimerTick(ms : Double)
                     End
                     // Restore configured state if STRIP made live changes
                     if StripLiveDirty then
-                        LoadControllerMap(CurrentCtrlMapName)
+                        LoadControllerMapV2(CurrentCtrlMapName)
                         StripLiveDirty = false
                         Trace("STRIP: Live changes restored via controller map reload.")
                         OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> STRIP RESTORED <<<", Local_IP, Local_PORT)
