@@ -3436,7 +3436,7 @@ End
 // ---------------------------------------------------------
 
 Function GetAssignedHWString(mIdx : Integer) Returns String
-   // Hardware assignments are now embedded in ControllerMaps_v2.txt (Source= lines)
+   // Hardware assignments are now embedded in ControllerMaps.txt (Source= lines)
    result = ""
 End
 
@@ -7356,7 +7356,7 @@ Function LoadControllerMap(mapName : String)
    var ctrlMapFilePath : String
 
    savedEditScope = CurrentEditScope
-   ctrlMapFilePath = UserSnapshotPath + "/ControllerMaps_v2.txt"
+   ctrlMapFilePath = UserSnapshotPath + "/ControllerMaps.txt"
 
    if mapName == "DEFAULT_INIT" then
       isFirstLoad = true
@@ -11617,9 +11617,9 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
    // --- UNIVERSAL FEEDBACK ANFEUERN ---
    TriggerMacroFeedback(cc, true, val)
 
-   // 1. LEARN MODE (hardware sources are now configured in ControllerMaps_v2.txt)
+   // 1. LEARN MODE (hardware sources are now configured in ControllerMaps.txt)
    if IsHardwareLearning then
-       Trace("HAL Learn: CC" + cc + " Ch" + ch + " detected for Macro " + (CurrentEditScope + 1) + " (configure in ControllerMaps_v2.txt)")
+       Trace("HAL Learn: CC" + cc + " Ch" + ch + " detected for Macro " + (CurrentEditScope + 1) + " (configure in ControllerMaps.txt)")
        IsHardwareLearning = false
        SetWidgetValue(BTN_MacroLearn, 0.0)
        UpdateControllerInfoDisplay()
@@ -11847,10 +11847,10 @@ Function ProcessHardwareNote(m : NoteMessage)
     // Runs on every hardware note-on regardless of latch state — cheap.
     if IsNoteOn(m) then Latch_LastNoteOnTime = TimeSinceStartup() end
 
-    // 1. LEARN MODE FOR NOTES (sources are now configured in ControllerMaps_v2.txt)
+    // 1. LEARN MODE FOR NOTES (sources are now configured in ControllerMaps.txt)
     if IsHardwareLearning then
         if IsNoteOn(m) then
-            Trace("HAL Learn: Note" + noteNum + " Ch" + chan + " detected for Macro " + (CurrentEditScope + 1) + " (configure in ControllerMaps_v2.txt)")
+            Trace("HAL Learn: Note" + noteNum + " Ch" + chan + " detected for Macro " + (CurrentEditScope + 1) + " (configure in ControllerMaps.txt)")
             IsHardwareLearning = false
             SetWidgetValue(BTN_MacroLearn, 0.0)
             UpdateControllerInfoDisplay()
@@ -14870,8 +14870,8 @@ End
 
 On WidgetValueChanged(val : Double) from BTN_MacroUnLearn
     if val > 0.5 then
-        // Hardware unlearn is now managed via ControllerMaps_v2.txt
-        Trace("HAL: Unlearn for Macro " + (CurrentEditScope + 1) + " (edit ControllerMaps_v2.txt)")
+        // Hardware unlearn is now managed via ControllerMaps.txt
+        Trace("HAL: Unlearn for Macro " + (CurrentEditScope + 1) + " (edit ControllerMaps.txt)")
         UpdateControllerInfoDisplay()
         SetWidgetValue(BTN_MacroUnLearn, 0.0)
     end

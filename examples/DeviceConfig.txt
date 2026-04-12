@@ -1,14 +1,12 @@
 ; =============================================================================
-; DEVICE CONFIGURATION — Hardware Abstraction Layer
+; DEVICE CONFIGURATION v2 — Hardware Abstraction Layer
 ; =============================================================================
-; This file defines all connected MIDI devices, their physical controls,
-; and SysEx commands. Edit this file to match your hardware setup.
-;
-; Capabilities: TRANSPORT_SYNC, SYSEX_TRIGGER, CROSSFADER_TARGETS,
-;               SYSEX_PROFILES, JOYSTICK, MIDI_OUT, FEEDBACK_CC, SYSEX_COMMANDS
-;
-; Control Types: FADER, ENCODER, BUTTON, JOYSTICK, PAD
-; Feedback: NONE, CC, SYSEX
+; Sections: DEVICE, CONTROL, SYSEX (unchanged)
+;     NEW:  LAYERSWITCH, LAYERMAP, PERMANENT, OVERLAY
+; =============================================================================
+
+; =============================================================================
+; DEVICES
 ; =============================================================================
 
 [DEVICE:0]
@@ -24,6 +22,10 @@ MidiIn=Minilab3 MIDI
 MidiOut=Minilab3 MIDI
 Channel=0
 Caps=SYSEX_PROFILES,SYSEX_COMMANDS
+
+; =============================================================================
+; CONTROLS
+; =============================================================================
 
 [CONTROL:0]
 Device=0
@@ -70,6 +72,10 @@ RangeMin=0
 RangeMax=1
 Feedback=SYSEX
 
+; =============================================================================
+; SYSEX COMMANDS (outgoing)
+; =============================================================================
+
 [SYSEX:0]
 Device=1
 Purpose=PROFILE_1
@@ -89,3 +95,61 @@ Data=F0 00 20 6B 7F 42 02 00 62 06 F7
 Device=1
 Purpose=PROFILE_7
 Data=F0 00 20 6B 7F 42 02 00 62 07 F7
+
+; =============================================================================
+; LAYER SWITCHES — Binary toggle triggers (incoming)
+; =============================================================================
+; Type = SYSEX | NOTE | CC
+; SYSEX: OnData/OffData = one signature message picked from the burst
+; NOTE:  Velocity > 0 = ON, Velocity 0 = OFF
+; CC:    Value > 63 = ON, Value <= 63 = OFF
+
+[LAYERSWITCH:0]
+Device=0
+Label=Harmony
+Type=SYSEX
+OnData=F0 43 10 4C 04 00 0C 40 F7
+OffData=F0 43 10 4C 04 00 0C 7F F7
+
+[LAYERSWITCH:1]
+Device=0
+Label=Talk
+Type=SYSEX
+OnData=F0 43 10 4C 04 00 16 7F F7
+OffData=F0 43 10 4C 04 00 16 00 F7
+
+; =============================================================================
+; LAYER MAP — Switch combination -> Layer number
+; =============================================================================
+; Bitmask: Switch0=bit0, Switch1=bit1
+; 2 switches -> 2^2 = 4 states. Freely extensible to N switches.
+
+[LAYERMAP:0]
+Device=0
+State_0=LAY0
+State_1=LAY1
+State_2=LAY2
+State_3=LAY3
+
+; =============================================================================
+; PERMANENT BINDINGS — Always active, independent of ControllerMap
+; =============================================================================
+
+[PERMANENT:0]
+Device=0
+Source=CC64
+Function=SYSTEM_TOGGLE
+
+[PERMANENT:1]
+Device=0
+Source=CC11
+Function=CROSSFADER
+
+; =============================================================================
+; OVERLAY — Layer-level actions (not per-Macro, fires on layer activation)
+; =============================================================================
+
+[OVERLAY:0]
+Device=0
+Layer=3
+Action=SYSTEM_TOGGLE_ON

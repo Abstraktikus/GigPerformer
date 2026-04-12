@@ -70,8 +70,8 @@ Live performance system built on Gig Performer with a ~16k-line GPScript Global 
 |---|---|
 | `Global Rackspace.gpscript` | Main script (~16k lines), 26 sections |
 | `Note Prozessor.gpscript` | Per-channel note processing scriptlet |
-| `examples/DeviceConfig_v2.txt` | Hardware abstraction config (devices, controls, layer switches) |
-| `examples/ControllerMaps_v2.txt` | Unified controller maps with `[Map:Default]` inheritance |
+| `examples/DeviceConfig.txt` | Hardware abstraction config (devices, controls, layer switches) |
+| `examples/ControllerMaps.txt` | Unified controller maps with `[Map:Default]` inheritance |
 | `docs/superpowers/specs/` | Design specifications |
 | `docs/superpowers/plans/` | Implementation plans |
 | `docs/MACROS.md` | User-facing macro/controller map reference |
