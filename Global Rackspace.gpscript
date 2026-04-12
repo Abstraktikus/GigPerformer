@@ -7440,13 +7440,9 @@ Function LoadControllerMap(mapName : String)
 
    Trace("CTRLMAP: Loaded [Map:" + mapName + "]")
 
-   // Update LBL_CtrlConfig with map name
+   // Update LBL_CtrlConfig with the active map name (exactly one name, no combinations)
    if mapName <> "DEFAULT_INIT" then
-      if Length(BaseConfigName) > 0 then
-         LBL_CtrlConfig.SetWidgetLabel(BaseConfigName + " | " + mapName)
-      else
-         LBL_CtrlConfig.SetWidgetLabel(mapName)
-      end
+      LBL_CtrlConfig.SetWidgetLabel(mapName)
    end
 
    UpdateControllerInfoDisplay()
