@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-12.004"
+   SCRIPT_VERSION : String = "2026-04-12.005"
 
    DebugMode : Boolean = false
 
@@ -459,6 +459,7 @@ Var
    MatrixSafetyTimer, LoopSafetyTimer, DelayedLoadTimer : Double = 0.0
    DelayedSongSwitchTimer, SyncLockTimer, PlayheadEvalTimer : Double = 0.0
    GPTransportEvaluationTimer, StyleTriggerResetTimer, MacroFeedbackTimer : Double = 0.0
+   SysModeFeedbackTimer, LayerFeedbackTimer : Double = 0.0
    ScrubberTaubTimer, TransportDeafTimer, StopWatchdogTimer : Double = 0.0
    StartWatchdogTimer, LooperButtonSafetyTimer, IgnoreUIFeedbackTimer : Double = 0.0
    StateResetTime : Double = 0.0 
@@ -736,6 +737,7 @@ Var
    
    PendingMapName : String = ""
    MacroFeedbackLockTimer : Double = 0.0
+   LayerFeedbackStatus : String = "LAY0"
 
    // --- Unified Macro System (v2) ---
    MAX_SOURCES_PER_MACRO : Integer = 4
@@ -1864,6 +1866,14 @@ Function UpdateActiveLayer()
    else
       ActiveLayer = 0
    end
+
+   // Update permanent layer status
+   if ActiveLayer == 0 then
+      LayerFeedbackStatus = "LAY0"
+   else
+      LayerFeedbackStatus = "LAY" + IntToString(ActiveLayer)
+   end
+   OSC_SendStringSpecific("/UI/SetLayerFeedback", LayerFeedbackStatus, Local_IP, Local_PORT)
 
    // Fire/deactivate OVERLAY actions on layer change
    if ActiveLayer <> oldLayer then
@@ -9109,9 +9119,8 @@ Function CycleGlobalSystemMode()
    modeName = SysModeNames[GlobalSystemMode]
 
    Trace("SYS-MODE: Switched to " + modeName)
-   OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
-   MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-   MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+   OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
+   SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
 End
 
 Function SelectGlobalSystemMode(targetMode : Integer)
@@ -9126,9 +9135,8 @@ Function SelectGlobalSystemMode(targetMode : Integer)
 
         modeName = SysModeNames[GlobalSystemMode]
         Trace("SYS-MODE: Selected " + modeName)
-        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
-        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-        MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
+        SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
     end
 End
 
@@ -9146,8 +9154,8 @@ Function StartTimelineRecording()
     end
 
     Trace("TIMELINE: Count-in started, expires in " + Round(GetCountInDurationMS()) + "ms")
-    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: Count-In... <<<", Local_IP, Local_PORT)
-    MacroFeedbackTimer = TimeSinceStartup() + GetCountInDurationMS() + 500.0
+    OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> TIMELINE: Count-In... <<<", Local_IP, Local_PORT)
+    SysModeFeedbackTimer = TimeSinceStartup() + GetCountInDurationMS() + 500.0
 End
 
 Function CommitTimelineRecording()
@@ -9192,8 +9200,8 @@ Function DiscardTimelineRecording()
     TimelineCountInTimer = 0.0
 
     Trace("TIMELINE: Recording discarded.")
-    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> RECORDING DISCARDED <<<", Local_IP, Local_PORT)
-    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+    OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> RECORDING DISCARDED <<<", Local_IP, Local_PORT)
+    SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
 
     // Restart recording immediately so user can re-record
     TimelineRecState = 0  // Reset to Replace
@@ -9212,8 +9220,8 @@ Function ExecuteRecSongpart()
         RecordTimelineEvent("Marker", 0)
         CommitTimelineRecording()
         TimelineSubMode = 0
-        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SONG RECORDED <<<", Local_IP, Local_PORT)
-        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SONG RECORDED <<<", Local_IP, Local_PORT)
+        SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
 
     // Last part already recorded — this press = END OF SONG
     elsif TimelineCurrentPartIdx >= Size(Arr_SectionNames) then
@@ -9221,8 +9229,8 @@ Function ExecuteRecSongpart()
         RecordTimelineEvent("Marker", TimelineCurrentPartIdx)
         CommitTimelineRecording()
         TimelineSubMode = 0
-        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SONG RECORDED <<<", Local_IP, Local_PORT)
-        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SONG RECORDED <<<", Local_IP, Local_PORT)
+        SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
         Trace("TIMELINE: END OF SONG at " + Round(RecordEndTimeMS) + "ms")
 
     else
@@ -9230,8 +9238,8 @@ Function ExecuteRecSongpart()
         partName = Arr_SectionNames[TimelineCurrentPartIdx]
         RecordTimelineEvent("Marker", TimelineCurrentPartIdx)
 
-        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> PART: " + partName + " <<<", Local_IP, Local_PORT)
-        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> PART: " + partName + " <<<", Local_IP, Local_PORT)
+        SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
 
         TimelineCurrentPartIdx = TimelineCurrentPartIdx + 1
         Trace("TIMELINE: Recorded part " + partName + ", next idx=" + TimelineCurrentPartIdx)
@@ -9242,8 +9250,8 @@ Function PartJumpPreview(dir : Integer)
     var partName : String
 
     if Size(Arr_SectionNames) == 0 then
-        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> NO PARTS LOADED <<<", Local_IP, Local_PORT)
-        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> NO PARTS LOADED <<<", Local_IP, Local_PORT)
+        SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
     else
         PreviewPartIdx = PreviewPartIdx + dir
         if PreviewPartIdx < 0 then PreviewPartIdx = 0 end
@@ -9251,8 +9259,8 @@ Function PartJumpPreview(dir : Integer)
 
         partName = Arr_SectionNames[PreviewPartIdx]
 
-        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + partName + " <<<", Local_IP, Local_PORT)
-        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> " + partName + " <<<", Local_IP, Local_PORT)
+        SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
 
         Trace("TIMELINE: Preview part " + PreviewPartIdx + " = " + partName)
     end
@@ -9334,8 +9342,8 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
     elsif eventType == "Marker" then
         if eventVal >= 0 and eventVal < Size(Arr_SectionNames) then
             PreviewPartIdx = eventVal
-            OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + Arr_SectionNames[eventVal] + " <<<", Local_IP, Local_PORT)
-            MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+            OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> " + Arr_SectionNames[eventVal] + " <<<", Local_IP, Local_PORT)
+            SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
             Trace("TIMELINE: Part -> " + Arr_SectionNames[eventVal])
         end
     elsif IndexOfSubstring(eventType, "OVL_", false) == 0 then
@@ -9900,8 +9908,8 @@ Function CycleChannelScope(direction : Integer)
    ScrollToCurrentChannel()
    
    // HUD Feedback
-   OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SCOPE: CHANNEL " + (currentIdx + 1) + " <<<", Local_IP, Local_PORT)
-   MacroFeedbackTimer = TimeSinceStartup() + 1500.0
+   OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SCOPE: CHANNEL " + (currentIdx + 1) + " <<<", Local_IP, Local_PORT)
+   SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
 End
 
 // ---------------------------------------------------------
@@ -10409,8 +10417,8 @@ Function EvaluateAutoSysMode()
             else SendDeviceSysEx(controllerDevIdx, "PROFILE_1") end
         end
         
-        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SYS-MODE: " + SysModeNames[GlobalSystemMode] + " <<<", Local_IP, Local_PORT)
-        MacroFeedbackTimer = TimeSinceStartup() + 1500.0
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SYS-MODE: " + SysModeNames[GlobalSystemMode] + " <<<", Local_IP, Local_PORT)
+        SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
     end
    end // outer guard: skip for STRIP-CONTROL/TIMELINE
 End
@@ -10465,6 +10473,8 @@ Function ActivateOverlay(funcName : String, channel : Integer)
    if DebugMode then
       Trace("OVERLAY ON: " + funcName + " CH" + IntToString(channel))
    end
+   OSC_SendStringSpecific("/UI/SetLayerFeedback", LayerFeedbackStatus + " | " + funcName + ":CH" + IntToString(channel) + " ON", Local_IP, Local_PORT)
+   LayerFeedbackTimer = TimeSinceStartup() + 2000.0
 End
 
 Function DeactivateOverlay(funcName : String, channel : Integer)
@@ -10500,6 +10510,8 @@ Function DeactivateOverlay(funcName : String, channel : Integer)
    if DebugMode then
       Trace("OVERLAY OFF: " + funcName + " CH" + IntToString(channel))
    end
+   OSC_SendStringSpecific("/UI/SetLayerFeedback", LayerFeedbackStatus + " | " + funcName + ":CH" + IntToString(channel) + " OFF", Local_IP, Local_PORT)
+   LayerFeedbackTimer = TimeSinceStartup() + 2000.0
 End
 
 // Range-based overlay trigger with positional and movement-toggle support
@@ -10892,8 +10904,8 @@ Function ChangeVstScope(direction : Integer, directIdx : Integer)
    SyncChannelScopeToVst(Active_VST_Scope)
    UpdateSoloMuteState()
    
-   OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> SCOPE: " + pName + " <<<", Local_IP, Local_PORT)
-   MacroFeedbackTimer = TimeSinceStartup() + 1500.0
+   OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SCOPE: " + pName + " <<<", Local_IP, Local_PORT)
+   SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
    ShowVSTOverlay(">>> SCOPE: " + pName + " <<<", 1500.0)
    
    // --->  AUTO-SHOW GUI LOGIC <---
@@ -11419,9 +11431,8 @@ Function CycleStripTheme(dir : Integer)
    if Strip_ThemeIdx < 3 then Strip_ThemeIdx = Size(MacroGroup_Names) - 1
    elsif Strip_ThemeIdx >= Size(MacroGroup_Names) then Strip_ThemeIdx = 3 end
 
-   OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> STRIP: " + MacroGroup_Names[Strip_ThemeIdx] + " <<<", Local_IP, Local_PORT)
-   MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-   MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+   OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> STRIP: " + MacroGroup_Names[Strip_ThemeIdx] + " <<<", Local_IP, Local_PORT)
+   SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
    Trace("STRIP: Theme -> " + MacroGroup_Names[Strip_ThemeIdx])
 End
 
@@ -11445,9 +11456,8 @@ Function CycleStripChannel(dir : Integer)
       end
    End
 
-   OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> STRIP: Channel " + IntToString(Strip_ChannelIdx + 1) + " <<<", Local_IP, Local_PORT)
-   MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-   MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+   OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> STRIP: Channel " + IntToString(Strip_ChannelIdx + 1) + " <<<", Local_IP, Local_PORT)
+   SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
    Trace("STRIP: Channel -> " + IntToString(Strip_ChannelIdx + 1))
 End
 
@@ -11527,9 +11537,8 @@ Function ToggleStripMacro()
 
    if paramName != "" then
       if newVal > 0 then statusStr = "ON" else statusStr = "OFF" end
-      OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> Ch " + IntToString(ch + 1) + " | " + paramName + " [" + statusStr + "] <<<", Local_IP, Local_PORT)
-      MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-      MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+      OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> Ch " + IntToString(ch + 1) + " | " + paramName + " [" + statusStr + "] <<<", Local_IP, Local_PORT)
+      SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
       Trace("STRIP TOGGLE: Ch " + IntToString(ch + 1) + " | " + paramName + " = " + statusStr)
       StripLiveDirty = true
       UpdateSoloMuteState()
@@ -11543,9 +11552,8 @@ Function RestoreInitialControllerMap()
    if ExpectedMapName != "" and ExpectedMapName != "-" then
       LoadControllerMap(ExpectedMapName)
       HardwareSyncTimer = TimeSinceStartup() + 2000.0
-      OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> MAP: " + ExpectedMapName + " <<<", Local_IP, Local_PORT)
-      MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-      MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+      OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> MAP: " + ExpectedMapName + " <<<", Local_IP, Local_PORT)
+      SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
    end
 End
 
@@ -11680,9 +11688,8 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
                    Trace("SYS-MODE: RESTORED -> " + SysModeNames[GlobalSystemMode])
                end
                mName = SysModeNames[GlobalSystemMode]
-               OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> " + mName + " <<<", Local_IP, Local_PORT)
-               MacroFeedbackTimer = TimeSinceStartup() + 2000.0
-               MacroFeedbackLockTimer = TimeSinceStartup() + 2000.0
+               OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> " + mName + " <<<", Local_IP, Local_PORT)
+               SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
            else
                // SUSTAIN RELEASE: Save sticky state, do NOT stop Timeline recording
                StickySystemMode = GlobalSystemMode
@@ -11776,14 +11783,14 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
                 TimelineSubMode = 1
                 TimelineRecState = 0  // Default to Replace
                 StartTimelineRecording()
-                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: REC (Replace) <<<", Local_IP, Local_PORT)
+                OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> TIMELINE: REC (Replace) <<<", Local_IP, Local_PORT)
             else
                 // REC -> PLAY (commit recording)
                 if TimelineRecActive then CommitTimelineRecording() end
                 TimelineSubMode = 0
-                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: PLAY <<<", Local_IP, Local_PORT)
+                OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> TIMELINE: PLAY <<<", Local_IP, Local_PORT)
             end
-            MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+            SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
 
         elsif actionType == "X_AXIS" or actionType == "ENCODER" then
             if TimelineSubMode == 0 then
@@ -11801,13 +11808,13 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
                     if TimelineRecState > 2 then TimelineRecState = 0 end
 
                     if TimelineRecState == 0 then
-                        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> REC: Replace <<<", Local_IP, Local_PORT)
+                        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> REC: Replace <<<", Local_IP, Local_PORT)
                     elsif TimelineRecState == 1 then
-                        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> REC: Overdub <<<", Local_IP, Local_PORT)
+                        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> REC: Overdub <<<", Local_IP, Local_PORT)
                     elsif TimelineRecState == 2 then
                         DiscardTimelineRecording()
                     end
-                    MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+                    SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
                 end
             end
         end
@@ -16906,8 +16913,8 @@ On TimerTick(ms : Double)
                RecordStartTimeMS = TimeSinceStartup()
 
                Trace("TIMELINE: Count-in expired. Recording started at " + Round(RecordStartTimeMS) + "ms")
-               OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TIMELINE: REC <<<", Local_IP, Local_PORT)
-               MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+               OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> TIMELINE: REC <<<", Local_IP, Local_PORT)
+               SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
            end
        end
 
@@ -16981,6 +16988,18 @@ On TimerTick(ms : Double)
         if MacroFeedbackTimer > 0.0 and TimeSinceStartup() > MacroFeedbackTimer then
             MacroFeedbackTimer = 0.0
             OSC_SendStringSpecific("/UI/SetMacroFeedback", "", Local_IP, Local_PORT)
+        end
+        if SysModeFeedbackTimer > 0.0 and TimeSinceStartup() > SysModeFeedbackTimer then
+            SysModeFeedbackTimer = 0.0
+            if SystemModeActive then
+                OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeNames[GlobalSystemMode], Local_IP, Local_PORT)
+            else
+                OSC_SendStringSpecific("/UI/SetSysModeFeedback", "", Local_IP, Local_PORT)
+            end
+        end
+        if LayerFeedbackTimer > 0.0 and TimeSinceStartup() > LayerFeedbackTimer then
+            LayerFeedbackTimer = 0.0
+            OSC_SendStringSpecific("/UI/SetLayerFeedback", LayerFeedbackStatus, Local_IP, Local_PORT)
         end
         
         // --- MACRO ANIMATION ENGINE ---
@@ -17089,8 +17108,8 @@ On TimerTick(ms : Double)
                         LoadControllerMap(CurrentCtrlMapName)
                         StripLiveDirty = false
                         Trace("STRIP: Live changes restored via controller map reload.")
-                        OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> STRIP RESTORED <<<", Local_IP, Local_PORT)
-                        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
+                        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> STRIP RESTORED <<<", Local_IP, Local_PORT)
+                        SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
                     end
                 end
             end
