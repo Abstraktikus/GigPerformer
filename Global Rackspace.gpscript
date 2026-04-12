@@ -16564,8 +16564,9 @@ On TimerTick(ms : Double)
      msLeft_blink : Double = 0.0; timeSinceHW : Double = 0.0; t_progress : Double = 0.0;
      a_val : Double = 0.0; msSinceBarStart : Double = 0.0; currentBPM_Tick : Double = 0.0; msPerBeat : Double = 0.0
      msSinceSongStart : Double = 0.0
-     countdownBars : Double = 0.0
+     countdownBars : Double = 0.0; nowDb : Double = 0.0
      countdownText : String = ""
+     dbIdx : Integer
 
    // ========================================================================
    // --- INITIALIZATION FOR THIS TICK ---
@@ -16576,9 +16577,8 @@ On TimerTick(ms : Double)
    anyLooperActive = false
 
    // ========================================================================
-   // OVERLAY DEBOUNCE TIMER CHECK (v2)
+   // OVERLAY DEBOUNCE TIMER CHECK
    // ========================================================================
-   var dbIdx : Integer; var nowDb : Double = 0.0
    nowDb = TimeSinceStartup()
    For dbIdx = 0; dbIdx < MAX_OVERLAY_BINDINGS; dbIdx = dbIdx + 1 Do
       if Debounce_Active[dbIdx] then
