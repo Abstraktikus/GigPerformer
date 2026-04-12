@@ -139,12 +139,18 @@ Var
    SysAction_ByCC    : Integer Array
 
    // --- ENGINE DATA: RAM for macro assignment (active map) ---
-   VELRANGE_MacroIdx, VELRANGE_CCIdx : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
-   ROOT_MacroIdx,     ROOT_CCIdx     : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
-   OCTAVER_MacroIdx,  OCTAVER_CCIdx  : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
-   HUMANIZE_MacroIdx, HUMANIZE_CCIdx : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
-   QUANTIZE_MacroIdx, QUANTIZE_CCIdx : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
-   SUSTAIN_MacroIdx,  SUSTAIN_CCIdx  : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
+   VELRANGE_MacroIdx : Integer Array = [164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179]
+   VELRANGE_CCIdx    : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
+   ROOT_MacroIdx     : Integer Array = [180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195]
+   ROOT_CCIdx        : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
+   OCTAVER_MacroIdx  : Integer Array = [196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211]
+   OCTAVER_CCIdx     : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
+   HUMANIZE_MacroIdx : Integer Array = [212,213,214,215,216,217,218,219,220,221,222,223,224,225,226,227]
+   HUMANIZE_CCIdx    : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
+   QUANTIZE_MacroIdx : Integer Array = [228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243]
+   QUANTIZE_CCIdx    : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
+   SUSTAIN_MacroIdx  : Integer Array = [240,241,242,243,244,245,246,247,248,249,250,251,252,253,254,255]
+   SUSTAIN_CCIdx     : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
 
    // --- String Definitions ---
    HumanRoutingMap : String Array = ["1", "1", "1", "1", "1", "1", "1", "1", "9", "10", "2", "2", "3", "4", "5,6", "7,8"]
@@ -719,11 +725,11 @@ Var
    EncoderResetTimer_Scope, EncoderResetTimer_Browse, IgnoreInputTimer_Scope, IgnoreInputTimer_Browse : Double = 0.0
    
    // --- Channel Toggle Macros (Direct Buttons) ---
-   SOLO_STRICT_MacroIdx : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
+   SOLO_STRICT_MacroIdx : Integer Array = [132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147]
    SOLO_STRICT_CCIdx    : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
-   SOLO_SMART_MacroIdx  : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
+   SOLO_SMART_MacroIdx  : Integer Array = [116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131]
    SOLO_SMART_CCIdx     : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
-   USER_MUTE_MacroIdx   : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
+   USER_MUTE_MacroIdx   : Integer Array = [148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163]
    USER_MUTE_CCIdx      : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
 
    Mem_Fader_Buffer : Double Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -848,7 +854,8 @@ Var
    LoopStartTime, LoopLengthMS, LoopFreeArmTimer, LoopPlayheadMS : Double Array = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
    LoopNextEventIdx, LoopAnchorBar, LoopAnchorBeat, LoopAnchorTick : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    
-   LOOPER_CH_MacroIdx, LOOPER_CH_CCIdx : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
+   LOOPER_CH_MacroIdx : Integer Array = [96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111]
+   LOOPER_CH_CCIdx    : Integer Array = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
    LooperSoloMute : Boolean Array = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
    AllowedLoopLengths : Integer Array = [0, 1, 2, 4, 8]
    Global_BlinkState, Global_BlinkTimer : Double = 0.0
