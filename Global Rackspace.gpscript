@@ -9295,14 +9295,14 @@ Function ReplayOverlayToggle(funcName : String, channel : Integer, state : Integ
       Mem_NP_ChordMode[channel] = state
       SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ChordMode"), IntToFloat(state))
    elsif funcName == "OCTAVER" then
-      Mem_NP_OctaverMode[channel] = state
-      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_OctaverMode"), IntToFloat(state))
+      Mem_NP_Octaver[channel] = state
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_Octaver"), IntToFloat(state))
    elsif funcName == "HUMANIZE" then
-      Mem_NP_HumanizerMode[channel] = state
-      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_HumanizerMode"), IntToFloat(state))
+      Mem_NP_HumanizeActive[channel] = state
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_HumanizeActive"), IntToFloat(state))
    elsif funcName == "SCALE" then
-      Mem_NP_ScaleMode[channel] = state
-      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ScaleMode"), IntToFloat(state))
+      Mem_NP_QuantizeActive[channel] = state
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_QuantizeActive"), IntToFloat(state))
    elsif funcName == "RANGE" then
       Mem_NP_VelRangeActive[channel] = state
       SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_VelRangeActive"), IntToFloat(state))
@@ -10463,14 +10463,14 @@ Function ActivateOverlay(funcName : String, channel : Integer)
       Mem_NP_ChordMode[channel] = 1
       SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ChordMode"), 1.0)
    elsif funcName == "OCTAVER" then
-      Mem_NP_OctaverMode[channel] = 1
-      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_OctaverMode"), 1.0)
+      Mem_NP_Octaver[channel] = 1
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_Octaver"), 1.0)
    elsif funcName == "HUMANIZE" then
-      Mem_NP_HumanizerMode[channel] = 1
-      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_HumanizerMode"), 1.0)
+      Mem_NP_HumanizeActive[channel] = 1
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_HumanizeActive"), 1.0)
    elsif funcName == "SCALE" then
-      Mem_NP_ScaleMode[channel] = 1
-      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ScaleMode"), 1.0)
+      Mem_NP_QuantizeActive[channel] = 1
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_QuantizeActive"), 1.0)
    elsif funcName == "RANGE" then
       Mem_NP_VelRangeActive[channel] = 1
       SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_VelRangeActive"), 1.0)
@@ -10498,14 +10498,14 @@ Function DeactivateOverlay(funcName : String, channel : Integer)
       Mem_NP_ChordMode[channel] = 0
       SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ChordMode"), 0.0)
    elsif funcName == "OCTAVER" then
-      Mem_NP_OctaverMode[channel] = 0
-      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_OctaverMode"), 0.0)
+      Mem_NP_Octaver[channel] = 0
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_Octaver"), 0.0)
    elsif funcName == "HUMANIZE" then
-      Mem_NP_HumanizerMode[channel] = 0
-      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_HumanizerMode"), 0.0)
+      Mem_NP_HumanizeActive[channel] = 0
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_HumanizeActive"), 0.0)
    elsif funcName == "SCALE" then
-      Mem_NP_ScaleMode[channel] = 0
-      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_ScaleMode"), 0.0)
+      Mem_NP_QuantizeActive[channel] = 0
+      SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_QuantizeActive"), 0.0)
    elsif funcName == "RANGE" then
       Mem_NP_VelRangeActive[channel] = 0
       SetParameter(BLK_NoteProcessor[channel], GetParamIdxByName(BLK_NoteProcessor[channel], "p_VelRangeActive"), 0.0)
