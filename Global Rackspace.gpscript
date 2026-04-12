@@ -10216,6 +10216,10 @@ Function HandleInjectBypassClick(btnIdx : Integer, val : Double)
 
                 // Force immediate re-evaluation
                 ExecuteSmartBypass()
+
+                // v2: Re-validate VST bindings after bypass change
+                ValidateMapVSTs()
+                UpdateControllerInfoDisplay()
             end
         end
 
