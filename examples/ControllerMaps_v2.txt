@@ -1,0 +1,161 @@
+; =============================================================================
+; CONTROLLER MAPS v2 — Unified Format (replaces ControllerMaps.txt + HardwareMap.txt)
+; =============================================================================
+;
+; [Map:Default] = base configuration, inherited by all song maps.
+; [Map:SongName] = overrides only. Per-layer inheritance:
+;   - Unlisted macros: fully inherited from Default
+;   - Listed macros: only specified layers are replaced, others inherited
+;   - No DEV source: source inherited from Default
+;   - DEV source present: source completely replaced
+;
+; SYSTEM_TOGGLE (CC64) and CROSSFADER (CC11) are PERMANENT in DeviceConfig.
+; HardwareMap.txt is obsolete.
+; =============================================================================
+
+[Map:Default]
+; =========================================================================
+; BASE CONFIGURATION — inherited by all song maps
+; =========================================================================
+
+; --- BUTTONS 1-6 (Genos2) ---
+; LAY0: Default VST parameter bindings
+; LAY1 (Harmony):  ROOT toggle per channel
+; LAY2 (Talk):     OCTAVER toggle per channel
+; LAY3 (Both):     System shortcuts (+ SYSTEM_TOGGLE_ON via DeviceConfig OVERLAY)
+;
+; Channel mapping: BTN1=CH1, BTN2=CH2, BTN3=CH3, BTN4=CH11, BTN5=CH12, BTN6=CH14
+Macro1 = DEV0:BTN1; VST1_GRS:48{0.0,1.0} | LAY1:ROOT:CH1{1.0,1.0} | LAY2:OCTAVER:CH1{1.0,1.0} | LAY3:CHANNEL_BOUND_LFO
+Macro2 = DEV0:BTN2; VST1_GRS:49{0.0,1.0} | LAY1:ROOT:CH2{1.0,1.0} | LAY2:OCTAVER:CH2{1.0,1.0} | LAY3:SYSACT_TRANSPORT_TOGGLE
+Macro3 = DEV0:BTN3; VST1_GRS:50{0.0,1.0} | LAY1:ROOT:CH3{1.0,1.0} | LAY2:OCTAVER:CH3{1.0,1.0} | LAY3:VST_SCOPE
+Macro4 = DEV0:BTN4; VST1_GRS:51{0.0,1.0} | LAY1:ROOT:CH11{1.0,1.0} | LAY2:OCTAVER:CH11{1.0,1.0} | LAY3:VST_BROWSE
+Macro5 = DEV0:BTN5; VST1_GRS:52{0.0,1.0} | LAY1:ROOT:CH12{1.0,1.0} | LAY2:OCTAVER:CH12{1.0,1.0} | LAY3:SCRUBBER
+Macro6 = DEV0:BTN6; VST1_GRS:53{0.0,1.0} | LAY1:ROOT:CH14{1.0,1.0} | LAY2:OCTAVER:CH14{1.0,1.0} | LAY3:CROSSFADER
+
+; --- BUTTONS 7-12 (System, no layer overlays) ---
+Macro7 = DEV0:BTN7; SCRUBBER
+Macro8 = DEV0:BTN8; SYSACT_VST_SCOPE_DOWN
+Macro9 = DEV0:BTN9; SYSACT_VST_SCOPE_UP
+Macro10 = DEV0:BTN10; SYSACT_VST_PRESET_DOWN
+Macro11 = DEV0:BTN11; SYSACT_VST_PRESET_UP
+Macro12 = DEV0:BTN12; SYSACT_TL_REC_SONGPART
+
+; --- SLIDERS 1-9 (Genos2) ---
+; LAY0: Default VST parameters / volumes
+; LAY1 (Harmony):  SMART_SOLO via movement (full range = 10s debounce)
+; LAY2 (Talk):     STRICT_SOLO via movement
+Macro13 = DEV0:SLD1; VST1_GRS:0{0.0,1.0} | LAY1:SMART_SOLO:CH1{0.0,1.0} | LAY2:STRICT_SOLO:CH1{0.0,1.0}
+Macro14 = DEV0:SLD2; VST1_GRS:1{0.0,1.0} | LAY1:SMART_SOLO:CH2{0.0,1.0} | LAY2:STRICT_SOLO:CH2{0.0,1.0}
+Macro15 = DEV0:SLD3; VST1_GRS:2{0.0,1.0} | LAY1:SMART_SOLO:CH3{0.0,1.0} | LAY2:STRICT_SOLO:CH3{0.0,1.0}
+Macro16 = DEV0:SLD4; VST1_GRS:3{0.0,1.0} | LAY1:SMART_SOLO:CH11{0.0,1.0} | LAY2:STRICT_SOLO:CH11{0.0,1.0}
+Macro17 = DEV0:SLD5; VST1_GRS:4{0.0,1.0} | LAY1:SMART_SOLO:CH12{0.0,1.0} | LAY2:STRICT_SOLO:CH12{0.0,1.0}
+Macro18 = DEV0:SLD6; VST1_GRS:5{0.0,1.0} | LAY1:SMART_SOLO:CH14{0.0,1.0} | LAY2:STRICT_SOLO:CH14{0.0,1.0}
+Macro19 = DEV0:SLD7; VST1_GRS:6{0.0,1.0}
+Macro20 = DEV0:SLD8; Ch12:CC7:Volume V_Lab
+Macro21 = DEV0:SLD9; Ch13:CC7:Volume Triton
+
+; =========================================================================
+; SONG-SPECIFIC OVERRIDES — only list what differs from Default
+; Per-layer inheritance: unlisted layers are inherited automatically
+; =========================================================================
+
+[Map:Standard_VST1]
+; --- Omnisphere: different VST params on BTN1-5, CROSSFADER on BTN6 ---
+Macro1 = VST1_GRS:48
+Macro2 = VST1_GRS:49
+Macro3 = VST1_GRS:50
+Macro4 = VST1_GRS:52
+Macro5 = VST1_GRS:63
+Macro6 = CROSSFADER
+; SLD1: Omnisphere multi-part level reset
+Macro13 = VST1:0{0.0,1.0} | VST1:1{0.0,1.0} | VST1:2{0.0,1.0} | VST1:3{0.0,1.0} | VST1:4{0.0,1.0} | VST1:5{0.0,1.0} | VST1:6{0.0,1.0}
+Macro14 = VST1_GRS:0
+Macro15 = VST1_GRS:1
+Macro16 = VST1_GRS:2
+Macro17 = VST1_GRS:3
+Macro18 = VST1_GRS:4
+Macro19 = VST1_GRS:5
+Macro20 = VST1_GRS:6
+Macro21 = VST1_GRS:7
+
+[Map:Standard_VST2]
+Macro1 = Ch11:CC74{0.0,1.0}
+Macro2 = Ch11:CC71{0.0,1.0}
+Macro3 = Ch11:CC76{0.0,1.0}
+Macro4 = Ch11:CC77{0.0,1.0}
+Macro5 = Ch11:CC93{0.0,1.0}
+Macro6 = Ch11:CC18{0.0,1.0}
+Macro13 = Ch11:CC19{0.0,1.0}
+Macro14 = Ch11:CC73{0.0,1.0}
+Macro15 = Ch11:CC75{0.0,1.0}
+Macro16 = Ch11:CC79{0.0,1.0}
+Macro17 = Ch11:CC72{0.0,1.0}
+Macro18 = Ch11:CC80{0.0,1.0}
+Macro19 = Ch11:CC81{0.0,1.0}
+Macro20 = Ch11:CC82{0.0,1.0}
+Macro21 = Ch11:CC83{0.0,1.0}
+Macro23 = DEV0:SLD11; Ch11:CC85{0.0,1.0}
+Macro24 = DEV0:SLD12; VST2_GRS:41{0.0,1.0}
+Macro25 = DEV0:SLD13; VST2_GRS:42{0.0,1.0}
+Macro26 = DEV0:SLD14; VST2_GRS:43{0.0,1.0}
+Macro27 = DEV0:SLD15; VST2_GRS:44{0.0,1.0}
+
+[Map:Standard_VST3]
+; --- Triton Extreme (via MIDI CC) ---
+Macro1 = Ch13:CC17:Knob1
+Macro2 = Ch13:CC19:Knob2
+Macro3 = Ch13:CC20:Knob3
+Macro4 = Ch13:CC21:Knob4
+Macro6 = CROSSFADER
+Macro14 = Ch13:CC02:Breath
+Macro15 = Ch13:CC16:Ribbon
+Macro16 = Ch13:CC16:Slider
+Macro17 = Ch13:CC16:SW1
+Macro18 = Ch13:CC16:SW2
+Macro19 = Ch12:CC83:External
+
+[Map:Standard_VST4]
+Macro4 = VST_SCOPE
+Macro5 = VST_BROWSE
+Macro6 = CROSSFADER
+
+[Map:Standard_VST5]
+Macro4 = VST_SCOPE
+Macro5 = VST_BROWSE
+Macro6 = CROSSFADER
+
+[Map:Standard_VST6]
+Macro4 = VST_SCOPE
+Macro5 = VST_BROWSE
+Macro6 = CROSSFADER
+
+[Map:Standard_VST7]
+Macro4 = VST_SCOPE
+Macro5 = VST_BROWSE
+Macro6 = CROSSFADER
+
+[Map:Standard_VST8]
+Macro4 = VST_SCOPE
+Macro5 = VST_BROWSE
+Macro6 = CROSSFADER
+
+[Map:Standard_VST9]
+Macro4 = VST_SCOPE
+Macro5 = VST_BROWSE
+Macro6 = CROSSFADER
+
+[Map:SlowHip80erDream]
+; Only LAY0 overrides — all layer overlays inherited from Default
+Macro1 = Ch11:CC74{0.0,1.0}
+Macro2 = Ch11:CC71{0.0,1.0}
+Macro3 = Ch11:CC76{0.0,1.0}
+Macro4 = Ch11:CC77{0.0,1.0}
+Macro5 = Ch11:CC93{0.0,1.0}
+Macro6 = CROSSFADER
+Macro14 = VST1_GRS:1:Level (p2){0.000,0.442}
+Macro15 = VST1_GRS:2:Level (p3){0.000,0.464} | VST1_GRS:3:Level (p4){0.000,0.182}
+Macro16 = Ch13:CC7:Volume Triton
+Macro17 = VST1_GRS:0:Level (p1){0.000,0.289}
+Macro19 = Ch11:CC17:Master Volume{0.0,1.0}
+Macro20 = Ch12:CC17:Master Volume{0.0,1.0}
+Macro21 = VST1_GRS:7:Level (p8){0.000,0.235}
