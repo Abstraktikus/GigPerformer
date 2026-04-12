@@ -3554,14 +3554,15 @@ Function ScrollToCurrentCtrlScope()
     var targetLine : Integer = 0
     var searchStr, searchStrAlt : String = ""
     var isGrouped : Boolean = false
-    var foundLine : Boolean = false // ---> NEW: Clean exit flag <---
-    
+    var foundLine : Boolean = false
+
     var totalLines : Integer = Size(CtrlInfo_Lines)
-    var displayLines : Integer = 17 
+    var displayLines : Integer = 17
     var maxStart : Integer = totalLines - displayLines
     var scrollVal : Double = 0.0
 
-    // If EditScope is -1 (Global), targetLine stays 0 -> scrolls to the top!
+    Trace("SCROLL: scope=" + IntToString(CurrentEditScope) + " totalLines=" + IntToString(totalLines) + " maxStart=" + IntToString(maxStart))
+
     if CurrentEditScope != -1 then
         
         // 1. Check categories (is it a group macro?)
@@ -3584,13 +3585,14 @@ Function ScrollToCurrentCtrlScope()
         
         // 2. Individual functions or standard macros
         if not isGrouped then
-            searchStr = GetHardwareLabel(CurrentEditScope) // yields e.g. "Macro 1"
-            searchStrAlt = searchStr + " [" // "Macro 1 ["
-            searchStr = searchStr + ":"     // "Macro 1:"
+            searchStr = GetHardwareLabel(CurrentEditScope)
+            searchStrAlt = searchStr + " ["
+            searchStr = searchStr + ":"
         end
-        
+
+        Trace("SCROLL: isGrouped=" + isGrouped + " searchStr='" + searchStr + "' searchStrAlt='" + searchStrAlt + "'")
+
         // 3. Find the matching line
-        // ---> SECOND SAFE WHILE-LOOP <---
         i = 0
         While i < totalLines and not foundLine Do
             if isGrouped then
@@ -3612,13 +3614,17 @@ Function ScrollToCurrentCtrlScope()
         End
     end
 
+    Trace("SCROLL: foundLine=" + foundLine + " targetLine=" + IntToString(targetLine))
+
     // 4. Calculate slider value
-    if maxStart <= 0 then 
-        scrollVal = 1.0 
+    if maxStart <= 0 then
+        scrollVal = 1.0
     else
         if targetLine > maxStart then targetLine = maxStart end
         scrollVal = 1.0 - (IntToFloat(targetLine) / IntToFloat(maxStart))
     end
+
+    Trace("SCROLL: scrollVal=" + DoubleToString(scrollVal, 3))
 
     // 5. Set value and render display
     SetWidgetValue(SLD_ControllerInfo, scrollVal)
