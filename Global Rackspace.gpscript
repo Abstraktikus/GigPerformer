@@ -8108,7 +8108,14 @@ Function EvaluateSmartAdapt()
 
         // 3. ISOLATION ACTIVE: Exactly ONE VST is active! (regardless of mode)
         if activeVSTs == 1 then
-            targetMap = "Standard_VST" + IntToString(targetVstIdx + 1)
+            // v2: search by plugin name instead of slot number
+            var pluginName : String
+            pluginName = GetPluginName(BLK_VST[targetVstIdx])
+            if Length(pluginName) > 0 then
+               targetMap = pluginName
+            else
+               targetMap = "Standard_VST" + IntToString(targetVstIdx + 1)  // fallback
+            end
             
             // Only switch if we are not already on this map
             if CurrentCtrlMapName != targetMap then
