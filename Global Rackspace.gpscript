@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-12.003"
+   SCRIPT_VERSION : String = "2026-04-12.004"
 
    DebugMode : Boolean = false
 
@@ -75,7 +75,6 @@ Var
 >>>
    ASCII_LOOKUP : String = " !_#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[_]^_`abcdefghijklmnopqrstuvwxyz{|}~"
    FILTER_DEFAULT_VAL : Double = 0.0941176 // Default GP MIDI Filter value (passthrough)
-   MAX_LINKS : Integer = 512
    MAX_VSTS : Integer = 10
    MAX_MACROS : Integer = 256
 
@@ -689,12 +688,7 @@ Var
    MapMismatch : Boolean = false  
    CtrlMapList : String Array
    
-   // --- Link Database ---
-   Link_Count : Integer = 0
-   Link_Active, Link_IsCC, Link_IsSleepSwitch, Link_SourceIsCC : Boolean Array
-   Link_SourceIdx, Link_Type, Link_BlockIdx, Link_TargetParam : Integer Array
-   Link_BlockName, Link_ExpectedPlugin, Link_ExpectedName : String Array
-   Link_MinVal, Link_MaxVal : Double Array
+   // --- Link Database (REMOVED: legacy Link_* arrays replaced by Mac_Layer_*) ---
    
    // --- Dedicated Macros ---
    CF_MacroIdx : Integer = 6; CF_CCIdx : Integer = -1  
@@ -2521,7 +2515,7 @@ Function TraceHardwarePrediction()
    var s, midiVal : Integer
    var faderVal : Double = 0.0
    var hwLabel, assignment, linkInfo : String
-   var l : Integer
+   var fi, macIdx, bc : Integer
 
    Trace("=== PREDICTION: ARRANGER MACROS (0-127) ===")
    Trace("Map in RAM: " + CurrentCtrlMapName)
@@ -2544,15 +2538,15 @@ Function TraceHardwarePrediction()
       elsif s == VST_SCOPE_MacroIdx then assignment = "[VST SCOPE]"
       elsif s == REC_SONGPART_MacroIdx then assignment = "[REC MARKER]"
       else
-         // Search in the controller map
+         // Search in Mac_Layer_* for LAY0 binding
          linkInfo = ""
-         For l = 0; l < Link_Count; l = l + 1 Do
-            if Link_Active[l] and Link_SourceIdx[l] == s and Link_SourceIsCC[l] == false then
-               if linkInfo != "" then linkInfo = linkInfo + " & " end
-               if Link_ExpectedName[l] != "" then linkInfo = linkInfo + Link_ExpectedName[l] 
-               else linkInfo = linkInfo + "Param " + Link_TargetParam[l] end
-            end
-         End
+         macIdx = s + 1
+         bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+         if bc > 0 then
+            fi = MacLayerBindIdx(macIdx, 0, 0)
+            if Length(Mac_Layer_ParamLabel[fi]) > 0 then linkInfo = Mac_Layer_ParamLabel[fi]
+            else linkInfo = Mac_Layer_Target[fi] end
+         end
          if linkInfo != "" then assignment = linkInfo end
       end
 
@@ -3562,19 +3556,7 @@ Function GetAssignedHWString(mIdx : Integer) Returns String
    result = ""
 End
 
-Function GetLinkNameHelper(idx : Integer) Returns String
-   var pName : String = ""
-   if Link_IsCC[idx] then
-       if Length(Link_ExpectedName[idx]) > 0 then pName = Link_ExpectedName[idx] + " (CC" + Link_TargetParam[idx] + ")"
-       else pName = "MIDI CC " + Link_TargetParam[idx] end
-   else
-       if Link_Type[idx] == 0 then pName = GetParameterName(BLK_VST[Link_BlockIdx[idx]], Link_TargetParam[idx])
-       elsif Link_Type[idx] == 1 then pName = GetParameterName(BLK_NoteProcessor[Link_BlockIdx[idx]], Link_TargetParam[idx])
-       elsif Link_Type[idx] == 2 then pName = GetParameterName(AudioMixer, Link_TargetParam[idx])
-       end
-   end
-   result = pName
-End
+// GetLinkNameHelper removed (was Link_*-based, never called)
 
 /// ---------------------------------------------------------
 // SCROLL TO CURRENT CONTROLLER SCOPE
@@ -3653,9 +3635,9 @@ End
 // UNIVERSAL MACRO FEEDBACK ENGINE (The HUD)
 // ---------------------------------------------------------
 Function TriggerMacroFeedback(sourceIdx : Integer, isCC : Boolean, val : Double)
-    var i : Integer
+    var i, fi, macIdx, bc, vstIdx : Integer
     var msg, pName, paramName : String
-    var mappedVal : Double = 0.0
+    var mappedVal, rMin, rMax : Double = 0.0
     var linkFound : Boolean = false
     var isJitter : Boolean = false
     
@@ -3687,29 +3669,35 @@ Function TriggerMacroFeedback(sourceIdx : Integer, isCC : Boolean, val : Double)
             linkFound = true
             
         else
-            // 2. SEARCH NORMAL PARAMETER LINKS
-            For i = 0; i < Link_Count; i = i + 1 Do
-                // Grab the FIRST active link belonging to this controller
-                if not linkFound and Link_Active[i] and Link_SourceIdx[i] == sourceIdx and Link_SourceIsCC[i] == isCC then
-                    
-                    // A) Read actual plugin name
-                    if Link_Type[i] == 0 then pName = GetPluginInfo(BLK_VST[Link_BlockIdx[i]], 0)
-                    elsif Link_Type[i] == 1 then pName = "NoteProc (Ch " + (Link_BlockIdx[i]+1) + ")"
-                    elsif Link_Type[i] == 2 then pName = "AudioMixer"
-                    else pName = Link_BlockName[i] end
+            // 2. SEARCH Mac_Layer_* BINDINGS (LAY0)
+            if not isCC then
+                macIdx = sourceIdx + 1
+                bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+                if bc > 0 then
+                    fi = MacLayerBindIdx(macIdx, 0, 0)
+
+                    // A) Read actual plugin/target name
+                    if Mac_Layer_TargetType[fi] == "VST" then
+                        vstIdx = Mac_Layer_VSTIdx[fi]
+                        if vstIdx >= 1 and vstIdx <= MAX_VSTS then pName = GetPluginInfo(BLK_VST[vstIdx], 0) else pName = "VST?" end
+                    else
+                        pName = Mac_Layer_TargetType[fi]
+                    end
 
                     // B) Get parameter name
-                    paramName = Link_ExpectedName[i]
-                    if paramName == "" then paramName = "Param " + Link_TargetParam[i] end
+                    paramName = Mac_Layer_ParamLabel[fi]
+                    if paramName == "" then paramName = Mac_Layer_Target[fi] end
 
                     // C) Calculate the actual current value
-                    mappedVal = Link_MinVal[i] + (val * (Link_MaxVal[i] - Link_MinVal[i]))
-                    
+                    rMin = Mac_Layer_RangeMin[fi]
+                    rMax = Mac_Layer_RangeMax[fi]
+                    mappedVal = rMin + (val * (rMax - rMin))
+
                     // D) Assemble the string
                     msg = pName + " | " + paramName + " : " + Round(mappedVal * 100.0) + "%"
-                    linkFound = true 
+                    linkFound = true
                 end
-            End
+            end
         end // Closes the "else" of step 1
         
         // 3. SEND TO DISPLAY & START TIMER
@@ -3960,15 +3948,11 @@ Function CycleEditScope(dir : Integer)
                    i = i + 1
                End
                
-               // 4. Are there active links for this controller?
+               // 4. Are there active Mac_Layer_* bindings for this controller?
                if not isValid then
-                   i = 0
-                   While i < Link_Count and not isValid Do
-                       if Link_Active[i] and Link_SourceIdx[i] == nextScope then
-                           isValid = true
-                       end
-                       i = i + 1
-                   End
+                   if Mac_Layer_BindCount[MacLayerIdx(nextScope + 1, 0)] > 0 then
+                       isValid = true
+                   end
                end
            end
        End
@@ -4005,79 +3989,7 @@ Function CycleEditScope(dir : Integer)
    end
 End
 
-Function AppendLinkEncoded(name : String, paramId : Integer, sliderIdx : Integer, minV : Double, maxV : Double, expName : String, isCC : Boolean, srcIsCC : Boolean)
-   var idx, typeFound, idxFound, countRoutings, r, k : Integer
-   var parts : String Array
-   var isSleep : Boolean
-   var numPart, char : String = ""
-   
-   // Parse-stop flag (must be at top)
-   var stopParse : Boolean = false 
-   
-   typeFound = -1; idxFound = 0
-
-   // 1. VSTs (Type 0)
-   if IndexOfSubstring(name, "VST", false) == 0 then
-       k = 3
-       // ---> SAFE WHILE-LOOP <---
-       While k < Length(name) and not stopParse Do
-           char = CopySubstring(name, k, 1)
-           if char >= "0" and char <= "9" then 
-               numPart = numPart + char 
-           else 
-               stopParse = true 
-           end
-           k = k + 1
-       End
-       
-       idx = StringToInt(numPart) - 1
-       if idx >= 0 and idx < MAX_VSTS then typeFound = 0; idxFound = idx end
-       
-   // 2. Channels (NoteProcessor & Direct CC)
-   elsif IndexOfSubstring(name, "Ch", false) == 0 then
-       parts = SplitString(name, "_")
-       if Size(parts) >= 2 then
-            idx = StringToInt(ReplaceString(parts[0], "Ch", "", false)) - 1
-            if idx >= 0 and idx < 16 then
-                if parts[1] == "NP" then typeFound = 1; idxFound = idx end
-            end
-       else
-            idx = StringToInt(ReplaceString(name, "Ch", "", false))
-            if idx >= 1 and idx <= 16 then typeFound = 3; idxFound = idx end
-       end
-
-   // 3. Mixer (Type 2)
-   elsif name == "AudioMixer" then typeFound = 2; idxFound = 0 end
-   
-   if typeFound > -1 then
-       isSleep = false
-       if typeFound == 0 then 
-           countRoutings = 0
-           for r = 0; r < 16; r = r + 1 do
-               if RoutingMatrix[(idxFound * 16) + r] == true then countRoutings = countRoutings + 1 end
-           end
-           if countRoutings == 1 then
-               if IndexOfSubstring(expName, "Volume", true) > -1 or IndexOfSubstring(expName, "Level", true) > -1 then isSleep = true end
-           end
-       end
-       
-       Link_Active         <-- true
-       Link_SourceIdx      <-- sliderIdx
-       Link_Type           <-- typeFound
-       Link_BlockIdx       <-- idxFound
-       Link_TargetParam    <-- paramId
-       Link_BlockName      <-- name
-       Link_MinVal         <-- minV
-       Link_MaxVal         <-- maxV
-       Link_ExpectedName   <-- expName 
-       Link_IsCC           <-- isCC
-       Link_IsSleepSwitch  <-- isSleep
-       Link_SourceIsCC     <-- srcIsCC
-       Link_Count = Link_Count + 1
-   else
-       Trace("Link Warning: Could not resolve '" + name + "'")
-   end
-End
+// AppendLinkEncoded removed (legacy Link_* system replaced by Mac_Layer_*)
 
 // ---------------------------------------------------------
 // STATE DISPLAY FOR RECH CONFIG CHANGES
@@ -4160,63 +4072,58 @@ End
 // ---------------------------------------------------------------------
 
 Function SyncArrangerToCurrentMap()
-   var i, hwIdx : Integer
+   var macIdx, fi, vstIdx, paramIdx, hwIdx : Integer
    var currentVal : Double = 0.0; var range : Double = 0.0; var faderVal : Double = 0.0
-   
+   var rMin, rMax : Double = 0.0
+   var bc : Integer
+
    if DebugMode then Trace("=== START HARD-TRACE: SYNC ARRANGER TO MAP (" + CurrentCtrlMapName + ") ===") end
-   
-   For i = 0; i < Link_Count; i = i + 1 Do
-       if Link_Active[i] then
-           hwIdx = Link_SourceIdx[i]
-           
-           if DebugMode then Trace("  -> Analyzing Link " + i + " | SourceIdx (Macro/CC): " + hwIdx) end
-           
-           // ========================================================
-           // ---> 50% RULE FOR ONE-WAY CONTROLS (MIDI CC)
-           // ========================================================
-           if Link_IsCC[i] then
-               faderVal = 0.5 
-               if DebugMode then Trace("     [IS CC] One-way control detected! Setting faderVal to 0.5 (50%)") end
-           else
-               // IF IT IS A VST PARAMETER: Ask the host for the actual value!
-               if Link_Type[i] == 0 then 
-                   currentVal = GetParameter(BLK_VST[Link_BlockIdx[i]], Link_TargetParam[i])
-                   if DebugMode then Trace("     [IS VST] Type 0 (Plugin " + (Link_BlockIdx[i]+1) + " | Param " + Link_TargetParam[i] + "). Read value: " + currentVal) end
-               elsif Link_Type[i] == 1 then 
-                   currentVal = GetParameter(BLK_NoteProcessor[Link_BlockIdx[i]], Link_TargetParam[i])
-                   if DebugMode then Trace("     [IS NP] Type 1. Read value: " + currentVal) end
-               elsif Link_Type[i] == 2 then
-                   currentVal = GetParameter(AudioMixer, Link_TargetParam[i])
-                   if DebugMode then Trace("     [IS MIXER] Type 2. Read value: " + currentVal) end
+
+   // Iterate macros 1..16 (arranger faders 0..15)
+   For macIdx = 1; macIdx <= 16; macIdx = macIdx + 1 Do
+       hwIdx = macIdx - 1
+       bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+       if bc > 0 then
+           fi = MacLayerBindIdx(macIdx, 0, 0)
+
+           if DebugMode then Trace("  -> Analyzing Macro " + macIdx + " | Fader: " + hwIdx) end
+
+           if Mac_Layer_TargetType[fi] == "CC" then
+               // 50% RULE FOR ONE-WAY CONTROLS (MIDI CC)
+               faderVal = 0.5
+               if DebugMode then Trace("     [IS CC] One-way control. Setting faderVal to 0.5") end
+           elsif Mac_Layer_TargetType[fi] == "VST" then
+               vstIdx = Mac_Layer_VSTIdx[fi]
+               paramIdx = Mac_Layer_ParamIdx[fi]
+               if vstIdx >= 1 and vstIdx <= MAX_VSTS then
+                   currentVal = GetParameter(BLK_VST[vstIdx], paramIdx)
+                   if DebugMode then Trace("     [IS VST] Plugin " + vstIdx + " | Param " + paramIdx + ". Read value: " + currentVal) end
                end
-               
-               range = Link_MaxVal[i] - Link_MinVal[i]
-               if Abs(range) > 0.0001 then 
-                   faderVal = (currentVal - Link_MinVal[i]) / range 
-                   if DebugMode then Trace("     [MATH] Scale: (" + currentVal + " - " + Link_MinVal[i] + ") / " + range + " = " + faderVal) end
-               else 
-                   faderVal = 0.0 
+
+               rMin = Mac_Layer_RangeMin[fi]
+               rMax = Mac_Layer_RangeMax[fi]
+               range = rMax - rMin
+               if Abs(range) > 0.0001 then
+                   faderVal = (currentVal - rMin) / range
+                   if DebugMode then Trace("     [MATH] Scale: (" + currentVal + " - " + rMin + ") / " + range + " = " + faderVal) end
+               else
+                   faderVal = 0.0
                    if DebugMode then Trace("     [MATH] WARNING: Range is 0! Setting faderVal to 0.0") end
                end
+           else
+               faderVal = 0.5
            end
-           
+
            // Safety clamping
            if faderVal < 0.0 then faderVal = 0.0 elsif faderVal > 1.0 then faderVal = 1.0 end
-           
-           // Send to hardware (only if the source is an arranger macro)
-           if not Link_SourceIsCC[i] then
-               // ---> GUARD <---
-               if hwIdx >= 0 and hwIdx <= 15 then
-                   ScriptWrite_ExpectedPrev[hwIdx] = ScriptWrite_Expected[hwIdx]
-                   ScriptWrite_Expected[hwIdx] = faderVal
-                   SetParameter(ExternalArranger, hwIdx, faderVal)
-                   Mem_Fader_Buffer[hwIdx] = faderVal
-                   if DebugMode then Trace("     [HARDWARE] Guard PASSED! Arranger motorfader " + (hwIdx+1) + " moving to " + faderVal) end
-               else
-                   if DebugMode then Trace("     [HARDWARE] Guard BLOCKED! Index " + hwIdx + " is not a physical arranger fader (0-15).") end
-               end
-           else
-               if DebugMode then Trace("     [HARDWARE] Ignored. Source is a CC, not a physical arranger fader.") end
+
+           // Send to hardware
+           if hwIdx >= 0 and hwIdx <= 15 then
+               ScriptWrite_ExpectedPrev[hwIdx] = ScriptWrite_Expected[hwIdx]
+               ScriptWrite_Expected[hwIdx] = faderVal
+               SetParameter(ExternalArranger, hwIdx, faderVal)
+               Mem_Fader_Buffer[hwIdx] = faderVal
+               if DebugMode then Trace("     [HARDWARE] Arranger motorfader " + (hwIdx+1) + " moving to " + faderVal) end
            end
        end
    End
@@ -4228,51 +4135,54 @@ End
 // ---------------------------------------------------------
 
 Function MorphSend(sliderIdx : Integer, val : Double)
-    var i : Integer
-    For i = 0; i < Link_Count; i = i + 1 Do
-        if Link_SourceIdx[i] == sliderIdx then 
-            if Link_Type[i] == 0 then SetParameter(BLK_VST[Link_BlockIdx[i]], Link_TargetParam[i], val)
-            elsif Link_Type[i] == 1 then SetParameter(BLK_NoteProcessor[Link_BlockIdx[i]], Link_TargetParam[i], val)
-            elsif Link_Type[i] == 2 then SetParameter(AudioMixer, Link_TargetParam[i], val)
+    var macIdx, fi, bc, vstIdx, paramIdx : Integer
+    macIdx = sliderIdx + 1
+    bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+    if bc > 0 then
+        fi = MacLayerBindIdx(macIdx, 0, 0)
+        if Mac_Layer_TargetType[fi] == "VST" then
+            vstIdx = Mac_Layer_VSTIdx[fi]
+            paramIdx = Mac_Layer_ParamIdx[fi]
+            if vstIdx >= 1 and vstIdx <= MAX_VSTS then
+                SetParameter(BLK_VST[vstIdx], paramIdx, val)
             end
         end
-    End
+    end
 End
 
-// Read values directly from the plugin
+// Read values directly from the plugin and update Mac_Layer_* ranges
 Function CaptureSmartRanges(isMin : Boolean)
-   var i, sIdx, count : Integer = 0
+   var macIdx, fi, bc, vstIdx, paramIdx, count : Integer = 0
    var currentVal, diff : Double = 0.0
-   
-   For i = 0; i < Link_Count; i = i + 1 Do
-       if Link_Active[i] then
-           sIdx = Link_SourceIdx[i]
-           if CurrentEditScope == -1 or CurrentEditScope == sIdx then
-               
-               // ---> BUGFIX: Skip pure MIDI CCs entirely! <---
-               if not Link_IsCC[i] then
-                   
-                   currentVal = 0.0 // Clean reset for each iteration
-                   
-                   if Link_Type[i] == 0 then currentVal = GetParameter(BLK_VST[Link_BlockIdx[i]], Link_TargetParam[i])
-                   elsif Link_Type[i] == 1 then currentVal = GetParameter(BLK_NoteProcessor[Link_BlockIdx[i]], Link_TargetParam[i])
-                   elsif Link_Type[i] == 2 then currentVal = GetParameter(AudioMixer, Link_TargetParam[i])
+   var sIdx : Integer
+
+   For macIdx = 1; macIdx <= 16; macIdx = macIdx + 1 Do
+       sIdx = macIdx - 1
+       if CurrentEditScope == -1 or CurrentEditScope == sIdx then
+           bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+           if bc > 0 then
+               fi = MacLayerBindIdx(macIdx, 0, 0)
+               // Skip non-VST targets (CCs, keywords, etc.)
+               if Mac_Layer_TargetType[fi] == "VST" then
+                   vstIdx = Mac_Layer_VSTIdx[fi]
+                   paramIdx = Mac_Layer_ParamIdx[fi]
+                   currentVal = 0.0
+                   if vstIdx >= 1 and vstIdx <= MAX_VSTS then
+                       currentVal = GetParameter(BLK_VST[vstIdx], paramIdx)
                    end
-                   
-                   if isMin then 
-                       diff = Abs(currentVal - Link_MaxVal[i])
-                       if diff > 0.001 then Link_MinVal[i] = currentVal; count = count + 1 end
-                   else 
-                       diff = Abs(currentVal - Link_MinVal[i])
-                       if diff > 0.001 then Link_MaxVal[i] = currentVal; count = count + 1 end
+
+                   if isMin then
+                       diff = Abs(currentVal - Mac_Layer_RangeMax[fi])
+                       if diff > 0.001 then Mac_Layer_RangeMin[fi] = currentVal; count = count + 1 end
+                   else
+                       diff = Abs(currentVal - Mac_Layer_RangeMin[fi])
+                       if diff > 0.001 then Mac_Layer_RangeMax[fi] = currentVal; count = count + 1 end
                    end
-                   
                end
-               
            end
        end
    End
-   if isMin then Trace("Editor: Captured MIN (A) values for " + count + " links.") else Trace("Editor: Captured MAX (B) values for " + count + " links.") end
+   if isMin then Trace("Editor: Captured MIN (A) values for " + count + " bindings.") else Trace("Editor: Captured MAX (B) values for " + count + " bindings.") end
    SyncArrangerToCurrentMap()
    UpdateControllerInfoDisplay()
 End
@@ -4282,7 +4192,7 @@ End
 // --------------------------------------------------------------------
 
 Function ExportSmartConfig()
-   var s, lnk, typeLoop, pID : Integer
+   var s, lnk, typeLoop, pID, fi, bc, macIdx, vstIdx : Integer
    var line, newBlock, realName, valStr, finalContent, currentLine, lfoPrefix : String
    var linkFound, isCC, inTargetSection, replaced : Boolean
    var lines : String Array
@@ -4327,42 +4237,25 @@ Function ExportSmartConfig()
                    newBlock = newBlock + line + " = SYSTEM_TOGGLE" + NEW_LINE
                
                else
-                   // --- CHECK NORMAL PARAMETER LINKS ---
-                   lfoPrefix = ""
-                   if not isCC and LFO_ByMacro[s] >= 0 then
-                       lfoPrefix = "LFO:" + LFO_Names[LFO_ByMacro[s]] + " | "
-                   end
-                   line = line + " = " + lfoPrefix
-                   For lnk = 0; lnk < Link_Count; lnk = lnk + 1 Do
-                       if Link_Active[lnk] and Link_SourceIdx[lnk] == s and Link_SourceIsCC[lnk] == isCC then
-                           if linkFound then line = line + " | " end
-
-                           pID = Link_TargetParam[lnk]
-                           realName = ""
-
-                           // Determine name
-                           if Link_IsCC[lnk] then
-                               if Length(Link_ExpectedName[lnk]) > 0 then realName = Link_ExpectedName[lnk] else realName = "CC " + pID end
-                           else
-                               if Link_Type[lnk] == 0 then realName = GetParameterName(BLK_VST[Link_BlockIdx[lnk]], pID)
-                               elsif Link_Type[lnk] == 1 then realName = GetParameterName(BLK_NoteProcessor[Link_BlockIdx[lnk]], pID)
-                               elsif Link_Type[lnk] == 2 then realName = GetParameterName(AudioMixer, pID)
-                               end
+                   // --- CHECK Mac_Layer_* BINDINGS ---
+                   if not isCC then
+                       lfoPrefix = ""
+                       if LFO_ByMacro[s] >= 0 then
+                           lfoPrefix = "LFO:" + LFO_Names[LFO_ByMacro[s]] + " | "
+                       end
+                       macIdx = s + 1
+                       bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+                       if bc > 0 then
+                           fi = MacLayerBindIdx(macIdx, 0, 0)
+                           line = line + " = " + lfoPrefix + Mac_Layer_Target[fi]
+                           if Length(Mac_Layer_ParamLabel[fi]) > 0 then
+                               line = line + ":" + Mac_Layer_ParamLabel[fi]
                            end
-
-                           // Assemble line (incl. Min/Max)
-                           line = line + Link_BlockName[lnk] + ":"
-                           if Link_IsCC[lnk] then line = line + "CC" end
-                           line = line + pID
-                           if realName != "" then line = line + ":" + realName else line = line + ":" end
-
-                           valStr = " {" + Round(Link_MinVal[lnk]*1000)/1000.0 + ", " + Round(Link_MaxVal[lnk]*1000)/1000.0 + "}"
+                           valStr = " {" + Round(Mac_Layer_RangeMin[fi]*1000)/1000.0 + ", " + Round(Mac_Layer_RangeMax[fi]*1000)/1000.0 + "}"
                            line = line + valStr
-
-                           Link_ExpectedName[lnk] = realName
                            linkFound = true
                        end
-                   End
+                   end
                    if linkFound then newBlock = newBlock + line + NEW_LINE end
                end
            End
@@ -6639,13 +6532,12 @@ End
 // binding for a given LFO, grouped by map. Called from
 // RefreshLFOInspector() in EDIT state.
 //
-// For active-map bindings, the head line uses Link_* arrays (the
-// same pattern as CtrlInfo_Lines at ~line 3154). For inactive-map
-// bindings, the raw Macro<N> = ... line is re-parsed verbatim to
-// extract the first target without touching plugin state.
+// For active-map bindings, the head line uses Mac_Layer_* arrays.
+// For inactive-map bindings, the raw Macro<N> = ... line is re-parsed
+// verbatim to extract the first target without touching plugin state.
 // ---------------------------------------------------------
 Function BuildLFOBindLines(lfoIdx : Integer)
-   var i, j, mapIdx, macroSlot, firstTargetLink : Integer
+   var i, j, mapIdx, macroSlot, firstTargetLink, fi, bc, macIdx : Integer
    var currentMapIdx : Integer = -1
    var hwStr, headLine, rawLine, valuePart, firstEntry, realName, valStr : String
    var vMin, vMax : Integer
@@ -6695,21 +6587,17 @@ Function BuildLFOBindLines(lfoIdx : Integer)
 
           // Active-map vs inactive-map
           if CtrlMapList[mapIdx] == CurrentCtrlMapName then
-              // Active map: look up first Link_* for this macro slot
-              firstTargetLink = -1
-              For b = 0; b < Link_Count; b = b + 1 Do
-                 if Link_Active[b] and Link_SourceIdx[b] == macroSlot and firstTargetLink == -1 then
-                     firstTargetLink = b
-                 end
-              End
-
-              if firstTargetLink >= 0 then
-                  realName = Link_ExpectedName[firstTargetLink]
-                  if realName == "" then realName = "Param " + Link_TargetParam[firstTargetLink] end
-                  vMin = Round(Link_MinVal[firstTargetLink] * 100.0)
-                  vMax = Round(Link_MaxVal[firstTargetLink] * 100.0)
+              // Active map: look up Mac_Layer_* for this macro slot
+              macIdx = macroSlot + 1
+              bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+              if bc > 0 then
+                  fi = MacLayerBindIdx(macIdx, 0, 0)
+                  realName = Mac_Layer_ParamLabel[fi]
+                  if realName == "" then realName = Mac_Layer_Target[fi] end
+                  vMin = Round(Mac_Layer_RangeMin[fi] * 100.0)
+                  vMax = Round(Mac_Layer_RangeMax[fi] * 100.0)
                   if vMin != 0 or vMax != 100 then valStr = " {" + vMin + "%-" + vMax + "%}" else valStr = "" end
-                  headLine = "  Macro " + (macroSlot + 1) + hwStr + ": " + Link_BlockName[firstTargetLink] + ":" + realName + valStr
+                  headLine = "  Macro " + (macroSlot + 1) + hwStr + ": " + Mac_Layer_Target[fi] + ":" + realName + valStr
               else
                   headLine = "  Macro " + (macroSlot + 1) + hwStr + ": (no target)"
               end
@@ -7283,45 +7171,46 @@ End
 // ---------------------------------------------------------
 
 Function ValidateMapping() Returns Boolean
-   var i : Integer
+   var macIdx, fi, bc, vstIdx, paramIdx : Integer
    var realName : String
    var isValid : Boolean = true
    var mismatchDetails : String = ""
    var linkOk : Boolean
 
-   For i = 0; i < Link_Count; i = i + 1 Do
-      if Link_Active[i] then
+   // Validate Mac_Layer_* VST bindings (macros 1..50)
+   For macIdx = 1; macIdx < 51; macIdx = macIdx + 1 Do
+      bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+      if bc > 0 then
+         fi = MacLayerBindIdx(macIdx, 0, 0)
          linkOk = true
-         
-         // Only check when it is NOT a CC and we expect a name
-         if Link_IsCC[i] == false and Length(Link_ExpectedName[i]) > 0 then
-             
+
+         // Only check VST targets with a cached param label
+         if Mac_Layer_TargetType[fi] == "VST" and Length(Mac_Layer_ParamLabel[fi]) > 0 then
+             vstIdx = Mac_Layer_VSTIdx[fi]
+             paramIdx = Mac_Layer_ParamIdx[fi]
              realName = ""
-             if Link_Type[i] == 0 then realName = GetParameterName(BLK_VST[Link_BlockIdx[i]], Link_TargetParam[i])
-             elsif Link_Type[i] == 1 then realName = GetParameterName(BLK_NoteProcessor[Link_BlockIdx[i]], Link_TargetParam[i])
-             elsif Link_Type[i] == 2 then realName = GetParameterName(AudioMixer, Link_TargetParam[i])
+             if vstIdx >= 1 and vstIdx <= MAX_VSTS then
+                 realName = GetParameterName(BLK_VST[vstIdx], paramIdx)
              end
-             
-             // Comparison (case insensitive)
-             if realName != "" and TrimString(realName) != TrimString(Link_ExpectedName[i]) then
+
+             if realName != "" and TrimString(realName) != TrimString(Mac_Layer_ParamLabel[fi]) then
                  linkOk = false
                  isValid = false
-                 mismatchDetails = mismatchDetails + "Link " + i + ": Mismatch! Exp='" + Link_ExpectedName[i] + "' Got='" + realName + "'" + NEW_LINE
+                 mismatchDetails = mismatchDetails + "Macro " + macIdx + ": Mismatch! Exp='" + Mac_Layer_ParamLabel[fi] + "' Got='" + realName + "'" + NEW_LINE
              end
          end
-         
-         // Emergency stop on error
+
          if linkOk == false then
-             Link_Active[i] = false
-             Trace("SAFETY CUT: Link " + i + " disabled!")
+             Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)] = 0
+             Trace("SAFETY CUT: Macro " + macIdx + " binding disabled!")
          end
       end
    End
-   
+
    if not isValid then
        Trace("VALIDATION FAILED:" + NEW_LINE + mismatchDetails)
    end
-   
+
    result = isValid
 End
 
@@ -8427,21 +8316,19 @@ End
 // ============================================================================
 
 Function ParkFadersForVST(vstIdx : Integer)
-    var i, s : Integer
+    var macIdx, fi, bc, s : Integer
     var count : Integer = 0
-    
+
     Trace("PARK: Request for VST Index " + vstIdx)
 
-    // FIX: Limit raised to MAX_VSTS!
-    if vstIdx >= 0 and vstIdx < MAX_VSTS then
-        For i = 0; i < Link_Count; i = i + 1 Do
-            if Link_Active[i] and Link_Type[i] == 0 and Link_BlockIdx[i] == vstIdx then
-
-                s = Link_SourceIdx[i]
-
-                // Only park arranger faders (Index 0-15)
-                if s >= 0 and s <= 15 then
-                    Trace("PARK: Found Match! Link " + i + " is on Slider " + s + ". Current Val: " + GetParameter(ExternalArranger, s))
+    if vstIdx >= 1 and vstIdx <= MAX_VSTS then
+        For macIdx = 1; macIdx <= 16; macIdx = macIdx + 1 Do
+            bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+            if bc > 0 then
+                fi = MacLayerBindIdx(macIdx, 0, 0)
+                if Mac_Layer_TargetType[fi] == "VST" and Mac_Layer_VSTIdx[fi] == vstIdx then
+                    s = macIdx - 1
+                    Trace("PARK: Found Match! Macro " + macIdx + " on Fader " + s + ". Current Val: " + GetParameter(ExternalArranger, s))
                     Mem_Fader_Buffer[s] = GetParameter(ExternalArranger, s)
                     ScriptWrite_ExpectedPrev[s] = ScriptWrite_Expected[s]
                     ScriptWrite_Expected[s] = 0.0
@@ -8451,43 +8338,37 @@ Function ParkFadersForVST(vstIdx : Integer)
             end
         End
     end
-    
-    if count == 0 then Trace("PARK: No Links found for VST " + vstIdx + " in current Map!") end
+
+    if count == 0 then Trace("PARK: No bindings found for VST " + vstIdx + " in current Map!") end
 End
 
 // 2. RESTORE: Restore values (from plugin or memory)
 Function RestoreFadersForVST(vstIdx : Integer)
-    var i, s : Integer
+    var macIdx, fi, bc, s, paramIdx : Integer
     var currentVal, faderVal : Double = 0.0
-    var range : Double = 0.0
+    var range, rMin, rMax : Double = 0.0
     var count : Integer = 0
-    
+
     Trace("RESTORE: Request for VST Index " + vstIdx)
-    
-    // FIX: Limit raised to MAX_VSTS!
-    if vstIdx >= 0 and vstIdx < MAX_VSTS then
-        For i = 0; i < Link_Count; i = i + 1 Do
-            if Link_Active[i] and Link_Type[i] == 0 and Link_BlockIdx[i] == vstIdx then
 
-                s = Link_SourceIdx[i]
-                faderVal = 0.0
-
-                // Only restore arranger faders (Index 0-15)
-                if s >= 0 and s <= 15 then
-                    if Link_IsCC[i] then
-                        faderVal = Mem_Fader_Buffer[s]
-                        Trace("RESTORE: Link " + i + " (CC) -> Buffer says: " + faderVal)
-                    else
-                        currentVal = GetParameter(BLK_VST[vstIdx], Link_TargetParam[i])
-                        range = Link_MaxVal[i] - Link_MinVal[i]
-                        if Abs(range) > 0.0001 then
-                            faderVal = (currentVal - Link_MinVal[i]) / range
-                        else
-                            faderVal = 0.0 
-                        end
-                        Trace("RESTORE: Link " + i + " (Param) -> Plugin says: " + currentVal + " -> Fader: " + faderVal)
+    if vstIdx >= 1 and vstIdx <= MAX_VSTS then
+        For macIdx = 1; macIdx <= 16; macIdx = macIdx + 1 Do
+            bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+            if bc > 0 then
+                fi = MacLayerBindIdx(macIdx, 0, 0)
+                if Mac_Layer_TargetType[fi] == "VST" and Mac_Layer_VSTIdx[fi] == vstIdx then
+                    s = macIdx - 1
+                    faderVal = 0.0
+                    paramIdx = Mac_Layer_ParamIdx[fi]
+                    currentVal = GetParameter(BLK_VST[vstIdx], paramIdx)
+                    rMin = Mac_Layer_RangeMin[fi]
+                    rMax = Mac_Layer_RangeMax[fi]
+                    range = rMax - rMin
+                    if Abs(range) > 0.0001 then
+                        faderVal = (currentVal - rMin) / range
                     end
-                    
+                    Trace("RESTORE: Macro " + macIdx + " (Param) -> Plugin says: " + currentVal + " -> Fader: " + faderVal)
+
                     if faderVal < 0.0 then faderVal = 0.0 elsif faderVal > 1.0 then faderVal = 1.0 end
                     ScriptWrite_ExpectedPrev[s] = ScriptWrite_Expected[s]
                     ScriptWrite_Expected[s] = faderVal
@@ -8497,7 +8378,7 @@ Function RestoreFadersForVST(vstIdx : Integer)
             end
         End
     end
-    if count == 0 then Trace("RESTORE: No Links found to restore.") end
+    if count == 0 then Trace("RESTORE: No bindings found to restore.") end
 End
 
 Function ScrollToCurrentVST()
@@ -8560,54 +8441,29 @@ End
 // SECTION 17: CONTROLLER MAP ENGINE
 // ============================================================================
 
-Function ExecuteLink(i : Integer, val : Double)
-   var scaledVal : Double = Link_MinVal[i] + (val * (Link_MaxVal[i] - Link_MinVal[i]))
-   var midiVal : Integer
-   var m : MidiMessage
-
-   if Link_IsCC[i] == true then
-       midiVal = Round(scaledVal * 127.0)
-       if midiVal < 0 then midiVal = 0 elsif midiVal > 127 then midiVal = 127 end
-       
-       if Link_Type[i] == 0 then 
-           m = MakeControlChangeMessageEx(Link_TargetParam[i], midiVal, GetChannelForVST(Link_BlockIdx[i]))
-           SendNow(BLK_VSTControl, m)
-       elsif Link_Type[i] == 3 then
-           m = MakeControlChangeMessageEx(Link_TargetParam[i], midiVal, Link_BlockIdx[i])
-           SendNow(BLK_VSTControl, m)
-       end
-   else
-       if Link_Type[i] == 0 then SetParameter(BLK_VST[Link_BlockIdx[i]], Link_TargetParam[i], scaledVal)
-       elsif Link_Type[i] == 1 then SetParameter(BLK_NoteProcessor[Link_BlockIdx[i]], Link_TargetParam[i], scaledVal)
-       elsif Link_Type[i] == 2 then SetParameter(AudioMixer, Link_TargetParam[i], scaledVal)
-       end
-   end
-End
+// ExecuteLink removed (legacy Link_* system replaced by Mac_Layer_* via ExecuteHardwareMacro)
 
 // ---------------------------------------------------------------------
 // APPLY EDITOR-TEST // Executes the test fader logic in the editor
 // ---------------------------------------------------------------------
 
 Function ApplyEditorTest(val : Double)
-    var i, midiVal : Integer
-    var scaledVal : Double = 0.0
-    var m : MidiMessage 
-    
+    var s : Integer
+
     if CurrentEditScope == -1 then
-        For i = 0; i < Link_Count; i = i + 1 Do
-            if Link_Active[i] then ExecuteLink(i, val) end
+        // Global: write all 16 arranger faders (each triggers ParameterValueChanged -> ExecuteHardwareMacro)
+        For s = 0; s < 16; s = s + 1 Do
+            ScriptWrite_ExpectedPrev[s] = ScriptWrite_Expected[s]
+            ScriptWrite_Expected[s] = val
+            SetParameter(ExternalArranger, s, val)
         End
     else
-        // ---> GUARD <---
+        // Scoped: write to arranger (triggers ParameterValueChanged -> ExecuteHardwareMacro)
         if CurrentEditScope >= 0 and CurrentEditScope <= 15 then
             ScriptWrite_ExpectedPrev[CurrentEditScope] = ScriptWrite_Expected[CurrentEditScope]
             ScriptWrite_Expected[CurrentEditScope] = val
             SetParameter(ExternalArranger, CurrentEditScope, val)
         end
-        
-        For i = 0; i < Link_Count; i = i + 1 Do
-            if Link_Active[i] and Link_SourceIdx[i] == CurrentEditScope then ExecuteLink(i, val) end
-        End
     end
 End
 
@@ -8669,26 +8525,30 @@ End
 // Updates the hardware faders on the arranger for a specific VST
 // ---------------------------------------------------------
 Function ResetHardwareFadersForVST(vstIdx : Integer)
-   var i, s : Integer
+   var macIdx, fi, bc, s, paramIdx : Integer
    var currentVal, faderVal : Double = 0.0
-   var range : Double = 0.0
+   var range, rMin, rMax : Double = 0.0
 
-   if vstIdx >= 0 and vstIdx < MAX_VSTS then
-       For i = 0; i < Link_Count; i = i + 1 Do
-           if Link_Active[i] and Link_Type[i] == 0 and Link_BlockIdx[i] == vstIdx and Link_IsCC[i] == false then
-               
-               s = Link_SourceIdx[i] // The hardware slider index
-               
-               currentVal = GetParameter(BLK_VST[vstIdx], Link_TargetParam[i])
-               range = Link_MaxVal[i] - Link_MinVal[i]
-               
-               if range != 0.0 then faderVal = (currentVal - Link_MinVal[i]) / range else faderVal = currentVal end
-               if faderVal < 0.0 then faderVal = 0.0 elsif faderVal > 1.0 then faderVal = 1.0 end
-               
-               if s >= 0 and s <= 15 then
-                   ScriptWrite_ExpectedPrev[s] = ScriptWrite_Expected[s]
-                   ScriptWrite_Expected[s] = faderVal
-                   SetParameter(ExternalArranger, s, faderVal)
+   if vstIdx >= 1 and vstIdx <= MAX_VSTS then
+       For macIdx = 1; macIdx <= 16; macIdx = macIdx + 1 Do
+           bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+           if bc > 0 then
+               fi = MacLayerBindIdx(macIdx, 0, 0)
+               if Mac_Layer_TargetType[fi] == "VST" and Mac_Layer_VSTIdx[fi] == vstIdx then
+                   s = macIdx - 1
+                   paramIdx = Mac_Layer_ParamIdx[fi]
+                   currentVal = GetParameter(BLK_VST[vstIdx], paramIdx)
+                   rMin = Mac_Layer_RangeMin[fi]
+                   rMax = Mac_Layer_RangeMax[fi]
+                   range = rMax - rMin
+                   if range != 0.0 then faderVal = (currentVal - rMin) / range else faderVal = currentVal end
+                   if faderVal < 0.0 then faderVal = 0.0 elsif faderVal > 1.0 then faderVal = 1.0 end
+
+                   if s >= 0 and s <= 15 then
+                       ScriptWrite_ExpectedPrev[s] = ScriptWrite_Expected[s]
+                       ScriptWrite_Expected[s] = faderVal
+                       SetParameter(ExternalArranger, s, faderVal)
+                   end
                end
            end
        End
@@ -11835,13 +11695,8 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
            end
        end
        
-       // --- B: ARE THERE PARAMETER LINKS FOR THIS CC? ---
-       For i = 0; i < Link_Count; i = i + 1 Do
-           if Link_Active[i] and Link_SourceIsCC[i] and Link_SourceIdx[i] == cc then
-               ExecuteLink(i, val) 
-           end
-       End
-       
+       // --- B: Link_* CC routing removed (now handled by Mac_Layer_* via ExecuteHardwareMacro) ---
+
        // --- C: REVERSE LOOKUP (CC -> Macro) ---
        lookupIdx = ch * 128 + cc
        if lookupIdx >= 0 and lookupIdx < 256 then
@@ -14132,10 +13987,8 @@ Initialization
    CurrentCtrlMapName = "-"
    LBL_CtrlConfig.SetWidgetLabel("-")
 
-   Link_Active = []; Link_SourceIdx = []; Link_Type = []; Link_BlockIdx = []; 
-   Link_TargetParam = []; Link_BlockName = []; Link_MinVal = []; Link_MaxVal = []
+   // Link_* arrays removed (replaced by Mac_Layer_*)
    OutputScope = []; For i=0; i<16; i=i+1 Do OutputScope <-- false End
-   Link_Count = 0
    
    SyncMatrixToScriptlet()
     
@@ -15624,10 +15477,6 @@ End
 // ----------------------------------------------------
 
 On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArranger
-   var i, targetChannel : Integer
-   var scaledVal : Double = 0.0
-   var midiVal : Integer
-   var m : MidiMessage
    var isEcho : Boolean = false
 
    // EMERGENCY BRAKE — if the Trace() watchdog tripped the kill switch,
@@ -15716,52 +15565,8 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArran
                     if DebugMode then Trace("METER: SLD_Morph <- " + newVal + " (hardware write from slot=" + paramIdx + ")") end
                 end
 
-                For i = 0; i < Link_Count; i = i + 1 Do
-                    if Link_Active[i] == true and Link_SourceIdx[i] == paramIdx then
-                        
-                        // --- SLEEP SWITCH LOGIC (Pull-To-Sleep) ---
-                        if Link_IsSleepSwitch[i] then
-                            if newVal < 0.005 then // Fader is (nearly) 0
-                                if not IsPluginBypassed(BLK_VST[Link_BlockIdx[i]]) then
-                                    SetPluginBypassed(BLK_VST[Link_BlockIdx[i]], true)
-                                    targetChannel = GetChannelForVST(Link_BlockIdx[i])
-                                    Trigger_NotesOff(targetChannel)
-                                    if DebugMode then Trace("SLEEP SWITCH: VST" + (Link_BlockIdx[i]+1) + " bypassed (Fader 0).") end
-                                end
-                            else // Fader is being pulled up
-                                if IsPluginBypassed(BLK_VST[Link_BlockIdx[i]]) then
-                                    SetPluginBypassed(BLK_VST[Link_BlockIdx[i]], false)
-                                    if DebugMode then Trace("SLEEP SWITCH: VST" + (Link_BlockIdx[i]+1) + " awoken (Fader > 0).") end
-                                end
-                            end
-                        end
-                        // ------------------------------------------
-
-                        // Scaling
-                        scaledVal = Link_MinVal[i] + (newVal * (Link_MaxVal[i] - Link_MinVal[i]))
-                        
-                        // --- OUTPUT: CC OR PARAMETER? ---
-                        if Link_IsCC[i] == true then
-                            midiVal = Round(scaledVal * 127.0)
-                            if midiVal < 0 then midiVal = 0 elsif midiVal > 127 then midiVal = 127 end
-                            
-                            // Type 0 = VST Routing, Type 3 = Direct Channel Routing
-                            if Link_Type[i] == 0 then 
-                                m = MakeControlChangeMessageEx(Link_TargetParam[i], midiVal, GetChannelForVST(Link_BlockIdx[i]))
-                                SendNow(BLK_VSTControl, m)
-                            elsif Link_Type[i] == 3 then
-                                m = MakeControlChangeMessageEx(Link_TargetParam[i], midiVal, Link_BlockIdx[i])
-                                SendNow(BLK_VSTControl, m)
-                            end
-                        else
-                            // Type 0 = VST, Type 1 = NoteProcessor, Type 2 = AudioMixer
-                            if Link_Type[i] == 0 then SetParameter(BLK_VST[Link_BlockIdx[i]], Link_TargetParam[i], scaledVal)
-                            elsif Link_Type[i] == 1 then SetParameter(BLK_NoteProcessor[Link_BlockIdx[i]], Link_TargetParam[i], scaledVal)
-                            elsif Link_Type[i] == 2 then SetParameter(AudioMixer, Link_TargetParam[i], scaledVal)
-                            end
-                        end
-                    end
-                End
+                // Route via Mac_Layer_* (replaces legacy Link_* routing)
+                ExecuteHardwareMacro(paramIdx + 1, newVal)
            end
        end 
        
