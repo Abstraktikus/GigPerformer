@@ -5575,8 +5575,8 @@ End
 // =========================================================
 
 Function BuildRecDisplayLines()
-    var i, partIdx, tms, masterChIdx, k, showMS : Integer
-    var line, eType, valStr, showLine, barStr : String
+    var i, partIdx, tms, masterChIdx, k, showMS, ovlCh, ovlState : Integer
+    var line, eType, valStr, showLine, barStr, ovlFunc : String
 
     RecDisplayLines = []
 
@@ -5647,7 +5647,6 @@ Function BuildRecDisplayLines()
                 elsif eType == "LoopMaster" then
                     valStr = LoopMasterActionName(DecodeLoopMasterActionCode(Arr_Rec_Val[i])) + " Ch" + (DecodeLoopMasterChIdx(Arr_Rec_Val[i]) + 1)
                 elsif IndexOfSubstring(eType, "OVL_", false) == 0 then
-                    var ovlFunc : String; var ovlCh, ovlState : Integer
                     ovlFunc = CopySubstring(eType, 4, Length(eType) - 4)
                     ovlCh = Arr_Rec_Val[i] / 2
                     ovlState = Arr_Rec_Val[i] Mod 2
