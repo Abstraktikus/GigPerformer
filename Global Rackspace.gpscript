@@ -3277,7 +3277,7 @@ Function ParseMacroLine(line : String, isDefault : Boolean)
          macroIdx = StringToInt(CopySubstring(leftPart, 5, Length(leftPart) - 5))
       end
 
-      if macroIdx >= 1 and macroIdx <= MAX_MACROS then
+      if macroIdx >= 1 and macroIdx < MAX_MACROS then
          // Check for DEV source (before ";")
          semiPos = IndexOfSubstring(rightPart, ";", false)
          if semiPos >= 0 then
@@ -3734,7 +3734,7 @@ Function UpdateControllerInfoDisplay()
    // Hardware Assignments
    CtrlInfo_Lines <-- ""
    CtrlInfo_Lines <-- "--- HARDWARE ASSIGNMENTS ---"
-   For m = 1; m <= MAX_MACROS; m = m + 1 Do
+   For m = 1; m < MAX_MACROS; m = m + 1 Do
       if Mac_SourceCount[m] > 0 then
          devIdx2 = Mac_SourceDev[MacSourceIdx(m, 0)]
          if devIdx2 >= 0 and devIdx2 < MAX_DEVICES then
@@ -7241,7 +7241,7 @@ End
 // Copies all Def_Mac_* arrays into Mac_* (active) arrays
 Function CloneDefaultToActive()
    var m, s, l, b, fi : Integer
-   For m = 1; m <= MAX_MACROS; m = m + 1 Do
+   For m = 1; m < MAX_MACROS; m = m + 1 Do
       Mac_SourceCount[m] = Def_Mac_SourceCount[m]
       For s = 0; s < MAX_SOURCES_PER_MACRO; s = s + 1 Do
          Mac_SourceDev[MacSourceIdx(m, s)] = Def_Mac_SourceDev[MacSourceIdx(m, s)]
@@ -7305,12 +7305,12 @@ Function RebuildReverseLookups()
    For m = 0; m < 2048; m = m + 1 Do
       Mac_ReverseLookup_CC[m] = -1
    End
-   For m = 0; m <= MAX_MACROS; m = m + 1 Do
+   For m = 0; m < MAX_MACROS; m = m + 1 Do
       Mac_ReverseLookup_SysAct[m] = -1
    End
 
    // Build SysAction lookup from LAY0 bindings (isolation rule: must be sole binding)
-   For m = 1; m <= MAX_MACROS; m = m + 1 Do
+   For m = 1; m < MAX_MACROS; m = m + 1 Do
       bindCount = Mac_Layer_BindCount[MacLayerIdx(m, 0)]
       if bindCount == 1 then
          fi = MacLayerBindIdx(m, 0, 0)
@@ -7328,7 +7328,7 @@ Function RebuildReverseLookups()
    End
 
    // Build source-to-macro CC lookup
-   For m = 1; m <= MAX_MACROS; m = m + 1 Do
+   For m = 1; m < MAX_MACROS; m = m + 1 Do
       srcCount = Mac_SourceCount[m]
       For b = 0; b < srcCount; b = b + 1 Do
          devIdx = Mac_SourceDev[MacSourceIdx(m, b)]
