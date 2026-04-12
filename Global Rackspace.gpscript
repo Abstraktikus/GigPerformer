@@ -11787,9 +11787,10 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
 End
 
 Function ProcessHardwareNote(m : NoteMessage)
-    var chan : Integer = GetChannel(m)
-    var noteNum : Integer = GetNoteNumber(m)
+    var chan, noteNum, lookupIdx, macroFromLookup : Integer
     var val : Double = 0.0
+    chan = GetChannel(m)
+    noteNum = GetNoteNumber(m)
 
     // Stamp the global last-note-on time for the latch auto-release timer.
     // Runs on every hardware note-on regardless of latch state — cheap.
@@ -11809,8 +11810,7 @@ Function ProcessHardwareNote(m : NoteMessage)
         // Convert NoteOn/Off to 1.0 and 0.0
         if IsNoteOn(m) then val = IntToFloat(GetVelocity(m)) / 127.0 else val = 0.0 end
 
-        // Note-based macro dispatch uses the CC reverse lookup (Source=DEV:NoteN in ControllerMaps_v2.txt)
-        var lookupIdx, macroFromLookup : Integer
+        // Note-based macro dispatch uses the CC reverse lookup
         lookupIdx = chan * 128 + noteNum
         if lookupIdx >= 0 and lookupIdx < 2048 then
            macroFromLookup = Mac_ReverseLookup_CC[lookupIdx]
