@@ -11328,6 +11328,42 @@ Function ExecuteKeywordBinding(keyword : String, val : Double)
    end
 End
 
+// ---------------------------------------------------------
+// Single entry point for all virtualized SYSMODE actions. Called from
+// (a) ProcessSystemNavigation (joystick path) and
+// (b) the macro ParameterValueChanged handler (hardware-button path).
+// ---------------------------------------------------------
+Function FireSystemAction(actionIdx : Integer)
+   if actionIdx < 0 or actionIdx >= Size(SysAction_Names) then
+      if DebugMode then Trace("SYSACT: Invalid actionIdx " + actionIdx) end
+   else
+      if DebugMode then Trace("SYSACT: Fire " + SysAction_Names[actionIdx]) end
+
+      Select
+         SysAction_Names[actionIdx] == "VST_SCOPE_UP"       Do ChangeVstScope(1, -1);  ApplyVstFocusBypass()
+         SysAction_Names[actionIdx] == "VST_SCOPE_DOWN"     Do ChangeVstScope(-1, -1); ApplyVstFocusBypass()
+         SysAction_Names[actionIdx] == "VST_PRESET_UP"      Do TriggerVstPresetChange(1)
+         SysAction_Names[actionIdx] == "VST_PRESET_DOWN"    Do TriggerVstPresetChange(-1)
+         SysAction_Names[actionIdx] == "LOOPER_CH_UP"       Do CycleChannelScope(1)
+         SysAction_Names[actionIdx] == "LOOPER_CH_DOWN"     Do CycleChannelScope(-1)
+         SysAction_Names[actionIdx] == "LOOPER_REC"         Do ClickWidget(BTN_Loop_Rec)
+         SysAction_Names[actionIdx] == "LOOPER_CLEAR"       Do ClickWidget(BTN_Loop_Clear)
+         SysAction_Names[actionIdx] == "CTRLMAP_PREV"       Do PreviewActiveControllerMaps(-1)
+         SysAction_Names[actionIdx] == "CTRLMAP_NEXT"       Do PreviewActiveControllerMaps(1)
+         SysAction_Names[actionIdx] == "CTRLMAP_RESTORE"    Do RestoreInitialControllerMap()
+         SysAction_Names[actionIdx] == "CTRLMAP_CYCLE"      Do CycleCtrlMap(1)
+         SysAction_Names[actionIdx] == "STRIP_CH_UP"        Do CycleStripChannel(1)
+         SysAction_Names[actionIdx] == "STRIP_CH_DOWN"      Do CycleStripChannel(-1)
+         SysAction_Names[actionIdx] == "STRIP_THEME_PREV"   Do CycleStripTheme(-1)
+         SysAction_Names[actionIdx] == "STRIP_THEME_NEXT"   Do CycleStripTheme(1)
+         SysAction_Names[actionIdx] == "STRIP_MACRO_TOGGLE" Do ToggleStripMacro()
+         SysAction_Names[actionIdx] == "TL_PARTJUMP_NEXT"   Do PartJumpPreview(1)
+         SysAction_Names[actionIdx] == "TL_PARTJUMP_PREV"   Do PartJumpPreview(-1)
+         SysAction_Names[actionIdx] == "TL_REC_SONGPART"    Do ExecuteRecSongpart()
+      End
+   end
+End
+
 // Layer-aware macro dispatch
 Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
    var l, b, fi, bindingKey, bindCount, vstIdx, paramIdx, chPos, ccPos, ccCh, ccNum, labelPos, actionIdx, channel : Integer
@@ -11567,41 +11603,6 @@ End
 
 // ---------------------------------------------------------
 // SYSTEM ACTION DISPATCHER
-// Single entry point for all virtualized SYSMODE actions. Called from
-// (a) ProcessSystemNavigation (joystick path) and
-// (b) the macro ParameterValueChanged handler (hardware-button path).
-// ---------------------------------------------------------
-Function FireSystemAction(actionIdx : Integer)
-   if actionIdx < 0 or actionIdx >= Size(SysAction_Names) then
-      if DebugMode then Trace("SYSACT: Invalid actionIdx " + actionIdx) end
-   else
-      if DebugMode then Trace("SYSACT: Fire " + SysAction_Names[actionIdx]) end
-
-      Select
-         SysAction_Names[actionIdx] == "VST_SCOPE_UP"       Do ChangeVstScope(1, -1);  ApplyVstFocusBypass()
-         SysAction_Names[actionIdx] == "VST_SCOPE_DOWN"     Do ChangeVstScope(-1, -1); ApplyVstFocusBypass()
-         SysAction_Names[actionIdx] == "VST_PRESET_UP"      Do TriggerVstPresetChange(1)
-         SysAction_Names[actionIdx] == "VST_PRESET_DOWN"    Do TriggerVstPresetChange(-1)
-         SysAction_Names[actionIdx] == "LOOPER_CH_UP"       Do CycleChannelScope(1)
-         SysAction_Names[actionIdx] == "LOOPER_CH_DOWN"     Do CycleChannelScope(-1)
-         SysAction_Names[actionIdx] == "LOOPER_REC"         Do ClickWidget(BTN_Loop_Rec)
-         SysAction_Names[actionIdx] == "LOOPER_CLEAR"       Do ClickWidget(BTN_Loop_Clear)
-         SysAction_Names[actionIdx] == "CTRLMAP_PREV"       Do PreviewActiveControllerMaps(-1)
-         SysAction_Names[actionIdx] == "CTRLMAP_NEXT"       Do PreviewActiveControllerMaps(1)
-         SysAction_Names[actionIdx] == "CTRLMAP_RESTORE"    Do RestoreInitialControllerMap()
-         SysAction_Names[actionIdx] == "CTRLMAP_CYCLE"      Do CycleCtrlMap(1)
-         SysAction_Names[actionIdx] == "STRIP_CH_UP"        Do CycleStripChannel(1)
-         SysAction_Names[actionIdx] == "STRIP_CH_DOWN"      Do CycleStripChannel(-1)
-         SysAction_Names[actionIdx] == "STRIP_THEME_PREV"   Do CycleStripTheme(-1)
-         SysAction_Names[actionIdx] == "STRIP_THEME_NEXT"   Do CycleStripTheme(1)
-         SysAction_Names[actionIdx] == "STRIP_MACRO_TOGGLE" Do ToggleStripMacro()
-         SysAction_Names[actionIdx] == "TL_PARTJUMP_NEXT"   Do PartJumpPreview(1)
-         SysAction_Names[actionIdx] == "TL_PARTJUMP_PREV"   Do PartJumpPreview(-1)
-         SysAction_Names[actionIdx] == "TL_REC_SONGPART"    Do ExecuteRecSongpart()
-      End
-   end
-End
-
 Function ProcessHardwareCC(m : ControlChangeMessage)
    var ch, cc, i, lookupIdx, macroFromLookup, pIdx : Integer
    var val : Double = 0.0
