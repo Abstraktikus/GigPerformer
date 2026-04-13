@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-13.004"
+   SCRIPT_VERSION : String = "2026-04-13.005"
 
    DebugMode : Boolean = false
 
@@ -269,9 +269,9 @@ Var
    // ========================================================================
    RECH                : PluginBlock
    AudioMixer          : AudioMixerBlock
-   ExternalArranger    : PluginBlock
+
    BLK_VelocityMonitor : PluginBlock
-   BLK_ArrangerSync    : PluginBlock
+
    SystemActions       : PluginBlock
 
    DeviceIn_0          : MidiInBlock
@@ -478,7 +478,7 @@ Var
    InputSyncTimer, OutputSyncTimer, SnapshotPostLoadTimer : Double = 0.0
    MatrixSafetyTimer, LoopSafetyTimer, DelayedLoadTimer : Double = 0.0
    DelayedSongSwitchTimer, SyncLockTimer, PlayheadEvalTimer : Double = 0.0
-   GPTransportEvaluationTimer, StyleTriggerResetTimer, MacroFeedbackTimer : Double = 0.0
+   GPTransportEvaluationTimer, MacroFeedbackTimer : Double = 0.0
    StyleEchoBlockTimer : Double = 0.0
    TRIG_START_STOP     : Integer = -1
    SysModeFeedbackTimer, LayerFeedbackTimer : Double = 0.0
@@ -510,10 +510,6 @@ Var
    Ctrl_OverlayMsg, VST_OverlayMsg, Rec_OverlayMsg : String = ""
    
    // --- System Parameters ---
-   P_ARRANGER_FLAGS_START : Integer = 16 
-   P_ARRANGER_CROSSFADER : Integer = 32 
-   P_STYLE_START_STOP : Integer = 1   
-   P_STYLE_HW_START   : Integer = 29  
    Mixer_Vol_Params : Integer Array = [0, 7, 14, 21, 28, 35, 42, 49, 56, 63]
 
    // --- Arranger Volume Feedback State ---
@@ -575,9 +571,7 @@ Var
    LFO_Draft_StartTime : Double  = 0.0
    LFO_Draft_PreValue  : Double  = 0.0
 
-   // v2: origin flag for Timeline replay writes. Set to true around
-   // every SetParameter(ExternalArranger,...) call inside FireTimelineEvent.
-   // Two readers:
+   // Origin flag for Timeline replay writes. Two readers:
    //   1. LFO auto-start gate: bound LFOs only start when a Timeline
    //      replay hits their slot (hardware fader jitter must NOT start
    //      an LFO — BTN_LFO_Run and Timeline replay are the only entries)
@@ -585,52 +579,6 @@ Var
    //      loops when the Record button happens to be active during
    //      playback.
    Timeline_IsReplaying : Boolean = false
-
-   // v2: per-slot echo-deduplication sentinel for script-initiated
-   // ExternalArranger writes. The original LFO_IsDriving boolean flag
-   // was conceptually broken because SetParameter(ExternalArranger,...)
-   // dispatches On ParameterValueChanged asynchronously — by the time
-   // the callback fires, any flag we set right before the SetParameter
-   // call has already been cleared. Value-based deduplication works
-   // because GP echoes back the exact float we wrote.
-   //
-   // Protocol:
-   //   - Before every script-initiated SetParameter(ExternalArranger, slot, val):
-   //        ScriptWrite_Expected[slot] = val
-   //   - In On ParameterValueChanged from ExternalArranger, compare
-   //     newVal to ScriptWrite_Expected[paramIdx] with 0.005 tolerance
-   //     (wide enough for 1/127 MIDI quantization if a motorfader
-   //     round-trips the value). Match == echo == skip all side-effects
-   //     (HUD push, trace, SysAction dispatch, Timeline recording,
-   //     LFO retrigger). Link routing stays unconditional so VST
-   //     parameters still move.
-   //   - The sentinel is NOT consumed on match — it stays until the
-   //     next script write to the same slot refreshes it. This catches
-   //     duplicate callbacks (internal + hardware round-trip) for a
-   //     single write. The narrow false-suppression window (hardware
-   //     happening to land exactly on the last-written value) is
-   //     acceptable.
-   //
-   // Size MAX_MACROS so it covers the full parameter range the handler
-   // inspects (the HUD path uses 0..15, the LFO/SysAction path uses
-   // 0..MAX_MACROS-1). -1.0 is the "no pending echo" sentinel.
-   //
-   // DOUBLE SENTINEL — ScriptWrite_ExpectedPrev holds the value from
-   // the write BEFORE the current one. Required because multiple script
-   // writes to the same slot can happen between two message-loop
-   // dispatches (e.g. TickLFOs emits a sample, then StopLFO snaps back
-   // in the same call). Without the previous sentinel, the first async
-   // callback arrives after the sentinel was already overwritten by
-   // the second write, fails the match, and treats the script write
-   // as a hardware event — cascading into a death loop on finite-cycle
-   // LFO termination.
-   //
-   // Protocol change: every write site rotates before updating:
-   //   ScriptWrite_ExpectedPrev[slot] = ScriptWrite_Expected[slot]
-   //   ScriptWrite_Expected[slot]     = val
-   // Handler matches against EITHER current OR previous.
-   ScriptWrite_Expected     : Double Array
-   ScriptWrite_ExpectedPrev : Double Array
 
    // v2: flash surface for LBL_LFO_BoundMacro — 1-second transient feedback
    // from BTN_LFO_Save when clicked in LOCKED state, prompting the user
@@ -6843,12 +6791,11 @@ End
 // HARD-STOP ALL LFOs — emergency kill switch for critical
 // transitions (song change, map load, rackspace switch).
 //
-// Unlike StopLFO(slot) this does NOT do a snap-back write to
-// ExternalArranger: the caller is about to reload song state
-// anyway, so GetParameter/SetParameter of the old pre-value
-// would either conflict with the new load or write stale data.
-// We just kill the runtime flags so TickLFOs stops emitting
-// samples on its next tick.
+// Unlike StopLFO(slot) this does NOT do a snap-back write —
+// the caller is about to reload song state anyway, so writing
+// the old pre-value would conflict with the new load or write
+// stale data. We just kill the runtime flags so TickLFOs stops
+// emitting samples on its next tick.
 //
 // Call this BEFORE LoadControllerMap, BEFORE SongText loads,
 // BEFORE any mass rewrite of LFO_ByMacro[] bindings. If an
@@ -10293,12 +10240,6 @@ End
 // CROSSFADER FUNKTIONEN
 // ---------------------------------------------------------
 
-// SyncMatrixToScriptlet: No longer needed — W_CF_Arranger widgets are the source of truth.
-// The ExternalArranger scriptlet has been eliminated; crossfader flags are read directly from widgets.
-Function SyncMatrixToScriptlet()
-    // Intentionally empty — kept as stub until callers are cleaned up
-End
-
 
 // ---------------------------------------------------------
 // CROSSFADE AUDIO LOGIC (UPDATED FOR DYNAMIC MAPPING)
@@ -11447,7 +11388,7 @@ Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
                rMinCC = Mac_Layer_RangeMin[fi]
                rMaxCC = Mac_Layer_RangeMax[fi]
                scaledCC = rMinCC + (val * (rMaxCC - rMinCC))
-               SendNowToMidiOutDevice(DEV_MidiOut[0], MakeControlChangeMessageEx(ccNum, Round(scaledCC * 127.0), ccCh))
+               SendNowToMidiOutDevice(GetDeviceRoute(arrangerDevIdx, ROUTE_CONTROL), MakeControlChangeMessageEx(ccNum, Round(scaledCC * 127.0), ccCh))
             end
 
          elsif targetType == "KEYWORD" then
@@ -12006,7 +11947,6 @@ Function PerformSystemReset()
        Trace("SYS: Reset requires VST changes. Starting Multi-Reboot Queue...")
        TriggerNextQueueJob()
    else
-       SyncMatrixToScriptlet()
        SetDefaultChannelScope()
        LoadControllerMap("Standard")
        HardwareSyncTimer = TimeSinceStartup() + 3500.0
@@ -13289,8 +13229,6 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
             End
             
             // 4. RESTLICHES SETUP
-            SyncMatrixToScriptlet()
-            
             if targetCtrlMap == "" or targetCtrlMap == "-" then
                 targetCtrlMap = GetDynamicStandardMap()
                 found = false
@@ -13351,7 +13289,6 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
        Trace("SONG LOAD: No Snapshot found! Reverting to Arranger-Only Fallback...")
        
        For i = 0; i < 256; i = i + 1 Do SetParameter(RECH, i, 0.0) End
-       SyncMatrixToScriptlet()
        
        For i = 0; i < MAX_VSTS; i = i + 1 Do 
            SetPluginBypassed(BLK_VST[i], true)
@@ -13789,7 +13726,7 @@ Initialization
    // ====================================================================================
 
    // ABSOLUTE FIRST: arm the FaderSafetyTimer. This is the boot safety
-   // window (5 seconds) during which ExternalArranger callbacks and
+   // window (5 seconds) during which inbound device callbacks and
    // widget callbacks silent-ignore. Must be set before ANY widget
    // reset or parameter write below, so every subsequent action in
    // Init is covered by the guard from time t=0.
@@ -14001,15 +13938,6 @@ Initialization
    LFO_Draft_PreValue  = 0.0
    Timeline_IsReplaying = false
 
-   // v2: echo-dedup sentinel arrays — one entry per macro slot,
-   // current + previous for race-safe dedup.
-   ScriptWrite_Expected     = []
-   ScriptWrite_ExpectedPrev = []
-   For i_init = 0; i_init < MAX_MACROS; i_init = i_init + 1 Do
-       ScriptWrite_Expected     <-- -1.0
-       ScriptWrite_ExpectedPrev <-- -1.0
-   End
-
    LFOFlashMsg   = ""
    LFOFlashTimer = 0.0
    LFOInspectorNeedsRefresh = false
@@ -14080,9 +14008,7 @@ Initialization
 
    // Link_* arrays removed (replaced by Mac_Layer_*)
    OutputScope = []; For i=0; i<16; i=i+1 Do OutputScope <-- false End
-   
-   SyncMatrixToScriptlet()
-    
+
    PLUGINS_NAMES = ["VST1_GRS","VST2_GRS","VST3_GRS","VST4_GRS","VST5_GRS"]; 
    For i = 0; i < 16; i = i + 1 Do PLUGINS_NAMES <-- "Ch" + IntToString(i+1) + "_Filter"; PLUGINS_NAMES <-- "Ch" + IntToString(i+1) + "_ChordM" End
    MIDI_NAMES = []; For i = 0; i < 16; i = i + 1 Do MIDI_NAMES <-- "Ch" + IntToString(i+1) + "_KBSplit" End
@@ -14877,7 +14803,6 @@ On WidgetValueChanged(val : Double) from BTN_CFCE_Ch1, BTN_CFCE_Ch2, BTN_CFCE_Ch
                                          BTN_CFCE_Ch9, BTN_CFCE_Ch10, BTN_CFCE_Ch11, BTN_CFCE_Ch12, BTN_CFCE_Ch13, BTN_CFCE_Ch14, BTN_CFCE_Ch15, BTN_CFCE_Ch16
     UpdateCFConfigLabel()
     If not IsLoadingSnapshot Then
-        SyncMatrixToScriptlet()
         ApplyCrossfade(GetWidgetValue(SLD_Crossfader))
     End
 End
@@ -15568,18 +15493,8 @@ End
 // HARDWARE FEEDBACK & CONTROLLER ROUTER
 // ----------------------------------------------------
 
-// ---------------------------------------------------------
-// DELETED: On ParameterValueChanged from ExternalArranger
-// Incoming fader/macro moves now flow through DeviceIn_0 CC processing
-// (ProcessHardwareCC -> ExecuteHardwareMacro path).
-// ---------------------------------------------------------
-
-// ---------------------------------------------------------
-// DELETED: On ParameterValueChanged from BLK_ArrangerSync
-// Transport sync and style part recording migrated to
-// On NoteEvent from DeviceIn_0 (trigger channel detection)
-// and On ControlChangeEvent from DeviceIn_0 (CC5 detection).
-// ---------------------------------------------------------
+// Scriptlet callbacks (ExternalArranger, BLK_ArrangerSync) eliminated.
+// All inbound processing now uses DeviceIn_0 MIDI callbacks.
 
 
 // ----------------------------------------------------
@@ -15589,7 +15504,7 @@ End
 On PitchBendEvent(m : PitchBendMessage) from DeviceIn_0
     var pbVal : Integer = GetPitchBendValue(m)
     if SystemModeActive then
-        // TODO(HAL): Read joystick thresholds from control registry
+        // TODO: Read joystick thresholds from control registry
         if pbVal > 12000 and Joy_PB_Fired != 1 then
             Joy_PB_Fired = 1; ProcessSystemNavigation(0, "X_AXIS", 1)
         elsif pbVal < 4000 and Joy_PB_Fired != -1 then
@@ -15608,7 +15523,6 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
     var ccChan : Integer = GetChannel(m)
 
     // --- Style feedback: CC5 on TriggerChannel = hardware start/stop ---
-    // Replaces the BLK_ArrangerSync callback's paramIdx 44 path for CC-based transport.
     if ccChan == DEV_TriggerChannel and cc == 5 then
        if TimeSinceStartup() >= StyleEchoBlockTimer then
           LastHardwarePulseTime = TimeSinceStartup()
@@ -15648,7 +15562,7 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1
     var val : Integer = GetCCValue(m)
     var ch : Integer = GetChannel(m)
     var dir : Integer = 0
-    // TODO(HAL): Use FindControl/GetControlType from control registry
+    // TODO: Use FindControl/GetControlType from control registry
     var ctrlIdx : Integer = FindControl(1, cc)
 
     // ====================================================
@@ -15718,8 +15632,7 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0
     end
 
     // --- Style trigger feedback from arranger ---
-    // Replaces On ParameterValueChanged from BLK_ArrangerSync: incoming notes
-    // on DEV_TriggerChannel are hardware start/stop and style part changes.
+    // Incoming notes on DEV_TriggerChannel are hardware start/stop and style part changes.
     if chan == DEV_TriggerChannel and IsNoteOn(m) then
        if TimeSinceStartup() >= StyleEchoBlockTimer then
           inTrigIdx = FindTriggerIdxByNote(GetNoteNumber(m))
@@ -15728,12 +15641,12 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0
              LastHardwarePulseTime = TimeSinceStartup()
              if DebugMode then Trace(">>> STYLE-IN: Hardware Start/Stop (Note " + IntToString(GetNoteNumber(m)) + ")") end
 
-             // Transport sync logic (was in BLK_ArrangerSync for SyncModes 1,4,5 / paramIdx 29)
+             // Transport sync logic for SyncModes 1,4,5
              if CurrentSyncMode == 2 and not IsPlayheadEnabled() then
                 Trace("   [X] STYLE-IN: Arranger started in isolation! Abort echo...")
                 TriggerStyleAction(TRIG_START_STOP)
              elsif CurrentSyncMode == 2 or CurrentSyncMode == 3 then
-                // Hardware start/stop button (was BLK_ArrangerSync paramIdx 44)
+                // Hardware start/stop button
                 IsCorrectingPlayhead = false
                 EnablePlayhead(not PendingPlayheadState)
              end
@@ -17021,8 +16934,6 @@ On TimerTick(ms : Double)
           end
         end
 
-        // StyleTriggerResetTimer block removed — TriggerStyleAction handles full Note On/Off pulse internally
-        
         if StateResetTime > 0.0 and TimeSinceStartup() > StateResetTime then
           CurrentState = 0; StateResetTime = 0.0 
         end
