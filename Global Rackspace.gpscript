@@ -15641,7 +15641,7 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0
              LastHardwarePulseTime = TimeSinceStartup()
              if DebugMode then Trace(">>> STYLE-IN: Hardware Start/Stop (Note " + IntToString(GetNoteNumber(m)) + ")") end
 
-             // Transport sync logic for SyncModes 1,4,5
+             // Transport sync logic for SyncModes 2,3
              if CurrentSyncMode == 2 and not IsPlayheadEnabled() then
                 Trace("   [X] STYLE-IN: Arranger started in isolation! Abort echo...")
                 TriggerStyleAction(TRIG_START_STOP)
