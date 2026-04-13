@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-13.003"
+   SCRIPT_VERSION : String = "2026-04-13.004"
 
    DebugMode : Boolean = false
 
@@ -421,6 +421,10 @@ Var
    RecordMode : Integer = 0
    SoloMuteStateDirty : Boolean = false
    PendingSysActionIdx : Integer = -1
+   Pending_HAL_FaderSync : Boolean Array = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
+   Pending_HAL_FaderVal  : Double Array  = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+   Pending_HAL_MacroExec : Boolean Array = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
+   Pending_HAL_MacroVal  : Double Array  = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
    GlobalSystemMode : Integer = 0
    
    IsUpdatingMatrix, IsUpdatingFilters, IsUpdatingNP, IsUpdatingBypassUI : Boolean = false
@@ -1411,7 +1415,7 @@ Function StartMacroAnimation(macroID : Integer, targetVal : Double, durMS : Doub
    var mIdx : Integer = macroID - 1 
    
    if mIdx >= 0 and mIdx <= 15 then
-       Anim_Start[mIdx] = GetParameter(ExternalArranger, mIdx)
+       Anim_Start[mIdx] = Mem_Fader_Buffer[mIdx]
        Anim_Target[mIdx] = targetVal
        Anim_Duration[mIdx] = durMS
        Anim_StartTime[mIdx] = TimeSinceStartup()
@@ -2576,8 +2580,8 @@ Function TraceHardwarePrediction()
       elsif s == 6 then hwLabel = "Unused"
       else hwLabel = "Slider " + (s-6) end // s=7 -> Slider 1
 
-      // 2. Read current value from the ExternalArranger block
-      faderVal = GetParameter(ExternalArranger, s)
+      // 2. Read current value from the fader buffer
+      faderVal = Mem_Fader_Buffer[s]
       midiVal = Round(faderVal * 127.0)
 
       // 3. Determine what this controller does in the current map
@@ -4013,8 +4017,8 @@ Function CycleEditScope(dir : Integer)
        
        // Send hardware slider position to morph widget (arranger faders 1-16 only)
        if CurrentEditScope > -1 and CurrentEditScope <= 15 then
-           SetWidgetValue(SLD_Morph, GetParameter(ExternalArranger, CurrentEditScope))
-           if DebugMode then Trace("METER: SLD_Morph <- " + GetParameter(ExternalArranger, CurrentEditScope) + " (CycleEditScope, slot=" + CurrentEditScope + ")") end
+           SetWidgetValue(SLD_Morph, Mem_Fader_Buffer[CurrentEditScope])
+           if DebugMode then Trace("METER: SLD_Morph <- " + Mem_Fader_Buffer[CurrentEditScope] + " (CycleEditScope, slot=" + CurrentEditScope + ")") end
        else
            SetWidgetValue(SLD_Morph, 0.0)
            if DebugMode then Trace("METER: SLD_Morph <- 0.0 (CycleEditScope, scope=" + CurrentEditScope + ")") end
@@ -4164,7 +4168,8 @@ Function SyncArrangerToCurrentMap()
            // Send to hardware
            if hwIdx >= 0 and hwIdx <= 15 then
                Mem_Fader_Buffer[hwIdx] = faderVal
-               // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
+               Pending_HAL_FaderSync[hwIdx] = true
+               Pending_HAL_FaderVal[hwIdx] = faderVal
                if DebugMode then Trace("     [HARDWARE] Arranger motorfader " + (hwIdx+1) + " moving to " + faderVal) end
            end
        end
@@ -5975,7 +5980,8 @@ Function UpdatePrompter(moveSlider : Boolean)
        
        if SCRUB_MacroIdx >= 0 and SCRUB_MacroIdx <= 15 then
            Mem_Fader_Buffer[SCRUB_MacroIdx] = sliderPos
-           // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
+           Pending_HAL_FaderSync[SCRUB_MacroIdx] = true
+           Pending_HAL_FaderVal[SCRUB_MacroIdx] = sliderPos
        end
    End
    
@@ -6795,7 +6801,7 @@ Function StartLFO(slot : Integer)
        if lfoIdx < 0 then
            // nothing bound
        else
-           LFO_PreValue[slot] = GetParameter(ExternalArranger, slot)
+           LFO_PreValue[slot] = Mem_Fader_Buffer[slot]
            LFO_StartTime[slot] = TimeSinceStartup()
            LFO_CyclesLeftI[slot] = LFO_Cycles[lfoIdx]
            LFO_Active[slot] = true
@@ -6815,7 +6821,8 @@ Function StopLFO(slot : Integer)
        LFO_Active[slot] = false
        Mem_Fader_Buffer[slot] = LFO_PreValue[slot]
        LFO_LastSample[slot] = LFO_PreValue[slot]
-       // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
+       Pending_HAL_FaderSync[slot] = true
+       Pending_HAL_FaderVal[slot] = LFO_PreValue[slot]
        LFO_Progress[slot] = 0.0
        // Reset meters so they don't freeze on the last-tick value
        SetWidgetValue(METER_LFO_H, 0.0)
@@ -6923,7 +6930,8 @@ Function TickLFOs()
        end
 
        Mem_Fader_Buffer[LFO_Draft_Slot] = sample
-       // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
+       Pending_HAL_FaderSync[LFO_Draft_Slot] = true
+       Pending_HAL_FaderVal[LFO_Draft_Slot] = sample
        SetWidgetValue(METER_LFO_H, sample)
        SetWidgetValue(METER_LFO_V, vMeter)
        if DebugMode then
@@ -6959,7 +6967,8 @@ Function TickLFOs()
                end
 
                Mem_Fader_Buffer[slot] = sample
-               // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
+               Pending_HAL_FaderSync[slot] = true
+               Pending_HAL_FaderVal[slot] = sample
                LFO_LastSample[slot] = sample
                SetWidgetValue(METER_LFO_H, sample)
                SetWidgetValue(METER_LFO_V, LFO_Progress[slot])
@@ -8407,8 +8416,9 @@ Function ParkFadersForVST(vstIdx : Integer)
                 if Mac_Layer_TargetType[fi] == "VST" and Mac_Layer_VSTIdx[fi] == vstIdx then
                     s = macIdx - 1
                     Trace("PARK: Found Match! Macro " + macIdx + " on Fader " + s + ". Current Val: " + Mem_Fader_Buffer[s])
-                    // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
                     Mem_Fader_Buffer[s] = 0.0
+                    Pending_HAL_FaderSync[s] = true
+                    Pending_HAL_FaderVal[s] = 0.0
                     count = count + 1
                 end
             end
@@ -8447,7 +8457,8 @@ Function RestoreFadersForVST(vstIdx : Integer)
 
                     if faderVal < 0.0 then faderVal = 0.0 elsif faderVal > 1.0 then faderVal = 1.0 end
                     Mem_Fader_Buffer[s] = faderVal
-                    // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
+                    Pending_HAL_FaderSync[s] = true
+                    Pending_HAL_FaderVal[s] = faderVal
                     count = count + 1
                 end
             end
@@ -8529,13 +8540,19 @@ Function ApplyEditorTest(val : Double)
         // Global: write all 16 faders
         For s = 0; s < 16; s = s + 1 Do
             Mem_Fader_Buffer[s] = val
+            Pending_HAL_FaderSync[s] = true
+            Pending_HAL_FaderVal[s] = val
+            Pending_HAL_MacroExec[s] = true
+            Pending_HAL_MacroVal[s] = val
         End
-        // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback/ExecuteHardwareMacro not yet callable here (forward decl)
     else
         // Scoped: write single fader
         if CurrentEditScope >= 0 and CurrentEditScope <= 15 then
             Mem_Fader_Buffer[CurrentEditScope] = val
-            // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback/ExecuteHardwareMacro not yet callable here (forward decl)
+            Pending_HAL_FaderSync[CurrentEditScope] = true
+            Pending_HAL_FaderVal[CurrentEditScope] = val
+            Pending_HAL_MacroExec[CurrentEditScope] = true
+            Pending_HAL_MacroVal[CurrentEditScope] = val
         end
     end
 End
@@ -8619,7 +8636,8 @@ Function ResetHardwareFadersForVST(vstIdx : Integer)
 
                    if s >= 0 and s <= 15 then
                        Mem_Fader_Buffer[s] = faderVal
-                       // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
+                       Pending_HAL_FaderSync[s] = true
+                       Pending_HAL_FaderVal[s] = faderVal
                    end
                end
            end
@@ -9372,14 +9390,17 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
     var ovlFuncPlay : String
     var ovlChPlay, ovlStatePlay : Integer
     // Origin flag: marks every macro write in this function as "from
-    // Timeline replay" so On ParameterValueChanged from ExternalArranger
-    // can (a) auto-start a bound LFO and (b) skip Timeline recording.
+    // Timeline replay" so deferred HAL dispatch can (a) auto-start a
+    // bound LFO and (b) skip Timeline recording.
     Timeline_IsReplaying = true
 
     if eventType == "Macro" then
         if eventVal >= 0 and eventVal < MAX_MACROS then
             Mem_Fader_Buffer[eventVal] = 1.0
-            // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback/ExecuteHardwareMacro not yet callable here (forward decl)
+            Pending_HAL_FaderSync[eventVal] = true
+            Pending_HAL_FaderVal[eventVal] = 1.0
+            Pending_HAL_MacroExec[eventVal] = true
+            Pending_HAL_MacroVal[eventVal] = 1.0
         end
     elsif eventType == "Map" then
         if eventVal >= 0 and eventVal < Size(CtrlMapList) then
@@ -9396,7 +9417,10 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
             Trace("TIMELINE: RegMem -> " + eventVal)
             if eventVal < MAX_MACROS then
                 Mem_Fader_Buffer[eventVal] = 1.0
-                // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback/ExecuteHardwareMacro not yet callable here (forward decl)
+                Pending_HAL_FaderSync[eventVal] = true
+                Pending_HAL_FaderVal[eventVal] = 1.0
+                Pending_HAL_MacroExec[eventVal] = true
+                Pending_HAL_MacroVal[eventVal] = 1.0
             end
         end
     elsif eventType == "Marker" then
@@ -11206,8 +11230,8 @@ Function CycleScopeSection(direction : Integer)
     
     // UI Update (fetch hardware controller position)
     if CurrentEditScope > -1 and CurrentEditScope <= 15 then
-        SetWidgetValue(SLD_Morph, GetParameter(ExternalArranger, CurrentEditScope))
-        if DebugMode then Trace("METER: SLD_Morph <- " + GetParameter(ExternalArranger, CurrentEditScope) + " (MacroGroup jump, slot=" + CurrentEditScope + ")") end
+        SetWidgetValue(SLD_Morph, Mem_Fader_Buffer[CurrentEditScope])
+        if DebugMode then Trace("METER: SLD_Morph <- " + Mem_Fader_Buffer[CurrentEditScope] + " (MacroGroup jump, slot=" + CurrentEditScope + ")") end
     else
         SetWidgetValue(SLD_Morph, 0.0)
         if DebugMode then Trace("METER: SLD_Morph <- 0.0 (MacroGroup jump, scope=" + CurrentEditScope + ")") end
@@ -15232,7 +15256,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Run
                // DRAFT state — start the preview LFO
                LFO_Draft_Slot      = scopeSlot
                LFO_Draft_StartTime = TimeSinceStartup()
-               LFO_Draft_PreValue  = GetParameter(ExternalArranger, scopeSlot)
+               LFO_Draft_PreValue  = Mem_Fader_Buffer[scopeSlot]
                LFO_Draft_Running   = true
                if DebugMode then Trace("LFO v2: draft preview started on slot " + (scopeSlot + 1)) end
            else
@@ -15544,190 +15568,18 @@ End
 // HARDWARE FEEDBACK & CONTROLLER ROUTER
 // ----------------------------------------------------
 
-On ParameterValueChanged(paramIdx : Integer, newVal : Double) from ExternalArranger
-   var isEcho : Boolean = false
-
-   // EMERGENCY BRAKE — if the Trace() watchdog tripped the kill switch,
-   // reject all arranger callbacks. Combined with TickLFOs' kill-switch
-   // guard, this cuts the primary flood source (LFO sample writes) and
-   // the secondary flood source (handler side-effects per callback).
-   if EmergencyKillSwitch then
-       // Do nothing. Callback silently consumed.
-   else
-
-   // 1. GHOST-ZERO LOCK (hard guard)
-   // CRITICAL: The echo-dedup block below MUST stay inside this Else
-   // branch. It reads ScriptWrite_Expected[paramIdx], and those arrays
-   // are populated by the Init function LATE in the boot sequence.
-   // GP fires ghost-zero parameter callbacks DURING boot, before Init
-   // has run — reading the arrays then is an out-of-bounds access that
-   // hard-crashes GP. FaderSafetyTimer covers exactly this window.
-   If TimeSinceStartup() < FaderSafetyTimer Then
-       // Completely ignored! Protects against plugin load times
-       // and physical motorfader bounce-back.
-   Else
-
-       // 0. ECHO DEDUP — is this callback our own script write coming back?
-       // Match against BOTH current and previous sentinel (see comment at
-       // ScriptWrite_Expected declaration for why we need two). Tolerance
-       // 0.005 covers float round-trip + MIDI 1/127 quantization.
-       // Defensive Size() check: even inside the safety window, make sure
-       // the arrays are actually populated before indexing into them.
-       if paramIdx >= 0 and paramIdx < MAX_MACROS and Size(ScriptWrite_Expected) > paramIdx and Size(ScriptWrite_ExpectedPrev) > paramIdx then
-           if ScriptWrite_Expected[paramIdx] >= 0.0 and Abs(newVal - ScriptWrite_Expected[paramIdx]) < 0.005 then
-               isEcho = true
-           elsif ScriptWrite_ExpectedPrev[paramIdx] >= 0.0 and Abs(newVal - ScriptWrite_ExpectedPrev[paramIdx]) < 0.005 then
-               isEcho = true
-           end
-       end
-       if paramIdx >= 0 and paramIdx <= 15 then
-
-           // ==========================================================
-           // ---> LOG-EINTRAG & HUD FEEDBACK (Ausnahme: Scrubber)
-           // Echo-dedup guard: when this callback is our own script
-           // write coming back (isEcho), skip trace + HUD entirely.
-           // ==========================================================
-           if paramIdx != SCRUB_MacroIdx and not isEcho then
-               if DebugMode then Trace("MACRO-IN: Arranger Slider/Knob " + (paramIdx + 1) + " -> " + Round(newVal * 127.0)) end
-
-               // Send the value to the HUD (false = Macro, not a direct CC)
-               TriggerMacroFeedback(paramIdx, false, newVal)
-           end
-           // ==========================================================
-           
-           Mem_Fader_Buffer[paramIdx] = newVal
-               
-           // 2. CROSSFADER CHECK
-           if paramIdx == CF_MacroIdx then
-               // Same reasoning as SLD_Morph below: only update the widget
-               // on hardware moves. Script writes must not echo through a
-               // potential widget binding back to the parameter.
-               if not isEcho then
-                   SetWidgetValue(SLD_Crossfader, newVal)
-               end
-
-           // ---> NEU: SCRUBBER CHECK <---
-           elsif paramIdx == SCRUB_MacroIdx then
-               if TimeSinceStartup() > ScrubberTaubTimer then
-                   ExecuteScrub(newVal, false)
-               end
-                 
-           // 3. STANDARD MAPPING
-           else
-                if paramIdx == CurrentEditScope and not isEcho then
-                    // Only reflect HARDWARE moves on SLD_Morph. Script-own
-                    // writes (LFO samples, StopLFO snap-back, ApplyEditorTest,
-                    // etc.) are isEcho=True and MUST NOT touch SLD_Morph here.
-                    // SLD_Morph has a widget-level binding back to an
-                    // ExternalArranger parameter (rackspace-layer, invisible
-                    // to the script). If we SetWidgetValue on an echo, that
-                    // binding writes a fresh SetParameter — without updating
-                    // our sentinels — which re-fires the callback and feeds
-                    // an infinite loop. Observed 2026-04-11 at 19:08:37 where
-                    // the last LFO sample (0.0025244) and the StopLFO snap-
-                    // back (0.5) alternated hundreds of times in one second
-                    // until the emergency kill switch tripped.
-                    IgnoreMorphEcho = true
-                    SetWidgetValue(SLD_Morph, newVal)
-                    IgnoreMorphEcho = false
-                    if DebugMode then Trace("METER: SLD_Morph <- " + newVal + " (hardware write from slot=" + paramIdx + ")") end
-                end
-
-                // Route via Mac_Layer_* (replaces legacy Link_* routing)
-                ExecuteHardwareMacro(paramIdx + 1, newVal)
-           end
-       end 
-       
-       // SYSTEM ACTION DISPATCH (hardware-macro path)
-       // Reverse-lookup is O(1); Isolation Rule guarantees exclusivity.
-       // Skip echoes — our own script writes aren't SysAction triggers.
-       if not isEcho then
-           if newVal > 0.5 and paramIdx >= 0 and paramIdx < MAX_MACROS then
-               if SysAction_ByMacro[paramIdx] > -1 then
-                   FireSystemAction(SysAction_ByMacro[paramIdx])
-               end
-           end
-       end
-
-       // TIMELINE RECORDING FOR MACROS (SWITCHES ONLY)
-       // System-action macros are excluded by design — their behavior should not
-       // be recorded/replayed through the Timeline (see Isolation Rule).
-       // Skip echoes — script writes shouldn't feed back into the recording.
-       // Skip when Timeline is replaying — prevents replay->record feedback loop.
-       if not isEcho and not Timeline_IsReplaying then
-           if (RecordMode > 0 or TimelineRecActive) and IsPerformanceActive then
-               if newVal == 1.0 and not IsSystemActionMacro(paramIdx) then
-                   RecordTimelineEvent("Macro", paramIdx)
-               end
-           end
-       end
-
-       // LFO auto-start: ONLY Timeline replay can start a bound LFO from
-       // the macro-write path. Hardware fader jitter must NOT auto-start
-       // an LFO (physical noise on a bound slot would continuously retrigger
-       // it). BTN_LFO_Run is the other, explicit entry point.
-       //
-       // Echo-check prevents the LFO's own sample writes from re-triggering
-       // StartLFO via the async callback path.
-       if Timeline_IsReplaying and not isEcho then
-           if paramIdx >= 0 and paramIdx < MAX_MACROS and LFO_ByMacro[paramIdx] >= 0 then
-               StartLFO(paramIdx)
-               if DebugMode then Trace("LFO: StartLFO triggered by timeline replay on slot " + paramIdx) end
-           end
-       end
-   end
-   end // end of "if EmergencyKillSwitch then ... else ..."
-End
-
 // ---------------------------------------------------------
-// HARDWARE RECEIVER (from scriptlet)
+// DELETED: On ParameterValueChanged from ExternalArranger
+// Incoming fader/macro moves now flow through DeviceIn_0 CC processing
+// (ProcessHardwareCC -> ExecuteHardwareMacro path).
 // ---------------------------------------------------------
 
-On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerSync
-
-    if CurrentSyncMode == 1 or CurrentSyncMode == 4 or CurrentSyncMode == 5 then
-        // P_STYLE_HW_START = 29 (Hardware Start Flag vom Scriptlet)
-        if paramIdx == 29 and newVal > 0.5 then
-            LastHardwarePulseTime = TimeSinceStartup()
-            if DebugMode then Trace(">>> ARRANGER_STYLE (1&4): Arranger hardware start via scriptlet flag 29 detected! <<<") end
-
-            // ---------------------------------------------------
-            // BUGFIX: GP LEADS - THE GUARD
-            // ---------------------------------------------------
-            // When GP LEADS (2) is active and the GP transport is STOPPED,
-            // but the arranger starts independently, fire an immediate STOP echo!
-            if CurrentSyncMode == 2 and IsPlayheadEnabled() == false then
-                Trace("   [X] ARRANGER_STYLE (2): Arranger started in isolation! Sending abort echo...")
-                TriggerStyleAction(TRIG_START_STOP)
-            end
-        end
-    End
-    
-    if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
-        // Index 44 is our Flag_HW_Start from the Scriptlet
-        if paramIdx == 44 and newVal > 0.5 then
-            Trace(">>> ARRANGER_STYLE (2&3): HARDWARE START/STOP BUTTON ON ARRANGER PRESSED!")
-        
-            // We toggle GP. Since the playhead switches, the SystemEvent (above) fires
-            // and sends a safety echo to the arranger. Since the button
-            // was just pressed anyway, so this is harmless!
-            IsCorrectingPlayhead = false // We want the SystemEvent to trigger!
-            EnablePlayhead(not PendingPlayheadState)
-        end
-    End
-    
-    // TIMELINE RECORDING FOR PART CHANGES (STYLE)
-    // ========================================================
-    // Record when REC is on AND it's a key press (> 0.5)
-    if (RecordMode > 0 or TimelineRecActive) and newVal > 0.5 then
-
-        // Filter out system pings (Start/Stop, HW flags)
-        // P_STYLE_START_STOP = 1, P_STYLE_HW_START = 29, Arranger HW button = 44
-        if paramIdx != 1 and paramIdx != 29 and paramIdx != 44 then
-            RecordTimelineEvent("Style", paramIdx)
-        end
-    end
-End
+// ---------------------------------------------------------
+// DELETED: On ParameterValueChanged from BLK_ArrangerSync
+// Transport sync and style part recording migrated to
+// On NoteEvent from DeviceIn_0 (trigger channel detection)
+// and On ControlChangeEvent from DeviceIn_0 (CC5 detection).
+// ---------------------------------------------------------
 
 
 // ----------------------------------------------------
@@ -15753,6 +15605,20 @@ End
 On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
     var cc : Integer = GetCCNumber(m)
     var val : Integer = GetCCValue(m)
+    var ccChan : Integer = GetChannel(m)
+
+    // --- Style feedback: CC5 on TriggerChannel = hardware start/stop ---
+    // Replaces the BLK_ArrangerSync callback's paramIdx 44 path for CC-based transport.
+    if ccChan == DEV_TriggerChannel and cc == 5 then
+       if TimeSinceStartup() >= StyleEchoBlockTimer then
+          LastHardwarePulseTime = TimeSinceStartup()
+          if DebugMode then Trace(">>> STYLE-IN: Hardware CC5 detected") end
+          if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
+             IsCorrectingPlayhead = false
+             EnablePlayhead(not PendingPlayheadState)
+          end
+       end
+    end
 
     // Device 0 joystick (only active while sustain pedal is held = SystemModeActive):
     //   CC1 (up)   = Y_AXIS +1 (navigate within current SYS-MODE)
@@ -15817,7 +15683,8 @@ End
 // ====================================================
 On NoteEvent(m : NoteMessage) from DeviceIn_0
     var chan : Integer = GetChannel(m)
-    
+    var inTrigIdx : Integer
+
     // 1. Call central HAL logic for macros
     ProcessHardwareNote(m)
     
@@ -15850,12 +15717,43 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0
         end
     end
 
+    // --- Style trigger feedback from arranger ---
+    // Replaces On ParameterValueChanged from BLK_ArrangerSync: incoming notes
+    // on DEV_TriggerChannel are hardware start/stop and style part changes.
+    if chan == DEV_TriggerChannel and IsNoteOn(m) then
+       if TimeSinceStartup() >= StyleEchoBlockTimer then
+          inTrigIdx = FindTriggerIdxByNote(GetNoteNumber(m))
+
+          if inTrigIdx == TRIG_START_STOP then
+             LastHardwarePulseTime = TimeSinceStartup()
+             if DebugMode then Trace(">>> STYLE-IN: Hardware Start/Stop (Note " + IntToString(GetNoteNumber(m)) + ")") end
+
+             // Transport sync logic (was in BLK_ArrangerSync for SyncModes 1,4,5 / paramIdx 29)
+             if CurrentSyncMode == 2 and not IsPlayheadEnabled() then
+                Trace("   [X] STYLE-IN: Arranger started in isolation! Abort echo...")
+                TriggerStyleAction(TRIG_START_STOP)
+             elsif CurrentSyncMode == 2 or CurrentSyncMode == 3 then
+                // Hardware start/stop button (was BLK_ArrangerSync paramIdx 44)
+                IsCorrectingPlayhead = false
+                EnablePlayhead(not PendingPlayheadState)
+             end
+          end
+
+          // Timeline recording for style part changes
+          if inTrigIdx >= 0 and inTrigIdx != TRIG_START_STOP then
+             if RecordMode > 0 or TimelineRecActive then
+                RecordTimelineEvent("Style", inTrigIdx)
+             end
+          end
+       end
+    end
+
     // 3. Keyboard split learning (if active)
     ProcessMidiLearn(m)
 
     // 4. Looper
     FeedLooper_Note(m)
-    
+
     // 5. Pass note to the block
     SendNow(DeviceIn_0, m)
 End
@@ -16629,6 +16527,7 @@ On TimerTick(ms : Double)
      countdownBars : Double = 0.0; nowDb : Double = 0.0
      countdownText : String = ""
      dbIdx : Integer
+     i_hal : Integer
 
    // ========================================================================
    // --- INITIALIZATION FOR THIS TICK ---
@@ -16686,6 +16585,20 @@ On TimerTick(ms : Double)
    if not IsLoadingSnapshot and TimeSinceStartup() > FaderSafetyTimer then
        TickLFOs()
        CheckLatchTimeout()
+
+       // Deferred HAL fader sync — dispatches SendArrangerVolumeFeedback and
+       // ExecuteHardwareMacro for callers that cannot reach them due to
+       // forward declaration order (defined later in the file).
+       For i_hal = 0; i_hal < 16; i_hal = i_hal + 1 Do
+          if Pending_HAL_FaderSync[i_hal] then
+             Pending_HAL_FaderSync[i_hal] = false
+             SendArrangerVolumeFeedback(Pending_HAL_FaderVal[i_hal], i_hal + 1)
+          end
+          if Pending_HAL_MacroExec[i_hal] then
+             Pending_HAL_MacroExec[i_hal] = false
+             ExecuteHardwareMacro(i_hal + 1, Pending_HAL_MacroVal[i_hal])
+          end
+       End
    end
 
    // 0c. LFO flash auto-clear — when the 1.5s flash window expires,
