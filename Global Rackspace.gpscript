@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-13.007"
+   SCRIPT_VERSION : String = "2026-04-13.008"
 
    DebugMode : Boolean = false
 
@@ -11606,10 +11606,12 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
 
    ch = GetChannel(m)
    cc = GetCCNumber(m)
-   
+
    // Standard scaling (0-127) for ALL hardware controllers (pedals, knobs, etc.)
-   val = IntToFloat(GetCCValue(m)) / 127.0 
-   
+   val = IntToFloat(GetCCValue(m)) / 127.0
+
+   if DebugMode then Trace("MACRO-IN: Ch" + IntToString(ch + 1) + ":CC" + IntToString(cc) + " -> " + IntToString(GetCCValue(m))) end
+
    // --- UNIVERSAL FEEDBACK ANFEUERN ---
    TriggerMacroFeedback(cc, true, val)
 
@@ -15527,7 +15529,7 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_A
     var ccChan : Integer = GetChannel(m)
 
     // --- Style feedback: CC5 on TriggerChannel = hardware start/stop ---
-    if ccChan == DEV_TriggerChannel and cc == 5 then
+    if ccChan + 1 == DEV_TriggerChannel and cc == 5 then
        if TimeSinceStartup() >= StyleEchoBlockTimer then
           LastHardwarePulseTime = TimeSinceStartup()
           if DebugMode then Trace(">>> STYLE-IN: Hardware CC5 detected") end
@@ -15701,9 +15703,23 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_B
     var cc : Integer = GetCCNumber(m)
     var val : Integer = GetCCValue(m)
     var ccChan : Integer = GetChannel(m)
+    var scaledVol : Double = 0.0
+
+    // --- CC7 Volume feedback from Genos2 (replaces Genos2_Control scriptlet) ---
+    // The Genos2 sends CC7 on channels 1-16 via DIN MIDI when its internal
+    // volume faders move. We intercept, scale, and store — do NOT pass through.
+    if cc == 7 and ccChan >= 0 and ccChan < 16 then
+       if Arr_AsymmetricMode then
+          if val >= 100 then scaledVol = 1.0 else scaledVol = IntToFloat(val) / 100.0 end
+       else
+          scaledVol = IntToFloat(val) / 127.0
+       end
+       Arr_EchoBlockTimer[ccChan + 1] = TimeSinceStartup() + 200.0
+       Arr_LastSentVol[ccChan + 1] = val
+       if DebugMode then Trace("VOL-IN: Ch" + IntToString(ccChan + 1) + " <- " + IntToString(val) + " (scaled=" + scaledVol + ")") end
 
     // --- Style feedback: CC5 on TriggerChannel = hardware start/stop ---
-    if ccChan == DEV_TriggerChannel and cc == 5 then
+    elsif ccChan + 1 == DEV_TriggerChannel and cc == 5 then
        if TimeSinceStartup() >= StyleEchoBlockTimer then
           LastHardwarePulseTime = TimeSinceStartup()
           if DebugMode then Trace(">>> STYLE-IN: Hardware CC5 detected") end
@@ -15712,10 +15728,9 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_B
              EnablePlayhead(not PendingPlayheadState)
           end
        end
-    end
 
     // Device 0 joystick (only active while sustain pedal is held = SystemModeActive):
-    if SystemModeActive and (cc == 1 or cc == 16) then
+    elsif SystemModeActive and (cc == 1 or cc == 16) then
         if cc == 1 then
             if val > 100 and not Joy_CC1_Fired then
                 Joy_CC1_Fired = true; ProcessSystemNavigation(0, "Y_AXIS", 1)
