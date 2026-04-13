@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-13.005"
+   SCRIPT_VERSION : String = "2026-04-13.006"
 
    DebugMode : Boolean = false
 
@@ -8332,13 +8332,13 @@ Function FireDirectArrangerTransport()
     
     // Note ON
     if arrangerDevIdx >= 0 and IsDeviceConnected(arrangerDevIdx) then
-        SendNowToMidiOutDevice(GetDeviceMidiOut(arrangerDevIdx), MakeMidiMessage3(159, 14, 127))
+        SendNowToMidiOutDevice(GetDeviceRoute(arrangerDevIdx, ROUTE_CONTROL), MakeMidiMessage3(159, 14, 127))
 
         // Wait 50 milliseconds (simulates holding the key)
         Wait(50.0)
 
         // Note OFF
-        SendNowToMidiOutDevice(GetDeviceMidiOut(arrangerDevIdx), MakeMidiMessage3(143, 14, 0))
+        SendNowToMidiOutDevice(GetDeviceRoute(arrangerDevIdx, ROUTE_CONTROL), MakeMidiMessage3(143, 14, 0))
     end
     
     Trace(">>> FireDIRECT-OUT: Start/Stop (Note 14) physically sent to arranger.")
@@ -13760,7 +13760,8 @@ Initialization
    // so this SetWidgetValue does not cascade into StopLFO or array
    // reads on uninitialized LFO_Active[].
    SetWidgetValue(BTN_LFO_Run, 0.0)
-   Trace("BOOT: BTN_LFO_Run reset to 0.0 (stale-state cleanup)")
+   SetWidgetValue(BTN_Loop_Rec, 0.0)
+   Trace("BOOT: BTN_LFO_Run + BTN_Loop_Rec reset to 0.0 (stale-state cleanup)")
 
    RecordMode = 0
    SetWidgetValue(BTN_Record_Overdub, 0.0)
