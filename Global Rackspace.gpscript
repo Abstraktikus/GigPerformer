@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-12.008"
+   SCRIPT_VERSION : String = "2026-04-13.001"
 
    DebugMode : Boolean = false
 
@@ -192,10 +192,19 @@ Var
 
    // --- Device Registry (4 slots) ---
    MAX_DEVICES  : Integer = 4
+   ROUTE_VOLUME     : Integer = 0
+   ROUTE_EXPRESSION : Integer = 1
+   ROUTE_CONTROL    : Integer = 2
+   ROUTE_COUNT      : Integer = 3
    DEV_Active   : Boolean Array = [false, false, false, false]
    DEV_Name     : String Array  = ["", "", "", ""]
    DEV_MidiIn   : String Array  = ["", "", "", ""]
    DEV_MidiOut  : String Array  = ["", "", "", ""]
+   DEV_Route          : String Array
+   DEV_TriggerNote    : Integer Array
+   DEV_TriggerName    : String Array
+   DEV_TriggerCount   : Integer = 0
+   DEV_TriggerChannel : Integer = 16
    DEV_Channel  : Integer Array = [0, 0, 0, 0]
    DEV_Caps     : Integer Array = [0, 0, 0, 0]
    DEV_BlockIdx : Integer Array = [-1, -1, -1, -1]
@@ -466,6 +475,8 @@ Var
    MatrixSafetyTimer, LoopSafetyTimer, DelayedLoadTimer : Double = 0.0
    DelayedSongSwitchTimer, SyncLockTimer, PlayheadEvalTimer : Double = 0.0
    GPTransportEvaluationTimer, StyleTriggerResetTimer, MacroFeedbackTimer : Double = 0.0
+   StyleEchoBlockTimer : Double = 0.0
+   TRIG_START_STOP     : Integer = -1
    SysModeFeedbackTimer, LayerFeedbackTimer : Double = 0.0
    ScrubberTaubTimer, TransportDeafTimer, StopWatchdogTimer : Double = 0.0
    StartWatchdogTimer, LooperButtonSafetyTimer, IgnoreUIFeedbackTimer : Double = 0.0
@@ -1625,6 +1636,9 @@ Function ParseDeviceConfig()
    var lines : String Array
    var i, eqPos, currentDevIdx, currentCtrlIdx, currentSysExIdx : Integer
    var currentSwitchIdx, currentMapIdx, currentPermIdx, currentOvlIdx, stateNum, sw : Integer
+   var d, r : Integer
+   var routeStream, trigName : String
+   var routeIdx : Integer
 
    if not FileExists(DeviceConfigFilePath) then
       Trace("HAL: No DeviceConfig.txt found at " + DeviceConfigFilePath + ". Running in fallback mode.")
@@ -1648,6 +1662,11 @@ Function ParseDeviceConfig()
       CTRL_RangeMin = []; CTRL_RangeMax = []; CTRL_Feedback = []; CTRL_Label = []
       SYSEX_DevIdx = []; SYSEX_Purpose = []; SYSEX_Data = []
       CTRL_Count = 0; SYSEX_Count = 0
+
+      For i = 0; i < MAX_DEVICES * ROUTE_COUNT; i = i + 1 Do
+         DEV_Route <-- ""
+      End
+      DEV_TriggerCount = 0
 
       For i = 0; i < Size(lines); i = i + 1 Do
          line = TrimString(lines[i])
@@ -1719,6 +1738,27 @@ Function ParseDeviceConfig()
                      key == "Caps"     Do DEV_Caps[currentDevIdx] = ParseCapString(val)
                   End
 
+                  // --- Route and Trigger parsing (DEVICE section) ---
+                  if Length(key) > 6 and CopySubstring(key, 0, 6) == "Route:" then
+                     routeStream = CopySubstring(key, 6, Length(key) - 6)
+                     routeIdx = -1
+                     if routeStream == "Volume" then routeIdx = ROUTE_VOLUME
+                     elsif routeStream == "Expression" then routeIdx = ROUTE_EXPRESSION
+                     elsif routeStream == "Control" then routeIdx = ROUTE_CONTROL
+                     end
+                     if routeIdx >= 0 then
+                        DEV_Route[currentDevIdx * ROUTE_COUNT + routeIdx] = val
+                     end
+                  elsif key == "TriggerChannel" then
+                     DEV_TriggerChannel = StringToInt(val)
+                  elsif Length(key) > 8 and CopySubstring(key, 0, 8) == "Trigger:" then
+                     trigName = CopySubstring(key, 8, Length(key) - 8)
+                     DEV_TriggerNote <-- StringToInt(val)
+                     DEV_TriggerName <-- trigName
+                     if trigName == "StartStop" then TRIG_START_STOP = DEV_TriggerCount end
+                     DEV_TriggerCount = DEV_TriggerCount + 1
+                  end
+
                elsif section == "CONTROL" and currentCtrlIdx >= 0 then
                   Select
                      key == "Device"   Do CTRL_DevIdx[currentCtrlIdx] = StringToInt(val)
@@ -1788,6 +1828,15 @@ Function ParseDeviceConfig()
             Trace("  Switch " + IntToString(sw) + ": " + LayerSwitch_Label[sw] + " [" + LayerSwitch_Type[sw] + "]")
          End
       end
+
+      // Fallback: any unset route defaults to the device's MidiOut
+      For d = 0; d < MAX_DEVICES; d = d + 1 Do
+         For r = 0; r < ROUTE_COUNT; r = r + 1 Do
+            if DEV_Route[d * ROUTE_COUNT + r] == "" then
+               DEV_Route[d * ROUTE_COUNT + r] = DEV_MidiOut[d]
+            end
+         End
+      End
    end
 End
 
@@ -1889,6 +1938,24 @@ End
 Function GetDeviceMidiOut(devIdx : Integer) Returns String
    result = ""
    if devIdx >= 0 and devIdx < MAX_DEVICES then result = DEV_MidiOut[devIdx] end
+End
+
+Function GetDeviceRoute(devIdx : Integer, routeType : Integer) Returns String
+   var idx : Integer = devIdx * ROUTE_COUNT + routeType
+   result = ""
+   if devIdx >= 0 and devIdx < MAX_DEVICES and routeType >= 0 and routeType < ROUTE_COUNT then
+      result = DEV_Route[idx]
+   end
+End
+
+Function FindTriggerIdxByNote(note : Integer) Returns Integer
+   var i : Integer
+   result = -1
+   For i = 0; i < DEV_TriggerCount; i = i + 1 Do
+      if DEV_TriggerNote[i] == note then
+         result = i
+      end
+   End
 End
 
 Function IsDeviceConnected(devIdx : Integer) Returns Boolean
@@ -13835,6 +13902,12 @@ Initialization
       end
    End
    Trace("HAL: arrangerDevIdx=" + IntToString(arrangerDevIdx) + " controllerDevIdx=" + IntToString(controllerDevIdx))
+   if arrangerDevIdx >= 0 then
+      Trace("HAL: Route Volume=" + GetDeviceRoute(arrangerDevIdx, ROUTE_VOLUME))
+      Trace("HAL: Route Expression=" + GetDeviceRoute(arrangerDevIdx, ROUTE_EXPRESSION))
+      Trace("HAL: Route Control=" + GetDeviceRoute(arrangerDevIdx, ROUTE_CONTROL))
+      Trace("HAL: " + IntToString(DEV_TriggerCount) + " style triggers loaded, channel=" + IntToString(DEV_TriggerChannel))
+   end
 
    // ====================================================================================
    // PHASE 3: SYSTEM DEFAULTS
