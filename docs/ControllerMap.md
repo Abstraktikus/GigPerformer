@@ -1,6 +1,6 @@
-# Macros, ControllerMap v2, DeviceConfig, and SYS-MODE
+# ControllerMap Reference
 
-This document is the user-facing reference for the unified ControllerMap architecture in the Global Rackspace. It covers macro slots, hardware layer system, overlay triggers, DeviceConfig, SYSACT roles, and SYS-MODE joystick navigation. If you are editing `ControllerMaps.txt` or `DeviceConfig.txt` by hand, this is the authoritative syntax reference.
+This document covers the `ControllerMaps.txt` syntax: macro slots, hardware source bindings, overlay trigger zones (OTZ), SYSACT roles, SYS-MODE joystick navigation, Smart Solo, VST validation, timeline recording, and runtime behavior. For hardware device definitions, controls, layers, output routing, style triggers, and SysEx song sync, see `docs/DeviceConfig.md`.
 
 Quick start: read sections **1**, **2**, and **3**. The rest is reference material for specific questions.
 
@@ -52,7 +52,7 @@ Contains a `[Map:Default]` base section and optional `[Map:<SongName>]` override
 
 ### `DeviceConfig.txt` -- "What hardware exists and how is it wired?"
 
-Defines physical devices, their controls with labels, layer switch triggers, layer-to-bitmask mappings, permanent bindings, and layer-level overlay actions. Parsed once at startup.
+Defines physical devices, their controls with labels, layer switch triggers, layer-to-bitmask mappings, permanent bindings, output routing, style triggers, and SysEx song sync configuration. Parsed once at startup. See `docs/DeviceConfig.md` for full syntax reference.
 
 ### How they interact
 
@@ -89,7 +89,7 @@ If no `DEV...;` prefix is present in a song map line, the source is inherited fr
 
 ### Binding kinds
 
-| Kind | Syntax | Multi-`\|` | Purpose |
+| Kind | Syntax | Multi-`|` | Purpose |
 |---|---|---|---|
 | **VST parameter** | `VST<k>_GRS:<paramIdx>[:<label>] [{min,max}]` | yes | Route macro to a parameter on the k-th VST slot |
 | **Direct CC** | `Ch<c>:CC<n>[:<label>] [{min,max}]` | yes | Emit a CC message on channel c, number n |
@@ -146,70 +146,7 @@ Song maps override per-macro. Unspecified macros and layers remain as defined in
 
 ---
 
-## 4. Layer System
-
-### Layer switches
-
-Layer switches are defined in DeviceConfig via `[LAYERSWITCH:<n>]` sections. Each switch is a binary toggle triggered by incoming SysEx, Note, or CC messages.
-
-```ini
-[LAYERSWITCH:0]
-Device=0
-Label=Harmony
-Type=SYSEX
-OnData=F0 43 10 4C 04 00 0C 40 F7
-OffData=F0 43 10 4C 04 00 0C 7F F7
-
-[LAYERSWITCH:1]
-Device=0
-Label=Talk
-Type=SYSEX
-OnData=F0 43 10 4C 04 00 16 7F F7
-OffData=F0 43 10 4C 04 00 16 00 F7
-```
-
-Supported trigger types:
-
-| Type | ON condition | OFF condition |
-|---|---|---|
-| `SYSEX` | Incoming matches `OnData` | Incoming matches `OffData` |
-| `NOTE` | Velocity > 0 | Velocity = 0 |
-| `CC` | Value > 63 | Value <= 63 |
-
-### Bitmask to layer number
-
-Switch states form a bitmask (Switch 0 = bit 0, Switch 1 = bit 1). The `[LAYERMAP:<n>]` section maps each bitmask state to a layer number:
-
-```ini
-[LAYERMAP:0]
-Device=0
-State_0=LAY0
-State_1=LAY1
-State_2=LAY2
-State_3=LAY3
-```
-
-Two switches yield 4 layers (2^2). Extensible to N switches.
-
-### Per-layer reverse lookup
-
-Each macro declares exactly one layer in its source: `DEV0:LAY1:Enc1`. The same physical control on different layers maps to different macros. At runtime, per-layer reverse lookup arrays (`Mac_ReverseLookup_L0` through `Mac_ReverseLookup_L3`) resolve the active layer's physical CC to the correct macro index.
-
-```
-ProcessHardwareCC:
-  cc = GetCCNumber(m)
-  Select ActiveLayer:
-    0: macroIdx = Mac_ReverseLookup_L0[cc]
-    1: macroIdx = Mac_ReverseLookup_L1[cc]
-    ...
-  if macroIdx > 0: ExecuteHardwareMacro(macroIdx, val)
-```
-
-No layer check is needed inside `ExecuteHardwareMacro` -- the macro was already layer-correctly selected. All bindings on that macro fire unconditionally.
-
----
-
-## 5. Overlay Trigger Zones (OTZ)
+## 4. Overlay Trigger Zones (OTZ)
 
 ### The OTZ marker
 
@@ -259,71 +196,7 @@ On LAY1, moving Fader1 both adjusts the VST parameter (normal target) and can to
 
 ---
 
-## 6. DeviceConfig -- Controls and Labels
-
-### Control definitions
-
-Each physical control is defined in a `[CONTROL:<n>]` section in `DeviceConfig.txt`:
-
-```ini
-[CONTROL:4]
-Device=0
-Label=Enc1
-Type=ENCODER
-CC=17
-Channel=13
-```
-
-Controls have **labels** -- free-form strings, unique per device. The ControllerMap references controls by label, not by type or CC number. This decouples the map from physical wiring.
-
-### Control types
-
-| Type | Physical form | Value range |
-|---|---|---|
-| `FADER` | Slider / linear pot | 0--127 |
-| `ENCODER` | Rotary knob (endless) | Relative |
-| `BUTTON` | Press / release | 0 / 127 |
-| `JOYSTICK` | Directional axis | Range-dependent |
-| `PAD` | Velocity-sensitive surface | 0--127 |
-
-### Genos2 layout (19 controls)
-
-- 4 joystick axes: `JoyUp`, `JoyDown`, `JoyLeft`, `JoyRight`
-- 6 encoders: `Enc1` through `Enc6`
-- 9 faders: `Fader1` through `Fader9`
-
-### Parser resolution
-
-When the ControllerMap parser encounters `DEV0:LAY0:Enc1`:
-
-1. Extract device index (0), layer index (0), label string (`Enc1`).
-2. Search DeviceConfig's `CTRL_Label[]` where `CTRL_DevIdx == 0` and `CTRL_Label == "Enc1"`.
-3. Resolve to the physical CC number from `CTRL_CC[match]`.
-4. Register in the appropriate per-layer reverse lookup array.
-
----
-
-## 7. Permanent Bindings
-
-`[PERMANENT]` sections in DeviceConfig define hardware functions that are always active, independent of the loaded ControllerMap. They do not consume user macro slots.
-
-```ini
-[PERMANENT:0]
-Device=0
-Source=CC64
-Function=SYSTEM_TOGGLE
-
-[PERMANENT:1]
-Device=0
-Source=CC11
-Function=CROSSFADER
-```
-
-These bindings are checked before the ControllerMap reverse lookup in `ProcessHardwareCC`. CC64 always triggers SYSTEM_TOGGLE and CC11 always drives CROSSFADER, regardless of which song map is active.
-
----
-
-## 8. SYSACT Roles (the System Action Framework)
+## 5. SYSACT Roles (the System Action Framework)
 
 SYSACT roles are virtual actions that can be bound to any user-zone macro slot. There are **20 virtual actions** covering VST navigation, looper control, controller map browsing, strip control, and timeline operations.
 
@@ -384,7 +257,7 @@ If a slot is in `SysAction_ByMacro[]`, `IsSystemActionMacro(paramIdx)` returns t
 
 ---
 
-## 9. SYS-MODE -- The Joystick Navigation Layer
+## 6. SYS-MODE -- The Joystick Navigation Layer
 
 SYS-MODE is a modal state machine. When `SYSTEM_TOGGLE` is active (held, or forced via LAY3 overlay), the hardware joystick axes are hijacked from musical use and become a navigation controller. There are **5 modes**, cycled in order:
 
@@ -427,7 +300,7 @@ Joystick events land in `On PitchBendEvent` / `On ControllerEvent`, which calls 
 
 ---
 
-## 10. Smart Solo Enhanced
+## 7. Smart Solo Enhanced
 
 Smart Solo now considers both the **RECH routing input** and the **Manual zone** (Upper / Lower / None) when deciding which channels to mute.
 
@@ -458,7 +331,7 @@ Soloing an Upper channel mutes other Upper channels sharing the same input, but 
 
 ---
 
-## 11. VST Validation
+## 8. VST Validation
 
 ### Map-level VST declarations
 
@@ -495,7 +368,7 @@ SmartAdapt reads the plugin name from the current VST scope (`GetPluginName(BLK_
 
 ---
 
-## 12. Timeline Recording
+## 9. Timeline Recording
 
 All overlay toggles are recorded into the Timeline -- no exceptions, no per-function filter. Every `ActivateOverlay()` / `DeactivateOverlay()` call triggers `RecordTimelineEvent()`.
 
@@ -507,7 +380,7 @@ SYSACT-exclusive macros are **not** recorded (filtered by `IsSystemActionMacro()
 
 ---
 
-## 13. Troubleshooting
+## 10. Troubleshooting
 
 ### "My SYSACT binding doesn't fire."
 
@@ -521,13 +394,6 @@ SYSACT-exclusive macros are **not** recorded (filtered by `IsSystemActionMacro()
 2. Verify the function name is one of the 9 registered names (SMART_SOLO, STRICT_SOLO, ROOT, OCTAVER, USER_MUTE, HUMANIZE, SCALE, RANGE, AUTO_SUSTAIN). Unknown names with OTZ are silently ignored.
 3. Check that the macro's source layer matches the currently active layer.
 4. For Full Range (`{OTZ,0.0,1.0}`): the 10-second debounce may be active. Wait and try again.
-
-### "Layer switch doesn't work."
-
-1. Check `DeviceConfig.txt` for the `[LAYERSWITCH:<n>]` section -- verify the `OnData` and `OffData` SysEx signatures match what your hardware actually sends.
-2. For NOTE/CC type switches: confirm the correct channel and number.
-3. Verify the `[LAYERMAP:<n>]` section maps all bitmask states to layer numbers.
-4. Enable `DebugMode` -- layer changes produce Trace output on every switch event.
 
 ### "Song loads the wrong map."
 
@@ -564,3 +430,7 @@ Last-wins semantics. If both `Macro5` and `Macro8` are bound to `CROSSFADER` in 
 - **Control label reference:** `docs/superpowers/specs/2026-04-12-control-label-reference-design.md`
 - **Layer-aware reverse lookup:** `docs/superpowers/specs/2026-04-12-layer-aware-reverse-lookup-design.md`
 - **Macro renumbering, SYSACT framework:** `docs/superpowers/specs/2026-04-10-vel-tamper-macro-refactor-sysact-design.md`
+
+## Reference -- Related Documents
+
+- **DeviceConfig Reference:** `docs/DeviceConfig.md` -- hardware devices, controls, layers, output routing, style triggers, SysEx song sync

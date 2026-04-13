@@ -129,7 +129,6 @@ Planned features, roughly in order of implementation:
 ├── Global Rackspace.gpscript   # Main script (current version)
 ├── Local Rackspace.gpscript    # Per-rackspace local script
 ├── Note Prozessor.gpscript     # Per-rackspace note processing
-├── Genos2_Control V2.gpscript      # Genos2 integration script
 ├── examples/                       # Ready-to-use test data
 │   ├── DeviceConfig.txt            # Hardware + layer switches (INI format)
 │   ├── VstDatabase.txt             # VST plugin database
@@ -140,20 +139,24 @@ Planned features, roughly in order of implementation:
 │   ├── VSTPlayMode.ini/.gpchord       # Example song
 │   └── Test.gig                    # Gig Performer test file
 ├── images/                         # Screenshots of the rackspace UI
-└── docs/                           # Design specs and migration notes
+└── docs/                           # Reference documentation
+    ├── ControllerMap.md            # ControllerMap syntax, OTZ, SYSACT, SYS-MODE
+    └── DeviceConfig.md             # Devices, controls, layers, routing, SysEx sync
 ```
 
 ## Configuration
 
 ### DeviceConfig.txt
 
-Define your MIDI devices in INI format with capabilities, controls, and layer switches:
+Define your MIDI devices in INI format with capabilities, controls, layer switches, output routing, style triggers, and SysEx song sync. Full reference: `docs/DeviceConfig.md`.
 
 ```ini
 [DEVICE:0]
 Name=Genos2
 MidiIn=Digital Keyboard-1
+MidiIn:Aux=Genos2 USB MIDI
 MidiOut=Digital Keyboard-1
+Caps=TRANSPORT_SYNC,SYSEX_TRIGGER,JOYSTICK,MIDI_OUT,SYSEX_COMMANDS
 
 [CONTROL:4]
 Device=0
@@ -169,6 +172,8 @@ OnData=F0 43 10 4C 04 00 0C 40 F7
 OffData=F0 43 10 4C 04 00 0C 7F F7
 ```
 
+DeviceConfig also supports **output routing** (separate MIDI ports for volume, expression, and control streams), **style triggers** (note pulses for arranger section changes, fills, and transport), and **SysEx song sync** (bidirectional song switching between GP and the arranger with auto-learning `GenosMapping.txt` cache).
+
 ### Song Files (.ini)
 
 Each song is a snapshot file with per-channel settings:
@@ -183,7 +188,7 @@ ControllerMap=SlowHip80erDream
 
 ### ControllerMaps.txt
 
-Maps use a `[Map:Default]` base; song-specific maps inherit from it and only override what changes:
+Maps use a `[Map:Default]` base; song-specific maps inherit from it and only override what changes. Full reference: `docs/ControllerMap.md`.
 
 ```ini
 [Map:Default]
