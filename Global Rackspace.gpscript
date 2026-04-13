@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-13.001"
+   SCRIPT_VERSION : String = "2026-04-13.002"
 
    DebugMode : Boolean = false
 
@@ -5839,21 +5839,24 @@ Function CalculateEffectiveTranspose()
 End
 
 Function TriggerStyleAction(styleId : Integer)
-   // Safety: Max index for send triggers is 28 (Trig_Fade).
-   // Anything above is out of bounds or our HW input (index 29).
-   if styleId >= 0 and styleId <= 28 then
-       if DebugMode then Trace("STYLE: Triggering ID " + styleId) end
-       
-       // Electronic key press (Note On)
-       SetParameter(BLK_ArrangerSync, styleId, 1.0)
-       
-       // Wait 50ms for the scriptlet to respond
-       Wait(50.0) 
-       
-       // Release the button (Note Off)
-       SetParameter(BLK_ArrangerSync, styleId, 0.0)
+   var route : String = ""
+   var note, ch : Integer
+
+   if styleId < 0 or styleId >= DEV_TriggerCount then
+      if DebugMode then Trace("STYLE ERROR: Invalid trigger ID (" + IntToString(styleId) + ") ignored! Max is " + IntToString(DEV_TriggerCount - 1)) end
    else
-       if DebugMode then Trace("STYLE ERROR: Invalid ID (" + styleId + ") ignored! Max is 28.") end
+      if arrangerDevIdx < 0 or not IsDeviceConnected(arrangerDevIdx) then
+         if DebugMode then Trace("STYLE: No arranger connected, trigger ignored") end
+      else
+         route = GetDeviceRoute(arrangerDevIdx, ROUTE_CONTROL)
+         note = DEV_TriggerNote[styleId]
+         ch = DEV_TriggerChannel
+         if DebugMode then Trace("STYLE: Triggering " + DEV_TriggerName[styleId] + " (Note " + IntToString(note) + " Ch" + IntToString(ch) + ")") end
+         SendNowToMidiOutDevice(route, MakeNoteMessageEx(note, 127, ch))
+         Wait(50.0)
+         SendNowToMidiOutDevice(route, MakeNoteMessageEx(note, 0, ch))
+         StyleEchoBlockTimer = TimeSinceStartup() + 500.0
+      end
    end
 End
 
@@ -10219,6 +10222,65 @@ Function GetSysexString(m : SysexMessage) Returns String
    result = s_sx
 End
 
+// ----------------------------------------------------------------------
+// --- ARRANGER VOLUME FEEDBACK (absorbed from arranger control scriptlet)
+// ----------------------------------------------------------------------
+
+// Sends a volume CC7 value to the arranger device on the given channel.
+// Respects asymmetric scaling mode (Yamaha 0-100) and echo blocking.
+Function SendArrangerVolumeFeedback(val : Double, ch : Integer)
+   var midiValToSend : Integer
+   var outDev : String
+
+   if arrangerDevIdx < 0 or not IsDeviceConnected(arrangerDevIdx) then
+      // No arranger connected
+   else
+      if TimeSinceStartup() < Arr_EchoBlockTimer[ch] then
+         // Echo blocked
+      else
+         outDev = GetDeviceRoute(arrangerDevIdx, ROUTE_VOLUME)
+         if Arr_AsymmetricMode then
+            midiValToSend = Round(val * 100.0)
+            if midiValToSend > 100 then midiValToSend = 100 end
+         else
+            midiValToSend = Round(val * 127.0)
+            if midiValToSend > 127 then midiValToSend = 127 end
+         end
+         if ch >= 1 and ch <= 16 then
+            if Arr_LastSentVol[ch] != midiValToSend then
+               SendNowToMidiOutDevice(outDev, MakeControlChangeMessageEx(7, midiValToSend, ch))
+               Arr_LastSentVol[ch] = midiValToSend
+            end
+         end
+      end
+   end
+End
+
+// Sends crossfader expression CC11 to arranger channels that have crossfader enabled.
+Function SendArrangerCrossfaderExpression(cfVal : Double)
+   var i, expVal : Integer
+   var outDev : String
+
+   if arrangerDevIdx < 0 or not DeviceHasCap(arrangerDevIdx, CAP_CROSSFADER_TARGETS) then
+      // No arranger or no crossfader capability
+   else
+      if not IsDeviceConnected(arrangerDevIdx) then
+         // Not connected
+      else
+         outDev = GetDeviceRoute(arrangerDevIdx, ROUTE_EXPRESSION)
+         expVal = Round((cfVal * cfVal) * 127.0)
+         For i = 0; i < 16; i = i + 1 Do
+            if GetWidgetValue(W_CF_Arranger[i]) > 0.5 then
+               if Arr_LastSentExp[i + 1] != expVal then
+                  SendNowToMidiOutDevice(outDev, MakeControlChangeMessageEx(11, expVal, i + 1))
+                  Arr_LastSentExp[i + 1] = expVal
+               end
+            end
+         End
+      end
+   end
+End
+
 // ---------------------------------------------------------
 // CROSSFADER FUNKTIONEN
 // ---------------------------------------------------------
@@ -10256,9 +10318,7 @@ Function ApplyCrossfade(x_val : Double)
       end
    End
    
-   ScriptWrite_ExpectedPrev[P_ARRANGER_CROSSFADER] = ScriptWrite_Expected[P_ARRANGER_CROSSFADER]
-   ScriptWrite_Expected[P_ARRANGER_CROSSFADER] = x_val
-   SetParameter(ExternalArranger, P_ARRANGER_CROSSFADER, x_val)
+   SendArrangerCrossfaderExpression(x_val)
 End
 
 // ---------------------------------------------------------
@@ -11277,65 +11337,6 @@ Function DeactivateChannel(chIdx : Integer)
    ChannelUsage[chIdx] = "Free"
    
    if DebugMode then Trace("DeactivateChannel: Ch" + (chIdx+1) + " deep sleep (CPU Saved).") end
-End
-
-// ----------------------------------------------------------------------
-// --- ARRANGER VOLUME FEEDBACK (absorbed from arranger control scriptlet)
-// ----------------------------------------------------------------------
-
-// Sends a volume CC7 value to the arranger device on the given channel.
-// Respects asymmetric scaling mode (Yamaha 0-100) and echo blocking.
-Function SendArrangerVolumeFeedback(val : Double, ch : Integer)
-   var midiValToSend : Integer
-   var outDev : String
-
-   if arrangerDevIdx < 0 or not IsDeviceConnected(arrangerDevIdx) then
-      // No arranger connected
-   else
-      if TimeSinceStartup() < Arr_EchoBlockTimer[ch] then
-         // Echo blocked
-      else
-         outDev = GetDeviceMidiOut(arrangerDevIdx)
-         if Arr_AsymmetricMode then
-            midiValToSend = Round(val * 100.0)
-            if midiValToSend > 100 then midiValToSend = 100 end
-         else
-            midiValToSend = Round(val * 127.0)
-            if midiValToSend > 127 then midiValToSend = 127 end
-         end
-         if ch >= 1 and ch <= 16 then
-            if Arr_LastSentVol[ch] != midiValToSend then
-               SendNowToMidiOutDevice(outDev, MakeControlChangeMessageEx(7, midiValToSend, ch))
-               Arr_LastSentVol[ch] = midiValToSend
-            end
-         end
-      end
-   end
-End
-
-// Sends crossfader expression CC11 to arranger channels that have crossfader enabled.
-Function SendArrangerCrossfaderExpression(cfVal : Double)
-   var i, expVal : Integer
-   var outDev : String
-
-   if arrangerDevIdx < 0 or not DeviceHasCap(arrangerDevIdx, CAP_CROSSFADER_TARGETS) then
-      // No arranger or no crossfader capability
-   else
-      if not IsDeviceConnected(arrangerDevIdx) then
-         // Not connected
-      else
-         outDev = GetDeviceMidiOut(arrangerDevIdx)
-         expVal = Round((cfVal * cfVal) * 127.0)
-         For i = 0; i < 16; i = i + 1 Do
-            if GetWidgetValue(W_CF_Arranger[i]) > 0.5 then
-               if Arr_LastSentExp[i + 1] != expVal then
-                  SendNowToMidiOutDevice(outDev, MakeControlChangeMessageEx(11, expVal, i + 1))
-                  Arr_LastSentExp[i + 1] = expVal
-               end
-            end
-         End
-      end
-   end
 End
 
 
