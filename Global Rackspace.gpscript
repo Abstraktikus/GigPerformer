@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-13.006"
+   SCRIPT_VERSION : String = "2026-04-13.007"
 
    DebugMode : Boolean = false
 
@@ -199,6 +199,7 @@ Var
    DEV_Active   : Boolean Array = [false, false, false, false]
    DEV_Name     : String Array  = ["", "", "", ""]
    DEV_MidiIn   : String Array  = ["", "", "", ""]
+   DEV_MidiInAux : String Array = ["", "", "", ""]
    DEV_MidiOut  : String Array  = ["", "", "", ""]
    DEV_Route          : String Array
    DEV_TriggerNote    : Integer Array
@@ -274,9 +275,10 @@ Var
 
    SystemActions       : PluginBlock
 
-   DeviceIn_0          : MidiInBlock
-   DeviceIn_1          : MidiInBlock
-   DeviceIn_2, DeviceIn_3 : MidiInBlock
+   DeviceIn_0_A        : MidiInBlock  // Genos2 USB Port A (Digital Keyboard-1)
+   DeviceIn_0_B        : MidiInBlock  // Genos2 DIN via Babyface (Babyface Midi Port 1)
+   DeviceIn_1_A        : MidiInBlock  // MiniLab3 (Minilab3 MIDI)
+   DeviceIn_2_A, DeviceIn_3_A : MidiInBlock  // AG03 + future expansion
    BLK_VSTControl      : MidiInBlock
    
    // --- VST Instruments ---
@@ -1685,6 +1687,7 @@ Function ParseDeviceConfig()
                   Select
                      key == "Name"     Do DEV_Name[currentDevIdx] = val
                      key == "MidiIn"   Do DEV_MidiIn[currentDevIdx] = val
+                     key == "MidiIn:Aux" Do DEV_MidiInAux[currentDevIdx] = val
                      key == "MidiOut"  Do DEV_MidiOut[currentDevIdx] = val
                      key == "Channel"  Do DEV_Channel[currentDevIdx] = StringToInt(val)
                      key == "Caps"     Do DEV_Caps[currentDevIdx] = ParseCapString(val)
@@ -5209,7 +5212,7 @@ Function InjectLooperEvent(ch : Integer, msg : MidiMessage)
     end
 
     if Mem_Loop_OutMode[ch] == 1 and not forceLocal then
-        SendNow(DeviceIn_0, msg) // GLOBAL MODE (fires into the RECH matrix)
+        SendNow(DeviceIn_0_A, msg) // GLOBAL MODE (fires into the RECH matrix)
     else
         SendNow(BLK_MidiIn[ch], msg) // CHANNEL MODE (fires directly into VST)
     end
@@ -15495,14 +15498,14 @@ End
 // ----------------------------------------------------
 
 // Scriptlet callbacks (ExternalArranger, BLK_ArrangerSync) eliminated.
-// All inbound processing now uses DeviceIn_0 MIDI callbacks.
+// All inbound processing now uses DeviceIn_0_A MIDI callbacks.
 
 
 // ----------------------------------------------------
 // MIDI EVENTS
 // ----------------------------------------------------
 
-On PitchBendEvent(m : PitchBendMessage) from DeviceIn_0
+On PitchBendEvent(m : PitchBendMessage) from DeviceIn_0_A
     var pbVal : Integer = GetPitchBendValue(m)
     if SystemModeActive then
         // TODO: Read joystick thresholds from control registry
@@ -15514,11 +15517,11 @@ On PitchBendEvent(m : PitchBendMessage) from DeviceIn_0
             Joy_PB_Fired = 0
         end
     else
-        SendNow(DeviceIn_0, m)
+        SendNow(DeviceIn_0_A, m)
     end
 End
 
-On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
+On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_A
     var cc : Integer = GetCCNumber(m)
     var val : Integer = GetCCValue(m)
     var ccChan : Integer = GetChannel(m)
@@ -15554,11 +15557,11 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0
             end
         end
     else
-        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_0, m)
+        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_0_A, m)
     end
 End
 
-On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1
+On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1_A
     var cc : Integer = GetCCNumber(m)
     var val : Integer = GetCCValue(m)
     var ch : Integer = GetChannel(m)
@@ -15589,14 +15592,14 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1
     
     // 3. NORMALE VERARBEITUNG (Pads, Fader, etc.)
     else
-        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_1, m) 
+        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_1_A, m) 
     end
 End
 
 // ====================================================
 // DEVICE 0 CALLBACKS
 // ====================================================
-On NoteEvent(m : NoteMessage) from DeviceIn_0
+On NoteEvent(m : NoteMessage) from DeviceIn_0_A
     var chan : Integer = GetChannel(m)
     var inTrigIdx : Integer
 
@@ -15669,13 +15672,145 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0
     FeedLooper_Note(m)
 
     // 5. Pass note to the block
-    SendNow(DeviceIn_0, m)
+    SendNow(DeviceIn_0_A, m)
+End
+
+// ====================================================
+// DEVICE 0 PORT B CALLBACKS (Genos2 DIN via Babyface)
+// ====================================================
+// Routes into the same HAL pipeline as Port A.
+// The Genos2 sends assignable controller CCs, volume
+// feedback, and possibly notes on this port.
+
+On PitchBendEvent(m : PitchBendMessage) from DeviceIn_0_B
+    var pbVal : Integer = GetPitchBendValue(m)
+    if SystemModeActive then
+        if pbVal > 12000 and Joy_PB_Fired != 1 then
+            Joy_PB_Fired = 1; ProcessSystemNavigation(0, "X_AXIS", 1)
+        elsif pbVal < 4000 and Joy_PB_Fired != -1 then
+            Joy_PB_Fired = -1; ProcessSystemNavigation(0, "X_AXIS", -1)
+        elsif pbVal >= 4000 and pbVal <= 12000 then
+            Joy_PB_Fired = 0
+        end
+    else
+        SendNow(DeviceIn_0_B, m)
+    end
+End
+
+On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_B
+    var cc : Integer = GetCCNumber(m)
+    var val : Integer = GetCCValue(m)
+    var ccChan : Integer = GetChannel(m)
+
+    // --- Style feedback: CC5 on TriggerChannel = hardware start/stop ---
+    if ccChan == DEV_TriggerChannel and cc == 5 then
+       if TimeSinceStartup() >= StyleEchoBlockTimer then
+          LastHardwarePulseTime = TimeSinceStartup()
+          if DebugMode then Trace(">>> STYLE-IN: Hardware CC5 detected") end
+          if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
+             IsCorrectingPlayhead = false
+             EnablePlayhead(not PendingPlayheadState)
+          end
+       end
+    end
+
+    // Device 0 joystick (only active while sustain pedal is held = SystemModeActive):
+    if SystemModeActive and (cc == 1 or cc == 16) then
+        if cc == 1 then
+            if val > 100 and not Joy_CC1_Fired then
+                Joy_CC1_Fired = true; ProcessSystemNavigation(0, "Y_AXIS", 1)
+            elsif val < 20 then Joy_CC1_Fired = false end
+        end
+        if cc == 16 then
+            if val > 100 and Joy_CC16_ArmTime == 0.0 then
+                Joy_CC16_ArmTime = TimeSinceStartup()
+            end
+            if val < 20 then
+                Joy_CC16_ArmTime = 0.0
+                Joy_CC16_Fired = false
+            end
+        end
+    else
+        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_0_B, m)
+    end
+End
+
+On NoteEvent(m : NoteMessage) from DeviceIn_0_B
+    var chan : Integer = GetChannel(m)
+    var inTrigIdx : Integer
+
+    // 1. Call central HAL logic for macros
+    ProcessHardwareNote(m)
+
+    // Transport sync: only if this device has the capability
+    if DeviceHasCap(0, CAP_TRANSPORT_SYNC) and IsNoteOn(m) and chan >= 9 and chan <= 16 then
+        if CurrentSyncMode == 0 and IsPlayheadEnabled() then
+             Trace(">>> ON NOTE: [ISOLATED] ArrangerStyle started (Ch " + chan + ") Stoppe GP")
+             EnablePlayhead(false)
+        elsif CurrentSyncMode == 1 or CurrentSyncMode == 2 or CurrentSyncMode == 3 then
+             if StartWatchdogTimer > 0.0 then
+                 Trace(">>> ON NOTE: Arranger already running (Ch " + chan + "). Aborting command.")
+                 StartWatchdogTimer = 0.0
+             end
+             if StopWatchdogTimer > 0.0 and not IsPlayheadEnabled() then
+                 Trace(">>> ON NOTE: Arranger still playing (Ch " + chan + ")! Sending stop.")
+                 FireDirectArrangerTransport()
+                 StopWatchdogTimer = 0.0
+             else
+                 LastHardwarePulseTime = TimeSinceStartup()
+             end
+        end
+    end
+
+    // Timeline NoteOn-detection playback start
+    if IsNoteOn(m) then
+        if not TimelinePlaybackActive and not TimelineRecActive and Size(Snap_TL_TimeMS) > 0 then
+            if GetWidgetValue(BTN_TL_HostSync) > 0.5 and not IsPlayheadEnabled() then
+                StartTimelinePlayback()
+            end
+        end
+    end
+
+    // --- Style trigger feedback from arranger ---
+    if chan == DEV_TriggerChannel and IsNoteOn(m) then
+       if TimeSinceStartup() >= StyleEchoBlockTimer then
+          inTrigIdx = FindTriggerIdxByNote(GetNoteNumber(m))
+
+          if inTrigIdx == TRIG_START_STOP then
+             LastHardwarePulseTime = TimeSinceStartup()
+             if DebugMode then Trace(">>> STYLE-IN: Hardware Start/Stop (Note " + IntToString(GetNoteNumber(m)) + ")") end
+
+             if CurrentSyncMode == 2 and not IsPlayheadEnabled() then
+                Trace("   [X] STYLE-IN: Arranger started in isolation! Abort echo...")
+                TriggerStyleAction(TRIG_START_STOP)
+             elsif CurrentSyncMode == 2 or CurrentSyncMode == 3 then
+                IsCorrectingPlayhead = false
+                EnablePlayhead(not PendingPlayheadState)
+             end
+          end
+
+          if inTrigIdx >= 0 and inTrigIdx != TRIG_START_STOP then
+             if RecordMode > 0 or TimelineRecActive then
+                RecordTimelineEvent("Style", inTrigIdx)
+             end
+          end
+       end
+    end
+
+    // 3. Keyboard split learning (if active)
+    ProcessMidiLearn(m)
+
+    // 4. Looper
+    FeedLooper_Note(m)
+
+    // 5. Pass note to the block
+    SendNow(DeviceIn_0_B, m)
 End
 
 // ====================================================
 // DEVICE 1 CALLBACKS
 // ====================================================
-On NoteEvent(m : NoteMessage) from DeviceIn_1
+On NoteEvent(m : NoteMessage) from DeviceIn_1_A
     // 1. Call central HAL logic for macros
     ProcessHardwareNote(m)
     
@@ -15686,29 +15821,29 @@ On NoteEvent(m : NoteMessage) from DeviceIn_1
     FeedLooper_Note(m)
     
     // 4. Pass note to the block
-    SendNow(DeviceIn_1, m)
+    SendNow(DeviceIn_1_A, m)
 End
 
 // ====================================================
 // DEVICE 2 CALLBACKS (future expansion)
 // ====================================================
-On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_2
-    ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_2, m)
+On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_2_A
+    ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_2_A, m)
 End
 
-On NoteEvent(m : NoteMessage) from DeviceIn_2
-    ProcessHardwareNote(m); ProcessMidiLearn(m); FeedLooper_Note(m); SendNow(DeviceIn_2, m)
+On NoteEvent(m : NoteMessage) from DeviceIn_2_A
+    ProcessHardwareNote(m); ProcessMidiLearn(m); FeedLooper_Note(m); SendNow(DeviceIn_2_A, m)
 End
 
 // ====================================================
 // DEVICE 3 CALLBACKS (future expansion)
 // ====================================================
-On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_3
-    ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_3, m)
+On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_3_A
+    ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_3_A, m)
 End
 
-On NoteEvent(m : NoteMessage) from DeviceIn_3
-    ProcessHardwareNote(m); ProcessMidiLearn(m); FeedLooper_Note(m); SendNow(DeviceIn_3, m)
+On NoteEvent(m : NoteMessage) from DeviceIn_3_A
+    ProcessHardwareNote(m); ProcessMidiLearn(m); FeedLooper_Note(m); SendNow(DeviceIn_3_A, m)
 End
 
 // ----------------------------------------------------
@@ -16117,7 +16252,7 @@ On BeatChanged(bar : Integer, beat : Integer, subbeat : Integer)
    end
 End
 
-On SysexEvent(m : SysexMessage) From DeviceIn_0
+On SysexEvent(m : SysexMessage) From DeviceIn_0_A
    var byte1, byte2, byte3, byte5, msgSize : Integer; val4, val5, val6, val7 : Integer
    var regButtonIndex, i, microSecs : Integer
    var newBPM : Double = 0.0; var incomingHex : String; var switchOk : Boolean 

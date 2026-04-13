@@ -12,6 +12,7 @@
 [DEVICE:0]
 Name=Genos2
 MidiIn=Digital Keyboard-1
+MidiIn:Aux=Babyface Midi Port 1
 MidiOut=Digital Keyboard-1
 Channel=0
 Caps=TRANSPORT_SYNC,SYSEX_TRIGGER,CROSSFADER_TARGETS,JOYSTICK,MIDI_OUT
