@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-13.002"
+   SCRIPT_VERSION : String = "2026-04-13.003"
 
    DebugMode : Boolean = false
 
@@ -4163,10 +4163,8 @@ Function SyncArrangerToCurrentMap()
 
            // Send to hardware
            if hwIdx >= 0 and hwIdx <= 15 then
-               ScriptWrite_ExpectedPrev[hwIdx] = ScriptWrite_Expected[hwIdx]
-               ScriptWrite_Expected[hwIdx] = faderVal
-               SetParameter(ExternalArranger, hwIdx, faderVal)
                Mem_Fader_Buffer[hwIdx] = faderVal
+               // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
                if DebugMode then Trace("     [HARDWARE] Arranger motorfader " + (hwIdx+1) + " moving to " + faderVal) end
            end
        end
@@ -5976,9 +5974,8 @@ Function UpdatePrompter(moveSlider : Boolean)
        ScrubberTaubTimer = TimeSinceStartup() + 1000.0 
        
        if SCRUB_MacroIdx >= 0 and SCRUB_MacroIdx <= 15 then
-           ScriptWrite_ExpectedPrev[SCRUB_MacroIdx] = ScriptWrite_Expected[SCRUB_MacroIdx]
-           ScriptWrite_Expected[SCRUB_MacroIdx] = sliderPos
-           SetParameter(ExternalArranger, SCRUB_MacroIdx, sliderPos)
+           Mem_Fader_Buffer[SCRUB_MacroIdx] = sliderPos
+           // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
        end
    End
    
@@ -6816,10 +6813,9 @@ Function StopLFO(slot : Integer)
        // nothing to do
    else
        LFO_Active[slot] = false
-       ScriptWrite_ExpectedPrev[slot] = ScriptWrite_Expected[slot]
-       ScriptWrite_Expected[slot] = LFO_PreValue[slot]
-       SetParameter(ExternalArranger, slot, LFO_PreValue[slot])
+       Mem_Fader_Buffer[slot] = LFO_PreValue[slot]
        LFO_LastSample[slot] = LFO_PreValue[slot]
+       // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
        LFO_Progress[slot] = 0.0
        // Reset meters so they don't freeze on the last-tick value
        SetWidgetValue(METER_LFO_H, 0.0)
@@ -6926,9 +6922,8 @@ Function TickLFOs()
            if vMeter > 1.0 then vMeter = 1.0 end
        end
 
-       ScriptWrite_ExpectedPrev[LFO_Draft_Slot] = ScriptWrite_Expected[LFO_Draft_Slot]
-       ScriptWrite_Expected[LFO_Draft_Slot] = sample
-       SetParameter(ExternalArranger, LFO_Draft_Slot, sample)
+       Mem_Fader_Buffer[LFO_Draft_Slot] = sample
+       // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
        SetWidgetValue(METER_LFO_H, sample)
        SetWidgetValue(METER_LFO_V, vMeter)
        if DebugMode then
@@ -6963,9 +6958,8 @@ Function TickLFOs()
                    if LFO_Progress[slot] > 1.0 then LFO_Progress[slot] = 1.0 end
                end
 
-               ScriptWrite_ExpectedPrev[slot] = ScriptWrite_Expected[slot]
-               ScriptWrite_Expected[slot] = sample
-               SetParameter(ExternalArranger, slot, sample)
+               Mem_Fader_Buffer[slot] = sample
+               // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
                LFO_LastSample[slot] = sample
                SetWidgetValue(METER_LFO_H, sample)
                SetWidgetValue(METER_LFO_V, LFO_Progress[slot])
@@ -8342,8 +8336,7 @@ Function ExecuteScrub(newValue : Double, fromOSC : Boolean)
                    IsPerformanceActive = false 
                    EnablePlayhead(false) 
                    
-                   SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
-                   StyleTriggerResetTimer = TimeSinceStartup() + 60.0
+                   TriggerStyleAction(TRIG_START_STOP)
                end
            end
 
@@ -8371,8 +8364,7 @@ End
 // HELPER: ARRANGER ECHO SENDER
 // ---------------------------------------------------------
 Function FireArrangerTransportEcho()
-    SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
-    StyleTriggerResetTimer = TimeSinceStartup() + 60.0
+    TriggerStyleAction(TRIG_START_STOP)
 End
 
 // ---------------------------------------------------------
@@ -8414,11 +8406,9 @@ Function ParkFadersForVST(vstIdx : Integer)
                 fi = MacLayerBindIdx(macIdx, 0, 0)
                 if Mac_Layer_TargetType[fi] == "VST" and Mac_Layer_VSTIdx[fi] == vstIdx then
                     s = macIdx - 1
-                    Trace("PARK: Found Match! Macro " + macIdx + " on Fader " + s + ". Current Val: " + GetParameter(ExternalArranger, s))
-                    Mem_Fader_Buffer[s] = GetParameter(ExternalArranger, s)
-                    ScriptWrite_ExpectedPrev[s] = ScriptWrite_Expected[s]
-                    ScriptWrite_Expected[s] = 0.0
-                    SetParameter(ExternalArranger, s, 0.0)
+                    Trace("PARK: Found Match! Macro " + macIdx + " on Fader " + s + ". Current Val: " + Mem_Fader_Buffer[s])
+                    // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
+                    Mem_Fader_Buffer[s] = 0.0
                     count = count + 1
                 end
             end
@@ -8456,9 +8446,8 @@ Function RestoreFadersForVST(vstIdx : Integer)
                     Trace("RESTORE: Macro " + macIdx + " (Param) -> Plugin says: " + currentVal + " -> Fader: " + faderVal)
 
                     if faderVal < 0.0 then faderVal = 0.0 elsif faderVal > 1.0 then faderVal = 1.0 end
-                    ScriptWrite_ExpectedPrev[s] = ScriptWrite_Expected[s]
-                    ScriptWrite_Expected[s] = faderVal
-                    SetParameter(ExternalArranger, s, faderVal)
+                    Mem_Fader_Buffer[s] = faderVal
+                    // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
                     count = count + 1
                 end
             end
@@ -8537,18 +8526,16 @@ Function ApplyEditorTest(val : Double)
     var s : Integer
 
     if CurrentEditScope == -1 then
-        // Global: write all 16 arranger faders (each triggers ParameterValueChanged -> ExecuteHardwareMacro)
+        // Global: write all 16 faders
         For s = 0; s < 16; s = s + 1 Do
-            ScriptWrite_ExpectedPrev[s] = ScriptWrite_Expected[s]
-            ScriptWrite_Expected[s] = val
-            SetParameter(ExternalArranger, s, val)
+            Mem_Fader_Buffer[s] = val
         End
+        // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback/ExecuteHardwareMacro not yet callable here (forward decl)
     else
-        // Scoped: write to arranger (triggers ParameterValueChanged -> ExecuteHardwareMacro)
+        // Scoped: write single fader
         if CurrentEditScope >= 0 and CurrentEditScope <= 15 then
-            ScriptWrite_ExpectedPrev[CurrentEditScope] = ScriptWrite_Expected[CurrentEditScope]
-            ScriptWrite_Expected[CurrentEditScope] = val
-            SetParameter(ExternalArranger, CurrentEditScope, val)
+            Mem_Fader_Buffer[CurrentEditScope] = val
+            // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback/ExecuteHardwareMacro not yet callable here (forward decl)
         end
     end
 End
@@ -8631,9 +8618,8 @@ Function ResetHardwareFadersForVST(vstIdx : Integer)
                    if faderVal < 0.0 then faderVal = 0.0 elsif faderVal > 1.0 then faderVal = 1.0 end
 
                    if s >= 0 and s <= 15 then
-                       ScriptWrite_ExpectedPrev[s] = ScriptWrite_Expected[s]
-                       ScriptWrite_Expected[s] = faderVal
-                       SetParameter(ExternalArranger, s, faderVal)
+                       Mem_Fader_Buffer[s] = faderVal
+                       // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback not yet callable here (forward decl)
                    end
                end
            end
@@ -9392,10 +9378,9 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
 
     if eventType == "Macro" then
         if eventVal >= 0 and eventVal < MAX_MACROS then
-            ScriptWrite_ExpectedPrev[eventVal] = ScriptWrite_Expected[eventVal]
-            ScriptWrite_Expected[eventVal] = 1.0
+            Mem_Fader_Buffer[eventVal] = 1.0
+            // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback/ExecuteHardwareMacro not yet callable here (forward decl)
         end
-        SetParameter(ExternalArranger, eventVal, 1.0)
     elsif eventType == "Map" then
         if eventVal >= 0 and eventVal < Size(CtrlMapList) then
             Trace("TIMELINE: Auto-Switching Map to -> " + CtrlMapList[eventVal])
@@ -9410,10 +9395,9 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
         if eventVal >= 0 then
             Trace("TIMELINE: RegMem -> " + eventVal)
             if eventVal < MAX_MACROS then
-                ScriptWrite_ExpectedPrev[eventVal] = ScriptWrite_Expected[eventVal]
-                ScriptWrite_Expected[eventVal] = 1.0
+                Mem_Fader_Buffer[eventVal] = 1.0
+                // TODO(HAL): Motorfader feedback needs direct CC send — SendArrangerVolumeFeedback/ExecuteHardwareMacro not yet callable here (forward decl)
             end
-            SetParameter(ExternalArranger, eventVal, 1.0)
         end
     elsif eventType == "Marker" then
         if eventVal >= 0 and eventVal < Size(Arr_SectionNames) then
@@ -10285,15 +10269,10 @@ End
 // CROSSFADER FUNKTIONEN
 // ---------------------------------------------------------
 
-// Transfers the matrix button state to the scriptlet
+// SyncMatrixToScriptlet: No longer needed — W_CF_Arranger widgets are the source of truth.
+// The ExternalArranger scriptlet has been eliminated; crossfader flags are read directly from widgets.
 Function SyncMatrixToScriptlet()
-    var i : Integer
-    var paramIdx : Integer
-    
-    For i = 0; i < 16; i = i + 1 Do
-        paramIdx = P_ARRANGER_FLAGS_START + i
-        SetParameter(ExternalArranger, paramIdx, GetWidgetValue(W_CF_Arranger[i]))
-    End
+    // Intentionally empty — kept as stub until callers are cleaned up
 End
 
 
@@ -11351,9 +11330,8 @@ Function ExecuteKeywordBinding(keyword : String, val : Double)
       SetWidgetValue(SLD_Crossfader, val)
    elsif keyword == "SCRUBBER" then
       if SCRUB_MacroIdx >= 0 then
-         ScriptWrite_ExpectedPrev[SCRUB_MacroIdx] = ScriptWrite_Expected[SCRUB_MacroIdx]
-         ScriptWrite_Expected[SCRUB_MacroIdx] = val
-         SetParameter(ExternalArranger, SCRUB_MacroIdx, val)
+         Mem_Fader_Buffer[SCRUB_MacroIdx] = val
+         SendArrangerVolumeFeedback(val, SCRUB_MacroIdx + 1)
       end
    elsif keyword == "VST_SCOPE" then
       scopeIdx = Round(val * (MAX_VSTS - 1))
@@ -11958,7 +11936,8 @@ Function PerformSystemReset()
    // 2. CHANNELS & ARRANGER RESET
    // Use DeactivateChannel (performs reset, bypass & usage=Free)
    For i = 0; i < 16; i = i + 1 Do DeactivateChannel(i) End
-   For j = 0; j < 16; j = j + 1 Do SetParameter(ExternalArranger, P_ARRANGER_FLAGS_START + j, 0.0) End
+   // CF flags reset removed — W_CF_Arranger widgets are the source of truth
+   For j = 0; j < 16; j = j + 1 Do SetWidgetValue(W_CF_Arranger[j], 0.0) End
 
    // 3. VST RESIDENT RESET (VST 1 & 2)
    SafeLoadPreset(BLK_VST[0], "Standard"); LoadedPresets[0] = "Standard"
@@ -12949,8 +12928,8 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
        // 2. Clean all channels and set to system defaults
        For i = 0; i < 16; i = i + 1 Do ResetChannelToStandard(i) End
        
-       // 3. Reset arranger flags
-       For j = 0; j < 16; j = j + 1 Do SetParameter(ExternalArranger, P_ARRANGER_FLAGS_START + j, 0.0) End
+       // 3. Reset arranger flags — W_CF_Arranger widgets are the source of truth
+       For j = 0; j < 16; j = j + 1 Do SetWidgetValue(W_CF_Arranger[j], 0.0) End
        
        fileContent = LoadStringFromTextFile(filePath)
        IsUpdatingMatrix = true
@@ -13707,15 +13686,13 @@ Function EvaluateTransportSync()
         IsPerformanceActive = playing
         if not isHW then
             Trace("ETS: [OK] GP LEADS: GUI action. Sending command to arranger...")
-            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
-            StyleTriggerResetTimer = TimeSinceStartup() + 60.0
+            TriggerStyleAction(TRIG_START_STOP)
             LastHardwarePulseTime = TimeSinceStartup() + 1000.0
         else
             // FORBIDDEN: Arranger started GP natively! Killing both!
             Trace("ETS: [X] GP LEADS: Arranger started illegally! Stopping both...")
             IsCorrectingPlayhead = true; EnablePlayhead(false)
-            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
-            StyleTriggerResetTimer = TimeSinceStartup() + 60.0
+            TriggerStyleAction(TRIG_START_STOP)
         end
 
     // --- MODE 3: FULL SYNC ---
@@ -13724,8 +13701,7 @@ Function EvaluateTransportSync()
         if not isHW then
             // It was a pure mouse click! We need to sync the arranger!
             Trace("ETS: [OK] FULL SYNC: GUI action. Sending command to arranger...")
-            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
-            StyleTriggerResetTimer = TimeSinceStartup() + 60.0
+            TriggerStyleAction(TRIG_START_STOP)
             
             // IMPORTANT: Set the pulse artificially into the future so that
             // unavoidable arranger stop echo does not confuse us!
@@ -13744,8 +13720,7 @@ Function EvaluateTransportSync()
                 end
             else
                 IsPerformanceActive = true; UpdateSyncLabel()
-                SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
-                StyleTriggerResetTimer = TimeSinceStartup() + 60.0
+                TriggerStyleAction(TRIG_START_STOP)
                 LastHardwarePulseTime = TimeSinceStartup() + 1000.0
             end
         else
@@ -15271,9 +15246,9 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Run
            // Button released — stop whichever is running
            if LFO_Draft_Running then
                LFO_Draft_Running = false
-               ScriptWrite_ExpectedPrev[LFO_Draft_Slot] = ScriptWrite_Expected[LFO_Draft_Slot]
-               ScriptWrite_Expected[LFO_Draft_Slot] = LFO_Draft_PreValue
-               SetParameter(ExternalArranger, LFO_Draft_Slot, LFO_Draft_PreValue)
+               Mem_Fader_Buffer[LFO_Draft_Slot] = LFO_Draft_PreValue
+               SendArrangerVolumeFeedback(LFO_Draft_PreValue, LFO_Draft_Slot + 1)
+               ExecuteHardwareMacro(LFO_Draft_Slot + 1, LFO_Draft_PreValue)
                SetWidgetValue(METER_LFO_H, 0.0)
                SetWidgetValue(METER_LFO_V, 0.0)
                LFO_Draft_Slot = -1
@@ -15723,8 +15698,7 @@ On ParameterValueChanged(paramIdx : Integer, newVal : Double) from BLK_ArrangerS
             // but the arranger starts independently, fire an immediate STOP echo!
             if CurrentSyncMode == 2 and IsPlayheadEnabled() == false then
                 Trace("   [X] ARRANGER_STYLE (2): Arranger started in isolation! Sending abort echo...")
-                SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
-                StyleTriggerResetTimer = TimeSinceStartup() + 60.0
+                TriggerStyleAction(TRIG_START_STOP)
             end
         end
     End
@@ -16859,8 +16833,7 @@ On TimerTick(ms : Double)
         else
             SyncLockTimer = TimeSinceStartup() + 800.0
             Trace(">>> ECHO SENDER: Sending START/STOP to arranger.")
-            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 1.0)
-            StyleTriggerResetTimer = TimeSinceStartup() + 60.0
+            TriggerStyleAction(TRIG_START_STOP)
         end
      end
 
@@ -17112,10 +17085,9 @@ On TimerTick(ms : Double)
                 end
                 
                 a_val = Anim_Start[a_idx] + ((Anim_Target[a_idx] - Anim_Start[a_idx]) * t_progress)
-                ScriptWrite_ExpectedPrev[a_idx] = ScriptWrite_Expected[a_idx]
-                ScriptWrite_Expected[a_idx] = a_val
-                SetParameter(ExternalArranger, a_idx, a_val)
                 Mem_Fader_Buffer[a_idx] = a_val
+                SendArrangerVolumeFeedback(a_val, a_idx + 1)
+                ExecuteHardwareMacro(a_idx + 1, a_val)
             end
         End
 
@@ -17136,11 +17108,7 @@ On TimerTick(ms : Double)
           end
         end
 
-        // --- Release the electronic key on the scriptlet ---
-        if StyleTriggerResetTimer > 0.0 and TimeSinceStartup() > StyleTriggerResetTimer then
-            SetParameter(BLK_ArrangerSync, P_STYLE_START_STOP, 0.0)
-            StyleTriggerResetTimer = 0.0
-        end  
+        // StyleTriggerResetTimer block removed — TriggerStyleAction handles full Note On/Off pulse internally
         
         if StateResetTime > 0.0 and TimeSinceStartup() > StateResetTime then
           CurrentState = 0; StateResetTime = 0.0 
@@ -17255,7 +17223,7 @@ On TimerTick(ms : Double)
                 StartWatchdogTimer = 0.0
                 Trace(">>> TRANSPORT: Arranger is silent. Sending start command (Note 14)!")
                 FireDirectArrangerTransport()
-                SetParameter(BLK_ArrangerSync, 1, 1.0)
+                TriggerStyleAction(TRIG_START_STOP)
             end
         end
         
