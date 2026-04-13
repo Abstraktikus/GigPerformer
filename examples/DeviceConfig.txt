@@ -16,6 +16,70 @@ MidiOut=Digital Keyboard-1
 Channel=0
 Caps=TRANSPORT_SYNC,SYSEX_TRIGGER,CROSSFADER_TARGETS,JOYSTICK,MIDI_OUT
 
+; --- Output Routing ---
+; Each Route:<stream> maps a logical MIDI output stream to a physical port.
+; Parsed once at boot. Runtime lookup is a flat array access.
+; Missing routes fall back to MidiOut.
+;
+; Route:Volume     = CC7 per-channel volume feedback to arranger hardware.
+;                    Separated because some USB-MIDI devices have port issues;
+;                    allows routing volume through an alternate interface
+;                    (e.g. DIN MIDI via audio interface).
+;
+; Route:Expression = CC11 crossfader expression floating.
+;                    Sends per-channel expression values to arranger channels
+;                    that have crossfader enabled (W_CF_Arranger toggles).
+;                    Uses quadratic scaling for smooth response curve.
+;
+; Route:Control    = All other outbound MIDI: generic CCs from ControllerMap,
+;                    style trigger note pulses, SysEx commands.
+;                    This is the "default" output path.
+;
+Route:Volume=Babyface Midi Port 1
+Route:Expression=Digital Keyboard-1
+Route:Control=Digital Keyboard-1
+
+; --- Style Trigger Mapping ---
+; Maps logical trigger names to MIDI notes on TriggerChannel.
+; Sent as Note On (vel 127) + Note Off (vel 0) after 50ms pulse.
+; Another arranger can define different notes, fewer triggers, or a different channel.
+;
+; Only Trigger:StartStop is referenced by script transport-sync logic (TRIG_START_STOP).
+; All other triggers are generic: FireStyleTrigger(idx) sends the pulse,
+; RecordTimelineEvent("Style", idx) records it. No script change needed
+; for a different arranger's trigger set.
+;
+TriggerChannel=16
+Trigger:TapTempo=13
+Trigger:StartStop=14
+Trigger:SyncStop=15
+Trigger:Intro1=16
+Trigger:Intro2=17
+Trigger:Intro3=18
+Trigger:MainA=20
+Trigger:MainB=21
+Trigger:MainC=22
+Trigger:MainD=23
+Trigger:FillDown=24
+Trigger:FillUp=25
+Trigger:FillSelf=26
+Trigger:Break=27
+Trigger:Ending1=28
+Trigger:Ending2=29
+Trigger:Ending3=30
+Trigger:SongA=31
+Trigger:SongB=32
+Trigger:MP1=33
+Trigger:MP2=34
+Trigger:MP3=35
+Trigger:MP4=36
+Trigger:MPStop=37
+Trigger:Right1=38
+Trigger:Right2=39
+Trigger:Right3=40
+Trigger:Left=41
+Trigger:Fade=43
+
 [DEVICE:1]
 Name=MiniLab3
 MidiIn=Minilab3 MIDI
