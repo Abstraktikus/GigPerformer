@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.018"
+   SCRIPT_VERSION : String = "2026-04-14.019"
 
    DebugMode : Boolean = false
 
@@ -12035,6 +12035,22 @@ Function ExecuteKeywordBinding(keyword : String, val : Double)
    end
 End
 
+// Push overlay event to LBL_MacroFeedback (Path B in spec §8.1)
+Function ShowOverlayFeedback(targetName : String, channel : Integer, state : Integer)
+   var msg : String
+   var lockOK : Boolean
+   lockOK = TimeSinceStartup() > MacroFeedbackLockTimer
+   if lockOK then
+      if state == 1 then
+         msg = targetName + ":CH" + IntToString(channel) + " : ON"
+      else
+         msg = targetName + ":CH" + IntToString(channel) + " : OFF"
+      end
+      OSC_SendStringSpecific("/UI/SetMacroFeedback", msg, Local_IP, Local_PORT)
+      MacroFeedbackTimer = TimeSinceStartup() + 1500.0
+   end
+End
+
 // Returns true if an OTZ overlay just transitioned state (suppresses base feedback).
 // Handles MODE_POINT, MODE_RANGE, MODE_DIR. Updates Overlay_FuncState + arms debounce.
 Function EvaluateOTZ(macroIdx : Integer, bindIdx : Integer, val : Double, isNote : Boolean) Returns Boolean
@@ -12102,22 +12118,6 @@ Function SendResetToHW(macroIdx : Integer)
          Pending_HAL_FaderVal[macroIdx - 1] = 0.5
          Control_EchoBlockUntil[macroIdx] = TimeSinceStartup() + OTZ_ECHO_BLOCK_MS
       end
-   end
-End
-
-// Push overlay event to LBL_MacroFeedback (Path B in spec §8.1)
-Function ShowOverlayFeedback(targetName : String, channel : Integer, state : Integer)
-   var msg : String
-   var lockOK : Boolean
-   lockOK = TimeSinceStartup() > MacroFeedbackLockTimer
-   if lockOK then
-      if state == 1 then
-         msg = targetName + ":CH" + IntToString(channel) + " : ON"
-      else
-         msg = targetName + ":CH" + IntToString(channel) + " : OFF"
-      end
-      OSC_SendStringSpecific("/UI/SetMacroFeedback", msg, Local_IP, Local_PORT)
-      MacroFeedbackTimer = TimeSinceStartup() + 1500.0
    end
 End
 
