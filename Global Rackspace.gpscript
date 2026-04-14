@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.003"
+   SCRIPT_VERSION : String = "2026-04-14.004"
 
    DebugMode : Boolean = false
 
@@ -1879,6 +1879,9 @@ Function UpdateActiveLayer()
             FireOverlayAction(Overlay_Action[ov])
          end
       End
+      // Hardware sync: physical knobs now map to different macros,
+      // so push VST parameter values back to the arranger faders.
+      HardwareSyncTimer = TimeSinceStartup() + 400.0
    end
 End
 
@@ -15881,6 +15884,58 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_B
 
     // 5. Pass note to the block
     SendNow(DeviceIn_0_B, m)
+End
+
+On SysexEvent(m : SysexMessage) From DeviceIn_0_B
+   // DIN MIDI SysEx from Genos2 — handles Layer Switch matching
+   // (Talk/Harmony buttons) and heartbeat. Arranger commands (Song/Reg)
+   // come via USB (DeviceIn_0_A) and are NOT duplicated here.
+   var byteIdx_B, swIdx_B, msgSize_B : Integer
+   var incomingHexFull_B : String = ""; var hexByte_B : String
+
+   msgSize_B = SM_Length(m)
+   If msgSize_B >= 6 Then
+      // Heartbeat
+      if SM_GetValue(m, 1) == 0x43 then
+          LastHardwarePulseTime = TimeSinceStartup()
+      end
+
+      // Build hex string for Layer Switch comparison
+      For byteIdx_B = 0; byteIdx_B < msgSize_B; byteIdx_B = byteIdx_B + 1 Do
+         if byteIdx_B > 0 then incomingHexFull_B = incomingHexFull_B + " " end
+         hexByte_B = IntToHexString(SM_GetValue(m, byteIdx_B))
+         if Length(hexByte_B) == 1 then hexByte_B = "0" + hexByte_B end
+         incomingHexFull_B = incomingHexFull_B + hexByte_B
+      End
+      incomingHexFull_B = MyToUpper(incomingHexFull_B)
+
+      For swIdx_B = 0; swIdx_B < LayerSwitch_Count; swIdx_B = swIdx_B + 1 Do
+         if LayerSwitch_DevIdx[swIdx_B] == 0 and LayerSwitch_Type[swIdx_B] == "SYSEX" then
+            if incomingHexFull_B == MyToUpper(LayerSwitch_OnData[swIdx_B]) then
+               LayerSwitch_State[swIdx_B] = 1
+               UpdateActiveLayer()
+               if MyToUpper(LayerSwitch_Label[swIdx_B]) == "TALK" then
+                  IgnoreVHOffUntil = TimeSinceStartup() + 200.0
+               end
+               if DebugMode then
+                  Trace("LAYERSWITCH " + IntToString(swIdx_B) + " (" + LayerSwitch_Label[swIdx_B] + "): ON [Port B]")
+               end
+            elsif incomingHexFull_B == MyToUpper(LayerSwitch_OffData[swIdx_B]) then
+               if MyToUpper(LayerSwitch_Label[swIdx_B]) == "HARMONY" and TimeSinceStartup() < IgnoreVHOffUntil then
+                  if DebugMode then
+                     Trace("LAYERSWITCH " + IntToString(swIdx_B) + " (" + LayerSwitch_Label[swIdx_B] + "): OFF suppressed (TALK cross-talk) [Port B]")
+                  end
+               else
+                  LayerSwitch_State[swIdx_B] = 0
+                  UpdateActiveLayer()
+                  if DebugMode then
+                     Trace("LAYERSWITCH " + IntToString(swIdx_B) + " (" + LayerSwitch_Label[swIdx_B] + "): OFF [Port B]")
+                  end
+               end
+            end
+         end
+      End
+   End
 End
 
 // ====================================================
