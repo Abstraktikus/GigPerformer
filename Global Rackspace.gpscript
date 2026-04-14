@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.013"
+   SCRIPT_VERSION : String = "2026-04-14.014"
 
    DebugMode : Boolean = false
 
@@ -11681,9 +11681,6 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
 
    if DebugMode then Trace("MACRO-IN: Ch" + IntToString(ch + 1) + ":CC" + IntToString(cc) + " -> " + IntToString(GetCCValue(m))) end
 
-   // --- UNIVERSAL FEEDBACK ANFEUERN ---
-   TriggerMacroFeedback(cc, true, val)
-
    // 1. LEARN MODE (hardware sources are now configured in ControllerMaps.txt)
    if IsHardwareLearning then
        Trace("HAL Learn: CC" + cc + " Ch" + ch + " detected for Macro " + (CurrentEditScope + 1) + " (configure in ControllerMaps.txt)")
@@ -11796,6 +11793,7 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
           end
           if macroFromLookup > 0 then
              ExecuteHardwareMacro(macroFromLookup, val)
+             TriggerMacroFeedback(macroFromLookup - 1, false, val)
              // Deferred SYSACT dispatch (ExecuteHardwareMacro can't call FireSystemAction directly)
              if PendingSysActionIdx >= 0 then
                 FireSystemAction(PendingSysActionIdx)
