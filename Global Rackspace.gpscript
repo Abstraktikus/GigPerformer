@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.021"
+   SCRIPT_VERSION : String = "2026-04-14.022"
 
    DebugMode : Boolean = true
 
@@ -4893,21 +4893,23 @@ Function ExportSmartConfig()
                else
                    // --- CHECK Mac_Layer_* BINDINGS ---
                    if not isCC then
-                       lfoPrefix = ""
-                       if LFO_ByMacro[s] >= 0 then
-                           lfoPrefix = "LFO:" + LFO_Names[LFO_ByMacro[s]] + " | "
-                       end
                        macIdx = s + 1
-                       bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
-                       if bc > 0 then
-                           fi = MacLayerBindIdx(macIdx, 0, 0)
-                           line = line + " = " + lfoPrefix + Mac_Layer_Target[fi]
-                           if Length(Mac_Layer_ParamLabel[fi]) > 0 then
-                               line = line + ":" + Mac_Layer_ParamLabel[fi]
+                       if macIdx < MAX_LAYER_MACROS then
+                           lfoPrefix = ""
+                           if LFO_ByMacro[s] >= 0 then
+                               lfoPrefix = "LFO:" + LFO_Names[LFO_ByMacro[s]] + " | "
                            end
-                           valStr = " {" + Round(Mac_Layer_RangeMin[fi]*1000)/1000.0 + ", " + Round(Mac_Layer_RangeMax[fi]*1000)/1000.0 + "}"
-                           line = line + valStr
-                           linkFound = true
+                           bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+                           if bc > 0 then
+                               fi = MacLayerBindIdx(macIdx, 0, 0)
+                               line = line + " = " + lfoPrefix + Mac_Layer_Target[fi]
+                               if Length(Mac_Layer_ParamLabel[fi]) > 0 then
+                                   line = line + ":" + Mac_Layer_ParamLabel[fi]
+                               end
+                               valStr = " {" + Round(Mac_Layer_RangeMin[fi]*1000)/1000.0 + ", " + Round(Mac_Layer_RangeMax[fi]*1000)/1000.0 + "}"
+                               line = line + valStr
+                               linkFound = true
+                           end
                        end
                    end
                    if linkFound then newBlock = newBlock + line + NEW_LINE end
