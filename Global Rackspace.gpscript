@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.009"
+   SCRIPT_VERSION : String = "2026-04-14.012"
 
    DebugMode : Boolean = false
 
@@ -237,7 +237,9 @@ Var
    LayerSwitch_OnData : String Array = ["", "", "", "", "", "", "", ""]
    LayerSwitch_OffData : String Array = ["", "", "", "", "", "", "", ""]
    LayerSwitch_State : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0]
-   IgnoreVHOffUntil : Double = 0.0  // Cross-talk guard: TALK ON suppresses VH OFF for 200ms
+   // Per-switch cross-talk guard: when switch X goes ON, all OTHER switches
+   // get a 200ms OFF-suppression window to absorb phantom OFF bursts.
+   IgnoreSwitchOffUntil : Double Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
    // --- Layer Map (switch combination → layer number) ---
    MAX_LAYERS : Integer = 4
@@ -15895,55 +15897,12 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_B
 End
 
 On SysexEvent(m : SysexMessage) From DeviceIn_0_B
-   // DIN MIDI SysEx from Genos2 — handles Layer Switch matching
-   // (Talk/Harmony buttons) and heartbeat. Arranger commands (Song/Reg)
-   // come via USB (DeviceIn_0_A) and are NOT duplicated here.
-   var byteIdx_B, swIdx_B, msgSize_B : Integer
-   var incomingHexFull_B : String = ""; var hexByte_B : String
-
-   msgSize_B = SM_Length(m)
-   If msgSize_B >= 6 Then
-      // Heartbeat
-      if SM_GetValue(m, 1) == 0x43 then
-          LastHardwarePulseTime = TimeSinceStartup()
-      end
-
-      // Build hex string for Layer Switch comparison
-      For byteIdx_B = 0; byteIdx_B < msgSize_B; byteIdx_B = byteIdx_B + 1 Do
-         if byteIdx_B > 0 then incomingHexFull_B = incomingHexFull_B + " " end
-         hexByte_B = IntToHexString(SM_GetValue(m, byteIdx_B))
-         if Length(hexByte_B) == 1 then hexByte_B = "0" + hexByte_B end
-         incomingHexFull_B = incomingHexFull_B + hexByte_B
-      End
-      incomingHexFull_B = MyToUpper(incomingHexFull_B)
-
-      For swIdx_B = 0; swIdx_B < LayerSwitch_Count; swIdx_B = swIdx_B + 1 Do
-         if LayerSwitch_DevIdx[swIdx_B] == 0 and LayerSwitch_Type[swIdx_B] == "SYSEX" then
-            if incomingHexFull_B == MyToUpper(LayerSwitch_OnData[swIdx_B]) then
-               LayerSwitch_State[swIdx_B] = 1
-               UpdateActiveLayer()
-               if MyToUpper(LayerSwitch_Label[swIdx_B]) == "TALK" then
-                  IgnoreVHOffUntil = TimeSinceStartup() + 200.0
-               end
-               if DebugMode then
-                  Trace("LAYERSWITCH " + IntToString(swIdx_B) + " (" + LayerSwitch_Label[swIdx_B] + "): ON [Port B]")
-               end
-            elsif incomingHexFull_B == MyToUpper(LayerSwitch_OffData[swIdx_B]) then
-               if MyToUpper(LayerSwitch_Label[swIdx_B]) == "HARMONY" and TimeSinceStartup() < IgnoreVHOffUntil then
-                  if DebugMode then
-                     Trace("LAYERSWITCH " + IntToString(swIdx_B) + " (" + LayerSwitch_Label[swIdx_B] + "): OFF suppressed (TALK cross-talk) [Port B]")
-                  end
-               else
-                  LayerSwitch_State[swIdx_B] = 0
-                  UpdateActiveLayer()
-                  if DebugMode then
-                     Trace("LAYERSWITCH " + IntToString(swIdx_B) + " (" + LayerSwitch_Label[swIdx_B] + "): OFF [Port B]")
-                  end
-               end
-            end
-         end
-      End
-   End
+   // DIN MIDI SysEx from Genos2 — heartbeat only.
+   // LayerSwitch matching is handled exclusively on Port A to avoid
+   // duplicate processing (both ports receive the same SysEx bursts).
+   if SM_Length(m) >= 6 and SM_GetValue(m, 1) == 0x43 then
+       LastHardwarePulseTime = TimeSinceStartup()
+   end
 End
 
 // ====================================================
@@ -16397,7 +16356,7 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0_A
    var newBPM : Double = 0.0; var incomingHex : String; var switchOk : Boolean
    var regNameDecoded, regNameSlug, gpSongSlug, gpArtistSlug : String
    var foundMatch : Boolean = false; var currentSongName : String
-   var regNumber, byteIdx, swIdx : Integer
+   var regNumber, byteIdx, swIdx, guardIdx : Integer
    var incomingHexFull : String = ""; var hexByte : String
 
    msgSize = SM_Length(m)
@@ -16428,19 +16387,20 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0_A
             if incomingHexFull == MyToUpper(LayerSwitch_OnData[swIdx]) then
                LayerSwitch_State[swIdx] = 1
                UpdateActiveLayer()
-               // Cross-talk guard: TALK ON triggers a phantom VH OFF burst.
-               // Set a 200ms ignore window so the VH OFF is suppressed.
-               if MyToUpper(LayerSwitch_Label[swIdx]) == "TALK" then
-                  IgnoreVHOffUntil = TimeSinceStartup() + 200.0
-               end
+               // Cross-talk guard: protect all OTHER switches from phantom OFF
+               For guardIdx = 0; guardIdx < LayerSwitch_Count; guardIdx = guardIdx + 1 Do
+                  if guardIdx != swIdx then
+                     IgnoreSwitchOffUntil[guardIdx] = TimeSinceStartup() + 200.0
+                  end
+               End
                if DebugMode then
                   Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): ON")
                end
             elsif incomingHexFull == MyToUpper(LayerSwitch_OffData[swIdx]) then
-               // Cross-talk guard: suppress VH OFF within the ignore window
-               if MyToUpper(LayerSwitch_Label[swIdx]) == "HARMONY" and TimeSinceStartup() < IgnoreVHOffUntil then
+               // Cross-talk guard: suppress OFF if this switch is protected
+               if TimeSinceStartup() < IgnoreSwitchOffUntil[swIdx] then
                   if DebugMode then
-                     Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): OFF suppressed (TALK cross-talk)")
+                     Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): OFF suppressed (cross-talk)")
                   end
                else
                   LayerSwitch_State[swIdx] = 0
