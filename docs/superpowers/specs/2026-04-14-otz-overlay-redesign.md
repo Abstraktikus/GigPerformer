@@ -39,7 +39,12 @@ This spec replaces the entire OTZ subsystem with a clean, keyword-based architec
 - Preserve existing Default/Song/VST map inheritance logic (UNCHANGED)
 - Preserve LFO special-storage-in-active-map behavior (UNCHANGED)
 - Persist overlay state across GP restart (runtime-only)
-- Modify Looper, Timeline, or other non-OTZ subsystems
+- No internal refactoring of Looper, Timeline, SmartSolo, NoteProcessor subsystems
+
+**Note**: Timeline recording of OTZ events continues to work automatically — the new
+`FireOverlayDirect` calls existing `ActivateOverlay`/`DeactivateOverlay`, which already
+invoke `RecordTimelineOverlay()`. No changes needed in the Timeline subsystem.
+Looper macros (system macros 97-112) are unaffected — they're SYSACT-based, not OTZ.
 
 ---
 
@@ -427,6 +432,12 @@ Overlay state is runtime-only. Song switch preserves state (no reset); GP restar
 ### 9.6 Multiple Base Bindings (SuperKnob)
 
 All non-OTZ bindings execute in sequence with the same `val`. Display shows only the first base binding's name/label. All overlays display separately.
+
+### 9.7 Timeline Recording Continuity
+
+`FireOverlayDirect` calls existing `ActivateOverlay`/`DeactivateOverlay`, which call
+`RecordTimelineOverlay(funcName, channel, state)` (line 10622/10661). Timeline records
+all OTZ events automatically — no spec change in Timeline subsystem.
 
 ---
 
