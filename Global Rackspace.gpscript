@@ -33,9 +33,9 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.020"
+   SCRIPT_VERSION : String = "2026-04-14.021"
 
-   DebugMode : Boolean = false
+   DebugMode : Boolean = true
 
    // --- Crash-safe trace sinks (independent of GP's in-app log) ---
    // When CrashDebugMode = true, every call to Trace() additionally:
@@ -12218,6 +12218,9 @@ Function DispatchMacro(matchedMacro : Integer, val : Double, isNote : Boolean, i
                      scaledVal = rMin + (val * (rMax - rMin))
                      if vstIdx <= MAX_VSTS then
                         SetParameter(BLK_VST[vstIdx], paramIdx, scaledVal)
+                        if DebugMode then
+                           Trace("VST-WRITE: Macro" + matchedMacro + " bind" + b + " VST" + vstIdx + " param" + paramIdx + " = " + DoubleToString(scaledVal, 4) + " | readback=" + DoubleToString(GetParameter(BLK_VST[vstIdx], paramIdx), 4))
+                        end
                      end
                   end
                end
