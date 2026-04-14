@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.019"
+   SCRIPT_VERSION : String = "2026-04-14.020"
 
    DebugMode : Boolean = false
 
@@ -3908,7 +3908,7 @@ Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx :
    var colonPos, colonPos2, bracePos, closeBrace, underPos, vstIdx, paramIdx : Integer
    var commaPos, mode, numCount : Integer
    var isOTZ, hasReset : Boolean
-   var rangeMin, rangeMax, numVal : Double
+   var rangeMin, rangeMax, numVal : Double = 0.0
    var firstSpecToken : Boolean
 
    isOTZ = false; hasReset = false; mode = MODE_RANGE
@@ -12055,7 +12055,7 @@ End
 // Handles MODE_POINT, MODE_RANGE, MODE_DIR. Updates Overlay_FuncState + arms debounce.
 Function EvaluateOTZ(macroIdx : Integer, bindIdx : Integer, val : Double, isNote : Boolean) Returns Boolean
    var funcIdx, channel, currentState, shouldFire, mode : Integer
-   var rMin, rMax, lastVal : Double
+   var rMin, rMax, lastVal : Double = 0.0
    var targetName : String
    var fired : Boolean = false
 
