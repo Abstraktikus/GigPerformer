@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.024"
+   SCRIPT_VERSION : String = "2026-04-14.025"
 
    DebugMode : Boolean = true
 
@@ -4859,6 +4859,64 @@ Function CaptureSmartRanges(isMin : Boolean)
 End
 
 // --------------------------------------------------------------------
+// FORMAT BINDING — emit one binding in canonical syntax
+// (used by ExportSmartConfig + UpdateControllerInfoDisplay)
+// --------------------------------------------------------------------
+Function FormatBinding(macIdx : Integer, bindIdx : Integer) Returns String
+   var t, label, target, specs, paramLbl : String
+   var ch, mode : Integer
+   var rmin, rmax : Double = 0.0
+
+   t = GetMacTargetType(macIdx, bindIdx)
+   target = GetMacTarget(macIdx, bindIdx)
+   label = target
+
+   if t == "OVERLAY" then
+      ch = GetMacChannel(macIdx, bindIdx)
+      label = label + ":CH" + IntToString(ch)
+   elsif t == "VST" then
+      paramLbl = GetMacParamLabel(macIdx, bindIdx)
+      if Length(paramLbl) > 0 then
+         label = label + ":" + paramLbl
+      end
+   end
+
+   // Build SPEC tokens
+   specs = ""
+   if GetMacIsOTZ(macIdx, bindIdx) then specs = "OTZ" end
+
+   mode = GetMacMode(macIdx, bindIdx)
+   rmin = GetMacRangeMin(macIdx, bindIdx)
+   rmax = GetMacRangeMax(macIdx, bindIdx)
+
+   if mode == MODE_DIR then
+      if Length(specs) > 0 then specs = specs + "," end
+      specs = specs + "DIR"
+   elsif mode == MODE_POINT and rmin == 1.0 then
+      if Length(specs) > 0 then specs = specs + "," end
+      specs = specs + "MAX"
+   elsif mode == MODE_POINT and rmin == 0.0 then
+      if Length(specs) > 0 then specs = specs + "," end
+      specs = specs + "MIN"
+   else
+      // Numeric range — always emit (preserves Min/Max captured values)
+      if Length(specs) > 0 then specs = specs + "," end
+      specs = specs + DoubleToString(rmin, 3) + "," + DoubleToString(rmax, 3)
+   end
+
+   if GetMacHasReset(macIdx, bindIdx) then
+      if Length(specs) > 0 then specs = specs + "," end
+      specs = specs + "RESET"
+   end
+
+   if Length(specs) > 0 then
+      result = label + "{" + specs + "}"
+   else
+      result = label
+   end
+End
+
+// --------------------------------------------------------------------
 // EXPORT SMART CONFIG // Overwrites the map directly in the file
 // --------------------------------------------------------------------
 
@@ -4908,27 +4966,30 @@ Function ExportSmartConfig()
                    newBlock = newBlock + line + " = SYSTEM_TOGGLE" + NEW_LINE
                
                else
-                   // --- CHECK Mac_Layer_* BINDINGS ---
+                   // --- BUILD MULTI-BINDING (Base + OTZ overlays) ---
                    if not isCC then
                        macIdx = s + 1
                        if macIdx < MAX_LAYER_MACROS then
-                           lfoPrefix = ""
-                           if LFO_ByMacro[s] >= 0 then
-                               lfoPrefix = "LFO:" + LFO_Names[LFO_ByMacro[s]] + " | "
-                           end
-                           bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
+                           bc = Mac_Layer_BindCount[macIdx]
                            if bc > 0 then
-                               fi = MacLayerBindIdx(macIdx, 0, 0)
-                               line = line + " = " + lfoPrefix + Mac_Layer_Target[fi]
-                               if Length(Mac_Layer_ParamLabel[fi]) > 0 then
-                                   line = line + ":" + Mac_Layer_ParamLabel[fi]
+                               lfoPrefix = ""
+                               if LFO_ByMacro[s] >= 0 then
+                                   lfoPrefix = "LFO:" + LFO_Names[LFO_ByMacro[s]] + " | "
                                end
-                               valStr = " {" + Round(Mac_Layer_RangeMin[fi]*1000)/1000.0 + ", " + Round(Mac_Layer_RangeMax[fi]*1000)/1000.0 + "}"
-                               line = line + valStr
-                               linkFound = true
+                               // Pipe-separated bindings
+                               valStr = ""
+                               For lnk = 0; lnk < bc; lnk = lnk + 1 Do
+                                   if Length(valStr) > 0 then valStr = valStr + " | " end
+                                   valStr = valStr + FormatBinding(macIdx, lnk)
+                               End
+                               if Length(valStr) > 0 then
+                                   line = line + " = " + lfoPrefix + valStr
+                                   linkFound = true
+                               end
                            end
                        end
                    end
+                   // Skip empty macros — only write when something is bound
                    if linkFound then newBlock = newBlock + line + NEW_LINE end
                end
            End
