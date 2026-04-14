@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.004"
+   SCRIPT_VERSION : String = "2026-04-14.009"
 
    DebugMode : Boolean = false
 
@@ -1597,18 +1597,17 @@ End
 // Parses DeviceConfig.txt (INI format) and fills DEV_*, CTRL_*, SYSEX_* registries.
 Function ParseDeviceConfig()
    var content, line, key, val, section : String
-   var lines : String Array
    var i, eqPos, currentDevIdx, currentCtrlIdx, currentSysExIdx : Integer
    var currentSwitchIdx, currentMapIdx, currentPermIdx, currentOvlIdx, stateNum, sw : Integer
    var d, r : Integer
    var routeStream, trigName : String
    var routeIdx : Integer
+   var pos, nlPos, lineCount, maxIter : Integer
 
    if not FileExists(DeviceConfigFilePath) then
       Trace("HAL: No DeviceConfig.txt found at " + DeviceConfigFilePath + ". Running in fallback mode.")
    else
       content = LoadStringFromTextFile(DeviceConfigFilePath)
-      lines = SplitString(content, NEW_LINE)
       section = ""
       currentDevIdx = -1
       currentCtrlIdx = -1
@@ -1632,8 +1631,17 @@ Function ParseDeviceConfig()
       End
       DEV_TriggerCount = 0
 
-      For i = 0; i < Size(lines); i = i + 1 Do
-         line = TrimString(lines[i])
+      pos = 0; lineCount = 0; maxIter = 2000
+      While pos < Length(content) and lineCount < maxIter Do
+         nlPos = IndexOfSubstring(CopySubstring(content, pos, Length(content) - pos), NEW_LINE, false)
+         if nlPos >= 0 then
+            line = TrimString(CopySubstring(content, pos, nlPos))
+            pos = pos + nlPos + Length(NEW_LINE)
+         else
+            line = TrimString(CopySubstring(content, pos, Length(content) - pos))
+            pos = Length(content)
+         end
+         lineCount = lineCount + 1
 
          if Length(line) == 0 then
             // skip empty line
@@ -16386,7 +16394,7 @@ End
 On SysexEvent(m : SysexMessage) From DeviceIn_0_A
    var byte1, byte2, byte3, byte5, msgSize : Integer; val4, val5, val6, val7 : Integer
    var regButtonIndex, i, microSecs : Integer
-   var newBPM : Double = 0.0; var incomingHex : String; var switchOk : Boolean 
+   var newBPM : Double = 0.0; var incomingHex : String; var switchOk : Boolean
    var regNameDecoded, regNameSlug, gpSongSlug, gpArtistSlug : String
    var foundMatch : Boolean = false; var currentSongName : String
    var regNumber, byteIdx, swIdx : Integer

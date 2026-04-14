@@ -344,7 +344,7 @@ Device=0
 Label=Talk
 Type=SYSEX
 OnData=F0 43 10 4C 10 00 0B 64 F7
-OffData=F0 43 10 4C 10 00 0B 00 F7
+OffData=F0 43 10 4C 10 00 0B 7F F7
 
 ; =============================================================================
 ; LAYER MAP — Switch combination -> Layer number
