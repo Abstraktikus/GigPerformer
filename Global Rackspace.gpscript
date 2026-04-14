@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.023"
+   SCRIPT_VERSION : String = "2026-04-14.024"
 
    DebugMode : Boolean = true
 
@@ -4816,6 +4816,10 @@ Function CaptureSmartRanges(isMin : Boolean)
    For macIdx = 1; macIdx <= 16; macIdx = macIdx + 1 Do
        sIdx = macIdx - 1
        if CurrentEditScope == -1 or CurrentEditScope == sIdx then
+           // Skip LFO-bound macros — plugin value is mid-oscillation, not a meaningful min/max
+           if LFO_ByMacro[sIdx] >= 0 then
+               if DebugMode then Trace("Editor: Macro " + macIdx + " skipped (LFO bound: " + LFO_Names[LFO_ByMacro[sIdx]] + ")") end
+           else
            bc = Mac_Layer_BindCount[macIdx]
            For b = 0; b < bc; b = b + 1 Do
                // Skip OTZ overlays — fixed trigger ranges, not a learn target
@@ -4846,6 +4850,7 @@ Function CaptureSmartRanges(isMin : Boolean)
                    end
                end
            End
+           end
        end
    End
    if isMin then Trace("Editor: Captured MIN (A) values for " + count + " bindings.") else Trace("Editor: Captured MAX (B) values for " + count + " bindings.") end
