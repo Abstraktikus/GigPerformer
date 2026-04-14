@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-13.008"
+   SCRIPT_VERSION : String = "2026-04-14.002"
 
    DebugMode : Boolean = false
 
@@ -432,14 +432,24 @@ Var
    IsUpdatingMatrix, IsUpdatingFilters, IsUpdatingNP, IsUpdatingBypassUI : Boolean = false
    IsSaving, IsLoadingSnapshot, IsLoading : Boolean = false  
    IsHardwareLearning, IsPerformanceActive, IsPresetLocked : Boolean = false
-   IsBrowsingFavorites, IsLearningMin, IsLearningMax : Boolean = false
-   IsLearningOctRangeMin, IsLearningOctRangeMax : Boolean = false
+   IsBrowsingFavorites : Boolean = false
+   // Learning Mode enum: 0=NONE, 1=MIN_NOTE, 2=MAX_NOTE, 3=OCT_MIN, 4=OCT_MAX
+   LEARN_NONE    : Integer = 0
+   LEARN_MIN     : Integer = 1
+   LEARN_MAX     : Integer = 2
+   LEARN_OCT_MIN : Integer = 3
+   LEARN_OCT_MAX : Integer = 4
+   LearnMode     : Integer = 0
    IsWaitingForWakeUp, IsCorrectingPlayhead, IsInitialLatchArmed : Boolean = false
    IsEmptyMode : Boolean = true
    IncomingFromArranger : Boolean = false
    IsUpdatingGUI : Boolean = false
    LastViewWasSetlist, IgnoreNextSongSwitch, StyleTriggerResetPending : Boolean = false
-   IsLearningVelMin, IsLearningVelMax : Boolean = false
+   // Velocity Learning enum: 0=NONE, 1=VEL_MIN, 2=VEL_MAX
+   VLEARN_NONE    : Integer = 0
+   VLEARN_MIN     : Integer = 1
+   VLEARN_MAX     : Integer = 2
+   VelLearnMode   : Integer = 0
    DeferredBootRecovery, DeferredManualReboot, IgnoreMorphEcho : Boolean = false
    EmergencyKillSwitch : Boolean = false
    SystemModeActive : Boolean = false
@@ -10061,7 +10071,7 @@ Function ProcessMidiLearn(m : NoteMessage)
    var noteNum, pIdx, vel, i : Integer
    var paramVal : Double = 0.0
 
-   if (IsLearningMin or IsLearningMax or IsLearningOctRangeMin or IsLearningOctRangeMax) and IsNoteOn(m) then
+   if LearnMode != LEARN_NONE and IsNoteOn(m) then
 
        noteNum = GetNoteNumber(m)
        paramVal = noteNum / 127.0
@@ -10069,21 +10079,21 @@ Function ProcessMidiLearn(m : NoteMessage)
        For i = 0; i < 16; i = i + 1 Do
           if OutputScope[i] then
 
-             if IsLearningMin then
+             if LearnMode == LEARN_MIN then
                 SetParameter(BLK_NoteProcessor[i], 0, paramVal)
-             elsif IsLearningMax then
+             elsif LearnMode == LEARN_MAX then
                 SetParameter(BLK_NoteProcessor[i], 1, paramVal)
-             elsif IsLearningOctRangeMin then
+             elsif LearnMode == LEARN_OCT_MIN then
                 pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_OctRangeMin")
                 if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) end
                 Mem_NP_OctRangeMin[i] = noteNum
-             elsif IsLearningOctRangeMax then
+             elsif LearnMode == LEARN_OCT_MAX then
                 pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_OctRangeMax")
                 if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) end
                 Mem_NP_OctRangeMax[i] = noteNum
              end
 
-             if IsLearningMin or IsLearningMax then
+             if LearnMode == LEARN_MIN or LearnMode == LEARN_MAX then
                  UpdateChannelFade(i, 4, 0, 0.0)
              end
 
@@ -10091,10 +10101,7 @@ Function ProcessMidiLearn(m : NoteMessage)
           end
        End
 
-       IsLearningMin = false
-       IsLearningMax = false
-       IsLearningOctRangeMin = false
-       IsLearningOctRangeMax = false
+       LearnMode = LEARN_NONE
        SetWidgetValue(BTN_LearnMin, 0.0)
        SetWidgetValue(BTN_LearnMax, 0.0)
        SetWidgetValue(BTN_LearnOctRangeMin, 0.0)
@@ -10107,28 +10114,27 @@ Function ProcessMidiLearn(m : NoteMessage)
        if DebugMode then Trace("LEARN SUCCESS: Injected Note " + noteNum + " to Scope.") end
    end
    
-   if (IsLearningVelMin or IsLearningVelMax) and IsNoteOn(m) then
+   if VelLearnMode != VLEARN_NONE and IsNoteOn(m) then
            vel = GetVelocity(m)
            paramVal = IntToFloat(vel) / 127.0
-           
+
            For i = 0; i < 16; i = i + 1 Do
               if OutputScope[i] then
-                 if IsLearningVelMin then
+                 if VelLearnMode == VLEARN_MIN then
                     Mem_NP_MinVel[i] = vel
                     pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_MinVel")
                  else
                     Mem_NP_MaxVel[i] = vel
                     pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_MaxVel")
                  end
-                 
+
                  // Inject into plugin
                  if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) end
               end
            End
-           
+
            // Auto-Off: End learn mode
-           IsLearningVelMin = false
-           IsLearningVelMax = false
+           VelLearnMode = VLEARN_NONE
            SetWidgetValue(BTN_Inject_NP_VelMinLearn, 0.0)
            SetWidgetValue(BTN_Inject_NP_VelMaxLearn, 0.0)
            
@@ -14526,34 +14532,30 @@ End
 
 On WidgetValueChanged(val : Double) from BTN_LearnMin
    if val > 0.5 then
-       IsLearningMin = true
-       IsLearningMax = false; IsLearningOctRangeMin = false; IsLearningOctRangeMax = false
+       LearnMode = LEARN_MIN
        SetWidgetValue(BTN_LearnMax, 0.0); SetWidgetValue(BTN_LearnOctRangeMin, 0.0); SetWidgetValue(BTN_LearnOctRangeMax, 0.0)
-   else IsLearningMin = false end
+   else LearnMode = LEARN_NONE end
 End
 
 On WidgetValueChanged(val : Double) from BTN_LearnMax
    if val > 0.5 then
-       IsLearningMax = true
-       IsLearningMin = false; IsLearningOctRangeMin = false; IsLearningOctRangeMax = false
+       LearnMode = LEARN_MAX
        SetWidgetValue(BTN_LearnMin, 0.0); SetWidgetValue(BTN_LearnOctRangeMin, 0.0); SetWidgetValue(BTN_LearnOctRangeMax, 0.0)
-   else IsLearningMax = false end
+   else LearnMode = LEARN_NONE end
 End
 
 On WidgetValueChanged(val : Double) from BTN_LearnOctRangeMin
    if val > 0.5 then
-       IsLearningOctRangeMin = true
-       IsLearningOctRangeMax = false; IsLearningMin = false; IsLearningMax = false
+       LearnMode = LEARN_OCT_MIN
        SetWidgetValue(BTN_LearnOctRangeMax, 0.0); SetWidgetValue(BTN_LearnMin, 0.0); SetWidgetValue(BTN_LearnMax, 0.0)
-   else IsLearningOctRangeMin = false end
+   else LearnMode = LEARN_NONE end
 End
 
 On WidgetValueChanged(val : Double) from BTN_LearnOctRangeMax
    if val > 0.5 then
-       IsLearningOctRangeMax = true
-       IsLearningOctRangeMin = false; IsLearningMin = false; IsLearningMax = false
+       LearnMode = LEARN_OCT_MAX
        SetWidgetValue(BTN_LearnOctRangeMin, 0.0); SetWidgetValue(BTN_LearnMin, 0.0); SetWidgetValue(BTN_LearnMax, 0.0)
-   else IsLearningOctRangeMax = false end
+   else LearnMode = LEARN_NONE end
 End
 
 On WidgetValueChanged(val : Double) from BTN_Inject_NP_OctRangeFade
@@ -14724,13 +14726,13 @@ On WidgetValueChanged(val : Double) from BTN_Inject_NP_VelMax_Up
 End
 
 On WidgetValueChanged(val : Double) from BTN_Inject_NP_VelMinLearn
-   if val > 0.5 then IsLearningVelMin = true; IsLearningVelMax = false; SetWidgetValue(BTN_Inject_NP_VelMaxLearn, 0.0)
-   else IsLearningVelMin = false end
+   if val > 0.5 then VelLearnMode = VLEARN_MIN; SetWidgetValue(BTN_Inject_NP_VelMaxLearn, 0.0)
+   else VelLearnMode = VLEARN_NONE end
 End
 
 On WidgetValueChanged(val : Double) from BTN_Inject_NP_VelMaxLearn
-   if val > 0.5 then IsLearningVelMax = true; IsLearningVelMin = false; SetWidgetValue(BTN_Inject_NP_VelMinLearn, 0.0)
-   else IsLearningVelMax = false end
+   if val > 0.5 then VelLearnMode = VLEARN_MAX; SetWidgetValue(BTN_Inject_NP_VelMinLearn, 0.0)
+   else VelLearnMode = VLEARN_NONE end
 End
 
 // --- CALLBACKS: HUMANIZER ---
@@ -16274,7 +16276,7 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0_A
    var regNameDecoded, regNameSlug, gpSongSlug, gpArtistSlug : String
    var foundMatch : Boolean = false; var currentSongName : String
    var regNumber, byteIdx, swIdx : Integer
-   var incomingHexFull : String = ""
+   var incomingHexFull : String = ""; var hexByte : String
 
    msgSize = SM_Length(m)
    If msgSize >= 6 Then
@@ -16293,7 +16295,9 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0_A
          if byteIdx > 0 then
             incomingHexFull = incomingHexFull + " "
          end
-         incomingHexFull = incomingHexFull + IntToHexString(SM_GetValue(m, byteIdx))
+         hexByte = IntToHexString(SM_GetValue(m, byteIdx))
+         if Length(hexByte) == 1 then hexByte = "0" + hexByte end
+         incomingHexFull = incomingHexFull + hexByte
       End
       incomingHexFull = MyToUpper(incomingHexFull)
 
