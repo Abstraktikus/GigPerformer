@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.002"
+   SCRIPT_VERSION : String = "2026-04-14.003"
 
    DebugMode : Boolean = false
 
@@ -6538,6 +6538,40 @@ Function BuildLFOUsageIndex()
 End
 
 // ---------------------------------------------------------
+// SYNC LFO_ByMacro — populate from LFO_Usage for active map
+// Must be called after every BuildLFOUsageIndex().
+// ---------------------------------------------------------
+Function SyncLFOByMacro()
+   var i, activeMapIdx : Integer
+
+   // Reset all slots to unbound
+   For i = 0; i < MAX_MACROS; i = i + 1 Do
+      LFO_ByMacro[i] = -1
+   End
+
+   // Find current map index in CtrlMapList
+   activeMapIdx = -1
+   For i = 0; i < Size(CtrlMapList); i = i + 1 Do
+      if CtrlMapList[i] == CurrentCtrlMapName then activeMapIdx = i end
+   End
+
+   // Populate from usage index entries that match the active map
+   For i = 0; i < Size(LFO_Usage_LfoIdx); i = i + 1 Do
+      if LFO_Usage_MapIdx[i] == activeMapIdx and LFO_Usage_MacroIdx[i] >= 0 and LFO_Usage_MacroIdx[i] < MAX_MACROS then
+         LFO_ByMacro[LFO_Usage_MacroIdx[i]] = LFO_Usage_LfoIdx[i]
+      end
+   End
+
+   if DebugMode then
+      activeMapIdx = 0
+      For i = 0; i < MAX_MACROS; i = i + 1 Do
+         if LFO_ByMacro[i] >= 0 then activeMapIdx = activeMapIdx + 1 end
+      End
+      Trace("LFO v2: SyncLFOByMacro complete, " + activeMapIdx + " bound slots for map '" + CurrentCtrlMapName + "'")
+   end
+End
+
+// ---------------------------------------------------------
 // BUILD LFO BIND LINES (v2)
 // Populates LFOBind_Lines with the head-line-only display of every
 // binding for a given LFO, grouped by map. Called from
@@ -7392,6 +7426,7 @@ Function LoadControllerMap(mapName : String)
    var inDefaultMap, inTargetMap, isFirstLoad, targetMapFound : Boolean
    var savedEditScope, dbIdx : Integer
    var ctrlMapFilePath : String
+   var strippedLine : String; var lfoPipePos : Integer
 
    savedEditScope = CurrentEditScope
    ctrlMapFilePath = UserSnapshotPath + "/ControllerMaps.txt"
@@ -7464,7 +7499,20 @@ Function LoadControllerMap(mapName : String)
                      end
                   // Macro lines (per-layer merge)
                   elsif IndexOfSubstring(key, "Macro", false) == 0 then
-                     ParseMacroLine(trimmedLine, false)
+                     // Strip LFO:<name> | prefix before parsing bindings.
+                     // LFO bindings are tracked separately via BuildLFOUsageIndex.
+                     // If only an LFO prefix remains (no bindings), skip parsing
+                     // entirely so Default bindings stay inherited via CloneDefaultToActive.
+                     if IndexOfSubstring(val, "LFO:", false) == 0 then
+                        lfoPipePos = IndexOfSubstring(val, "|", false)
+                        if lfoPipePos >= 0 then
+                           strippedLine = key + " = " + TrimString(CopySubstring(val, lfoPipePos + 1, Length(val) - (lfoPipePos + 1)))
+                           ParseMacroLine(strippedLine, false)
+                        end
+                        // else: LFO-only line, no pipe → skip, keep Default inheritance
+                     else
+                        ParseMacroLine(trimmedLine, false)
+                     end
                   end
                end
             end
@@ -13252,6 +13300,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
 
             LoadControllerMap(targetCtrlMap)
             BuildLFOUsageIndex()  // v2: rebuild reverse index against the freshly loaded map
+            SyncLFOByMacro()
             HardwareSyncTimer = TimeSinceStartup() + 3500.0
             SyncInputFeedback()
             TriggerSongTextLoad(songName)
@@ -13310,6 +13359,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
        
        LoadControllerMap("Standard")
        BuildLFOUsageIndex()  // v2: rebuild reverse index against the freshly loaded map
+       SyncLFOByMacro()
        HardwareSyncTimer = TimeSinceStartup() + 100.0
 
        SyncInputFeedback()
@@ -13965,6 +14015,7 @@ Initialization
    if DebugMode then Trace("LFO v2: reverse index + draft + flash state initialized") end
    LoadLFOConfig()   // v1: populate registry after arrays are zeroed
    BuildLFOUsageIndex()  // v2: scan ControllerMaps.txt for bindings
+   SyncLFOByMacro()
 
    // ====================================================================================
    // PHASE 5: DATABASE LOADING
@@ -15362,7 +15413,13 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Save
                                if DebugMode then Trace("LFO v2: DRAFT save, wrote LFO:" + lfoName + " prefix to [" + mapName + "] Macro" + (scopeSlot + 1) + " (saved=" + saved + ")") end
                            end
                        else
-                           if DebugMode then Trace("LFO v2: BTN_LFO_Save: Macro" + (scopeSlot + 1) + " not found in section [" + mapName + "]") end
+                           // Macro not in song section (inherited from Default).
+                           // Append an LFO-only line — bindings stay inherited.
+                           newLine = "Macro" + (scopeSlot + 1) + " = LFO:" + lfoName
+                           section = section + newLine + NEW_LINE
+                           content = CopySubstring(content, 0, mapSectionStart + Length("[Map:" + mapName + "]")) + section + CopySubstring(content, mapSectionStart + Length("[Map:" + mapName + "]") + mapSectionEnd, Length(content) - (mapSectionStart + Length("[Map:" + mapName + "]") + mapSectionEnd))
+                           saved = SaveStringToTextFile(ControllerMapFilePath, content)
+                           if DebugMode then Trace("LFO v2: DRAFT save, appended LFO-only line to [" + mapName + "] Macro" + (scopeSlot + 1) + " (inherited, saved=" + saved + ")") end
                        end
                    end
                end
@@ -15384,6 +15441,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Save
                UpdateEditScopeDisplay()
                UpdateControllerInfoDisplay()
                BuildLFOUsageIndex()
+               SyncLFOByMacro()
                RefreshLFOInspector()
            end
        end
@@ -15485,6 +15543,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Delete
                CurrentEditScope = scopeSlot
                UpdateEditScopeDisplay()
                BuildLFOUsageIndex()
+               SyncLFOByMacro()
                RefreshLFOInspector()
            end
        end
