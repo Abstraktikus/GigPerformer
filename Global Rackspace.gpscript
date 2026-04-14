@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.014"
+   SCRIPT_VERSION : String = "2026-04-14.015"
 
    DebugMode : Boolean = false
 
@@ -771,10 +771,11 @@ Var
    Def_Mac_SourceLayer : Integer Array      // default clone
 
    // Reverse lookups (rebuilt on map load) — per-layer CC dispatch
-   Mac_ReverseLookup_L0 : Integer Array     // [256] CC -> macroIdx for LAY0
-   Mac_ReverseLookup_L1 : Integer Array     // [256] CC -> macroIdx for LAY1
-   Mac_ReverseLookup_L2 : Integer Array     // [256] CC -> macroIdx for LAY2
-   Mac_ReverseLookup_L3 : Integer Array     // [256] CC -> macroIdx for LAY3
+   LOOKUP_SIZE : Integer = 2048  // 16 channels * 128 CCs
+   Mac_ReverseLookup_L0 : Integer Array     // [LOOKUP_SIZE] ch*128+cc -> macroIdx for LAY0
+   Mac_ReverseLookup_L1 : Integer Array     // [LOOKUP_SIZE] ch*128+cc -> macroIdx for LAY1
+   Mac_ReverseLookup_L2 : Integer Array     // [LOOKUP_SIZE] ch*128+cc -> macroIdx for LAY2
+   Mac_ReverseLookup_L3 : Integer Array     // [LOOKUP_SIZE] ch*128+cc -> macroIdx for LAY3
    Mac_ReverseLookup_SysAct : Integer Array // [MAX_MACROS] macroIdx -> sysActionIdx
 
    // Debounce state for full-range movement-toggle overlays
@@ -3265,10 +3266,10 @@ End
 Function InitMacroArrays_Lookups()
    var i : Integer
    // Per-layer reverse CC lookups (layer-aware dispatch)
-   Mac_ReverseLookup_L0 = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_L0 <-- -1 End
-   Mac_ReverseLookup_L1 = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_L1 <-- -1 End
-   Mac_ReverseLookup_L2 = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_L2 <-- -1 End
-   Mac_ReverseLookup_L3 = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_L3 <-- -1 End
+   Mac_ReverseLookup_L0 = []; For i = 0; i < LOOKUP_SIZE; i = i + 1 Do Mac_ReverseLookup_L0 <-- -1 End
+   Mac_ReverseLookup_L1 = []; For i = 0; i < LOOKUP_SIZE; i = i + 1 Do Mac_ReverseLookup_L1 <-- -1 End
+   Mac_ReverseLookup_L2 = []; For i = 0; i < LOOKUP_SIZE; i = i + 1 Do Mac_ReverseLookup_L2 <-- -1 End
+   Mac_ReverseLookup_L3 = []; For i = 0; i < LOOKUP_SIZE; i = i + 1 Do Mac_ReverseLookup_L3 <-- -1 End
    Mac_ReverseLookup_SysAct = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Mac_ReverseLookup_SysAct <-- -1 End
    Debounce_Active = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_Active <-- false End
    Debounce_Timer = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_Timer <-- 0.0 End
@@ -7376,7 +7377,7 @@ Function RebuildReverseLookups()
    var actionName, label : String
 
    // Clear all 4 per-layer reverse lookup arrays
-   For m = 0; m < 256; m = m + 1 Do
+   For m = 0; m < LOOKUP_SIZE; m = m + 1 Do
       Mac_ReverseLookup_L0[m] = -1
       Mac_ReverseLookup_L1[m] = -1
       Mac_ReverseLookup_L2[m] = -1
@@ -7416,7 +7417,7 @@ Function RebuildReverseLookups()
             physCh = ResolveControlChannel(devIdx, label)
             if physCC >= 0 and physCh >= 0 then
                lookupIdx = physCh * 128 + physCC
-               if lookupIdx >= 0 and lookupIdx < 256 then
+               if lookupIdx >= 0 and lookupIdx < LOOKUP_SIZE then
                   if layer == 0 then
                      Mac_ReverseLookup_L0[lookupIdx] = m
                   elsif layer == 1 then
@@ -11780,7 +11781,7 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
 
        // --- C: REVERSE LOOKUP (CC -> Macro) — layer-aware dispatch ---
        lookupIdx = ch * 128 + cc
-       if lookupIdx >= 0 and lookupIdx < 256 then
+       if lookupIdx >= 0 and lookupIdx < LOOKUP_SIZE then
           // Select lookup by ActiveLayer
           if ActiveLayer == 0 then
              macroFromLookup = Mac_ReverseLookup_L0[lookupIdx]
@@ -11931,7 +11932,7 @@ Function ProcessHardwareNote(m : NoteMessage)
 
         // Note-based macro dispatch — layer-aware reverse lookup
         lookupIdx = chan * 128 + noteNum
-        if lookupIdx >= 0 and lookupIdx < 256 then
+        if lookupIdx >= 0 and lookupIdx < LOOKUP_SIZE then
            // Select lookup by ActiveLayer
            if ActiveLayer == 0 then
               macroFromLookup = Mac_ReverseLookup_L0[lookupIdx]
