@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.016"
+   SCRIPT_VERSION : String = "2026-04-14.017"
 
    DebugMode : Boolean = false
 
@@ -15870,6 +15870,8 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_B
        Arr_EchoBlockTimer[ccChan + 1] = TimeSinceStartup() + 200.0
        Arr_LastSentVol[ccChan + 1] = val
        if DebugMode then Trace("VOL-IN: Ch" + IntToString(ccChan + 1) + " <- " + IntToString(val) + " (scaled=" + scaledVol + ")") end
+       // CC7 also drives the macro system (encoder/fader → VST parameter)
+       ProcessHardwareCC(m)
 
     // --- Style feedback: CC5 on TriggerChannel = hardware start/stop ---
     elsif ccChan + 1 == DEV_TriggerChannel and cc == 5 then
