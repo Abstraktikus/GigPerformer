@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.022"
+   SCRIPT_VERSION : String = "2026-04-14.023"
 
    DebugMode : Boolean = true
 
@@ -4804,36 +4804,48 @@ Function MorphSend(sliderIdx : Integer, val : Double)
     end
 End
 
-// Read values directly from the plugin and update Mac_Layer_* ranges
+// Read values directly from the plugin and update Mac_Layer_* ranges.
+// SuperKnob support: iterates ALL non-OTZ base bindings on the macro.
+// OTZ overlays are skipped (they have fixed trigger ranges).
 Function CaptureSmartRanges(isMin : Boolean)
-   var macIdx, fi, bc, vstIdx, paramIdx, count : Integer = 0
-   var currentVal, diff : Double = 0.0
+   var macIdx, b, bc, vstIdx, paramIdx, count : Integer
+   var currentVal, diff, oldMin, oldMax : Double = 0.0
    var sIdx : Integer
 
+   count = 0
    For macIdx = 1; macIdx <= 16; macIdx = macIdx + 1 Do
        sIdx = macIdx - 1
        if CurrentEditScope == -1 or CurrentEditScope == sIdx then
-           bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
-           if bc > 0 then
-               fi = MacLayerBindIdx(macIdx, 0, 0)
-               // Skip non-VST targets (CCs, keywords, etc.)
-               if Mac_Layer_TargetType[fi] == "VST" then
-                   vstIdx = Mac_Layer_VSTIdx[fi]
-                   paramIdx = Mac_Layer_ParamIdx[fi]
-                   currentVal = 0.0
-                   if vstIdx >= 1 and vstIdx <= MAX_VSTS then
-                       currentVal = GetParameter(BLK_VST[vstIdx], paramIdx)
-                   end
+           bc = Mac_Layer_BindCount[macIdx]
+           For b = 0; b < bc; b = b + 1 Do
+               // Skip OTZ overlays — fixed trigger ranges, not a learn target
+               if not GetMacIsOTZ(macIdx, b) then
+                   if GetMacTargetType(macIdx, b) == "VST" then
+                       vstIdx = GetMacVSTIdx(macIdx, b)
+                       paramIdx = GetMacParamIdx(macIdx, b)
+                       currentVal = 0.0
+                       if vstIdx >= 1 and vstIdx <= MAX_VSTS then
+                           currentVal = GetParameter(BLK_VST[vstIdx], paramIdx)
+                       end
+                       oldMin = GetMacRangeMin(macIdx, b)
+                       oldMax = GetMacRangeMax(macIdx, b)
 
-                   if isMin then
-                       diff = Abs(currentVal - Mac_Layer_RangeMax[fi])
-                       if diff > 0.001 then Mac_Layer_RangeMin[fi] = currentVal; count = count + 1 end
-                   else
-                       diff = Abs(currentVal - Mac_Layer_RangeMin[fi])
-                       if diff > 0.001 then Mac_Layer_RangeMax[fi] = currentVal; count = count + 1 end
+                       if isMin then
+                           diff = Abs(currentVal - oldMax)
+                           if diff > 0.001 then
+                               SetMacRangeMin(macIdx, b, currentVal)
+                               count = count + 1
+                           end
+                       else
+                           diff = Abs(currentVal - oldMin)
+                           if diff > 0.001 then
+                               SetMacRangeMax(macIdx, b, currentVal)
+                               count = count + 1
+                           end
+                       end
                    end
                end
-           end
+           End
        end
    End
    if isMin then Trace("Editor: Captured MIN (A) values for " + count + " bindings.") else Trace("Editor: Captured MAX (B) values for " + count + " bindings.") end
