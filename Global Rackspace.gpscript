@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.015"
+   SCRIPT_VERSION : String = "2026-04-14.016"
 
    DebugMode : Boolean = false
 
@@ -771,7 +771,7 @@ Var
    Def_Mac_SourceLayer : Integer Array      // default clone
 
    // Reverse lookups (rebuilt on map load) — per-layer CC dispatch
-   LOOKUP_SIZE : Integer = 2048  // 16 channels * 128 CCs
+   LOOKUP_SIZE : Integer = 256   // GPScript array limit; fallback linear search for overflow
    Mac_ReverseLookup_L0 : Integer Array     // [LOOKUP_SIZE] ch*128+cc -> macroIdx for LAY0
    Mac_ReverseLookup_L1 : Integer Array     // [LOOKUP_SIZE] ch*128+cc -> macroIdx for LAY1
    Mac_ReverseLookup_L2 : Integer Array     // [LOOKUP_SIZE] ch*128+cc -> macroIdx for LAY2
@@ -11670,7 +11670,7 @@ Function FireSystemAction(actionIdx : Integer)
 End
 
 Function ProcessHardwareCC(m : ControlChangeMessage)
-   var ch, cc, i, lookupIdx, macroFromLookup, pIdx : Integer
+   var ch, cc, i, lookupIdx, macroFromLookup, pIdx, scanIdx : Integer
    var val : Double = 0.0
    var mName : String = ""
 
@@ -11781,8 +11781,9 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
 
        // --- C: REVERSE LOOKUP (CC -> Macro) — layer-aware dispatch ---
        lookupIdx = ch * 128 + cc
+       macroFromLookup = -1
        if lookupIdx >= 0 and lookupIdx < LOOKUP_SIZE then
-          // Select lookup by ActiveLayer
+          // Fast path: array lookup
           if ActiveLayer == 0 then
              macroFromLookup = Mac_ReverseLookup_L0[lookupIdx]
           elsif ActiveLayer == 1 then
@@ -11792,14 +11793,25 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
           elsif ActiveLayer == 3 then
              macroFromLookup = Mac_ReverseLookup_L3[lookupIdx]
           end
-          if macroFromLookup > 0 then
-             ExecuteHardwareMacro(macroFromLookup, val)
-             TriggerMacroFeedback(macroFromLookup - 1, false, val)
-             // Deferred SYSACT dispatch (ExecuteHardwareMacro can't call FireSystemAction directly)
-             if PendingSysActionIdx >= 0 then
-                FireSystemAction(PendingSysActionIdx)
-                PendingSysActionIdx = -1
+       else
+          // Slow path: linear scan (ch*128+cc >= 256, e.g. CC7 on ch2+)
+          For scanIdx = 1; scanIdx < MAX_LAYER_MACROS; scanIdx = scanIdx + 1 Do
+             if Mac_SourceCount[scanIdx] > 0 and Mac_SourceLayer[scanIdx] == ActiveLayer then
+                if ResolveControlCC(Mac_SourceDev[MacSourceIdx(scanIdx, 0)], Mac_SourceLabel[MacSourceIdx(scanIdx, 0)]) == cc then
+                   if ResolveControlChannel(Mac_SourceDev[MacSourceIdx(scanIdx, 0)], Mac_SourceLabel[MacSourceIdx(scanIdx, 0)]) == ch then
+                      macroFromLookup = scanIdx
+                   end
+                end
              end
+          End
+       end
+       if macroFromLookup > 0 then
+          ExecuteHardwareMacro(macroFromLookup, val)
+          TriggerMacroFeedback(macroFromLookup - 1, false, val)
+          // Deferred SYSACT dispatch (ExecuteHardwareMacro can't call FireSystemAction directly)
+          if PendingSysActionIdx >= 0 then
+             FireSystemAction(PendingSysActionIdx)
+             PendingSysActionIdx = -1
           end
        end
 
@@ -11907,7 +11919,7 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
 End
 
 Function ProcessHardwareNote(m : NoteMessage)
-    var chan, noteNum, lookupIdx, macroFromLookup : Integer
+    var chan, noteNum, lookupIdx, macroFromLookup, scanIdx : Integer
     var val : Double = 0.0
     chan = GetChannel(m)
     noteNum = GetNoteNumber(m)
@@ -11932,8 +11944,8 @@ Function ProcessHardwareNote(m : NoteMessage)
 
         // Note-based macro dispatch — layer-aware reverse lookup
         lookupIdx = chan * 128 + noteNum
+        macroFromLookup = -1
         if lookupIdx >= 0 and lookupIdx < LOOKUP_SIZE then
-           // Select lookup by ActiveLayer
            if ActiveLayer == 0 then
               macroFromLookup = Mac_ReverseLookup_L0[lookupIdx]
            elsif ActiveLayer == 1 then
@@ -11943,12 +11955,23 @@ Function ProcessHardwareNote(m : NoteMessage)
            elsif ActiveLayer == 3 then
               macroFromLookup = Mac_ReverseLookup_L3[lookupIdx]
            end
-           if macroFromLookup > 0 then
-              ExecuteHardwareMacro(macroFromLookup, val)
-              if PendingSysActionIdx >= 0 then
-                 FireSystemAction(PendingSysActionIdx)
-                 PendingSysActionIdx = -1
+        else
+           // Slow path: linear scan (overflow)
+           For scanIdx = 1; scanIdx < MAX_LAYER_MACROS; scanIdx = scanIdx + 1 Do
+              if Mac_SourceCount[scanIdx] > 0 and Mac_SourceLayer[scanIdx] == ActiveLayer then
+                 if ResolveControlCC(Mac_SourceDev[MacSourceIdx(scanIdx, 0)], Mac_SourceLabel[MacSourceIdx(scanIdx, 0)]) == noteNum then
+                    if ResolveControlChannel(Mac_SourceDev[MacSourceIdx(scanIdx, 0)], Mac_SourceLabel[MacSourceIdx(scanIdx, 0)]) == chan then
+                       macroFromLookup = scanIdx
+                    end
+                 end
               end
+           End
+        end
+        if macroFromLookup > 0 then
+           ExecuteHardwareMacro(macroFromLookup, val)
+           if PendingSysActionIdx >= 0 then
+              FireSystemAction(PendingSysActionIdx)
+              PendingSysActionIdx = -1
            end
         end
     end
