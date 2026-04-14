@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.012"
+   SCRIPT_VERSION : String = "2026-04-14.013"
 
    DebugMode : Boolean = false
 
@@ -236,6 +236,7 @@ Var
    LayerSwitch_Type : String Array = ["", "", "", "", "", "", "", ""]
    LayerSwitch_OnData : String Array = ["", "", "", "", "", "", "", ""]
    LayerSwitch_OffData : String Array = ["", "", "", "", "", "", "", ""]
+   LayerSwitch_Channel : Integer Array = [-1, -1, -1, -1, -1, -1, -1, -1]  // -1 = any channel
    LayerSwitch_State : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0]
    // Per-switch cross-talk guard: when switch X goes ON, all OTHER switches
    // get a 200ms OFF-suppression window to absorb phantom OFF bursts.
@@ -1760,6 +1761,7 @@ Function ParseDeviceConfig()
                      key == "Type"     Do LayerSwitch_Type[currentSwitchIdx] = val
                      key == "OnData"   Do LayerSwitch_OnData[currentSwitchIdx] = val
                      key == "OffData"  Do LayerSwitch_OffData[currentSwitchIdx] = val
+                     key == "Channel"  Do LayerSwitch_Channel[currentSwitchIdx] = StringToInt(val)
                   End
 
                elsif section == "LAYERMAP" and currentMapIdx >= 0 then
@@ -1800,7 +1802,7 @@ Function ParseDeviceConfig()
       if LayerSwitch_Count > 0 then
          Trace("HAL: " + IntToString(LayerSwitch_Count) + " layer switches, " + IntToString(Permanent_Count) + " permanent bindings, " + IntToString(Overlay_Count) + " overlay actions")
          For sw = 0; sw < LayerSwitch_Count; sw = sw + 1 Do
-            Trace("  Switch " + IntToString(sw) + ": " + LayerSwitch_Label[sw] + " [" + LayerSwitch_Type[sw] + "]")
+            Trace("  Switch " + IntToString(sw) + ": " + LayerSwitch_Label[sw] + " [" + LayerSwitch_Type[sw] + "] OnData=" + LayerSwitch_OnData[sw] + " Ch=" + LayerSwitch_Channel[sw])
          End
       end
 
@@ -15601,6 +15603,35 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_A
     var cc : Integer = GetCCNumber(m)
     var val : Integer = GetCCValue(m)
     var ccChan : Integer = GetChannel(m)
+    var swC, guardC : Integer
+
+    // 0. Layer Switch matching (Type=CC)
+    For swC = 0; swC < LayerSwitch_Count; swC = swC + 1 Do
+       if LayerSwitch_DevIdx[swC] == 0 and LayerSwitch_Type[swC] == "CC" then
+          if StringToInt(LayerSwitch_OnData[swC]) == cc and (LayerSwitch_Channel[swC] == -1 or LayerSwitch_Channel[swC] == ccChan) then
+             if val > 63 then
+                if LayerSwitch_State[swC] == 0 then
+                   LayerSwitch_State[swC] = 1
+                   UpdateActiveLayer()
+                   For guardC = 0; guardC < LayerSwitch_Count; guardC = guardC + 1 Do
+                      if guardC != swC then IgnoreSwitchOffUntil[guardC] = TimeSinceStartup() + 200.0 end
+                   End
+                   if DebugMode then Trace("LAYERSWITCH " + IntToString(swC) + " (" + LayerSwitch_Label[swC] + "): ON [CC" + cc + "=" + val + "]") end
+                end
+             else
+                if LayerSwitch_State[swC] == 1 then
+                   if TimeSinceStartup() < IgnoreSwitchOffUntil[swC] then
+                      if DebugMode then Trace("LAYERSWITCH " + IntToString(swC) + " (" + LayerSwitch_Label[swC] + "): OFF suppressed (cross-talk) [CC]") end
+                   else
+                      LayerSwitch_State[swC] = 0
+                      UpdateActiveLayer()
+                      if DebugMode then Trace("LAYERSWITCH " + IntToString(swC) + " (" + LayerSwitch_Label[swC] + "): OFF [CC" + cc + "=" + val + "]") end
+                   end
+                end
+             end
+          end
+       end
+    End
 
     // --- Style feedback: CC5 on TriggerChannel = hardware start/stop ---
     if ccChan + 1 == DEV_TriggerChannel and cc == 5 then
@@ -15678,6 +15709,32 @@ End
 On NoteEvent(m : NoteMessage) from DeviceIn_0_A
     var chan : Integer = GetChannel(m)
     var inTrigIdx : Integer
+    var swN, guardN, noteNum : Integer
+
+    // 0. Layer Switch matching (Type=NOTE)
+    noteNum = GetNoteNumber(m)
+    For swN = 0; swN < LayerSwitch_Count; swN = swN + 1 Do
+       if LayerSwitch_DevIdx[swN] == 0 and LayerSwitch_Type[swN] == "NOTE" then
+          if StringToInt(LayerSwitch_OnData[swN]) == noteNum and (LayerSwitch_Channel[swN] == -1 or LayerSwitch_Channel[swN] == chan) then
+             if IsNoteOn(m) and GetVelocity(m) > 0 then
+                LayerSwitch_State[swN] = 1
+                UpdateActiveLayer()
+                For guardN = 0; guardN < LayerSwitch_Count; guardN = guardN + 1 Do
+                   if guardN != swN then IgnoreSwitchOffUntil[guardN] = TimeSinceStartup() + 200.0 end
+                End
+                if DebugMode then Trace("LAYERSWITCH " + IntToString(swN) + " (" + LayerSwitch_Label[swN] + "): ON [NOTE " + noteNum + "]") end
+             else
+                if TimeSinceStartup() < IgnoreSwitchOffUntil[swN] then
+                   if DebugMode then Trace("LAYERSWITCH " + IntToString(swN) + " (" + LayerSwitch_Label[swN] + "): OFF suppressed (cross-talk) [NOTE]") end
+                else
+                   LayerSwitch_State[swN] = 0
+                   UpdateActiveLayer()
+                   if DebugMode then Trace("LAYERSWITCH " + IntToString(swN) + " (" + LayerSwitch_Label[swN] + "): OFF [NOTE " + noteNum + "]") end
+                end
+             end
+          end
+       end
+    End
 
     // 1. Call central HAL logic for macros
     ProcessHardwareNote(m)

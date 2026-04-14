@@ -328,9 +328,10 @@ Data=F0 00 20 6B 7F 42 02 00 62 07 F7
 ; LAYER SWITCHES — Binary toggle triggers (incoming)
 ; =============================================================================
 ; Type = SYSEX | NOTE | CC
-; SYSEX: OnData/OffData = one signature message picked from the burst
-; NOTE:  Velocity > 0 = ON, Velocity 0 = OFF
-; CC:    Value > 63 = ON, Value <= 63 = OFF
+; SYSEX: OnData/OffData = full hex signature from the burst
+; NOTE:  OnData = note number. Velocity > 0 = ON, Velocity 0 = OFF
+; CC:    OnData = CC number. Value > 63 = ON, Value <= 63 = OFF
+; Channel = MIDI channel (0-15). Omit for any channel. Only for NOTE/CC.
 
 [LAYERSWITCH:0]
 Device=0
