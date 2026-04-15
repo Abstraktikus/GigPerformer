@@ -33,9 +33,9 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-13.008"
+   SCRIPT_VERSION : String = "2026-04-14.025"
 
-   DebugMode : Boolean = false
+   DebugMode : Boolean = true
 
    // --- Crash-safe trace sinks (independent of GP's in-app log) ---
    // When CrashDebugMode = true, every call to Trace() additionally:
@@ -236,8 +236,11 @@ Var
    LayerSwitch_Type : String Array = ["", "", "", "", "", "", "", ""]
    LayerSwitch_OnData : String Array = ["", "", "", "", "", "", "", ""]
    LayerSwitch_OffData : String Array = ["", "", "", "", "", "", "", ""]
+   LayerSwitch_Channel : Integer Array = [-1, -1, -1, -1, -1, -1, -1, -1]  // -1 = any channel
    LayerSwitch_State : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0]
-   IgnoreVHOffUntil : Double = 0.0  // Cross-talk guard: TALK ON suppresses VH OFF for 200ms
+   // Per-switch cross-talk guard: when switch X goes ON, all OTHER switches
+   // get a 200ms OFF-suppression window to absorb phantom OFF bursts.
+   IgnoreSwitchOffUntil : Double Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
    // --- Layer Map (switch combination → layer number) ---
    MAX_LAYERS : Integer = 4
@@ -432,14 +435,24 @@ Var
    IsUpdatingMatrix, IsUpdatingFilters, IsUpdatingNP, IsUpdatingBypassUI : Boolean = false
    IsSaving, IsLoadingSnapshot, IsLoading : Boolean = false  
    IsHardwareLearning, IsPerformanceActive, IsPresetLocked : Boolean = false
-   IsBrowsingFavorites, IsLearningMin, IsLearningMax : Boolean = false
-   IsLearningOctRangeMin, IsLearningOctRangeMax : Boolean = false
+   IsBrowsingFavorites : Boolean = false
+   // Learning Mode enum: 0=NONE, 1=MIN_NOTE, 2=MAX_NOTE, 3=OCT_MIN, 4=OCT_MAX
+   LEARN_NONE    : Integer = 0
+   LEARN_MIN     : Integer = 1
+   LEARN_MAX     : Integer = 2
+   LEARN_OCT_MIN : Integer = 3
+   LEARN_OCT_MAX : Integer = 4
+   LearnMode     : Integer = 0
    IsWaitingForWakeUp, IsCorrectingPlayhead, IsInitialLatchArmed : Boolean = false
    IsEmptyMode : Boolean = true
    IncomingFromArranger : Boolean = false
    IsUpdatingGUI : Boolean = false
    LastViewWasSetlist, IgnoreNextSongSwitch, StyleTriggerResetPending : Boolean = false
-   IsLearningVelMin, IsLearningVelMax : Boolean = false
+   // Velocity Learning enum: 0=NONE, 1=VEL_MIN, 2=VEL_MAX
+   VLEARN_NONE    : Integer = 0
+   VLEARN_MIN     : Integer = 1
+   VLEARN_MAX     : Integer = 2
+   VelLearnMode   : Integer = 0
    DeferredBootRecovery, DeferredManualReboot, IgnoreMorphEcho : Boolean = false
    EmergencyKillSwitch : Boolean = false
    SystemModeActive : Boolean = false
@@ -713,31 +726,84 @@ Var
 
    // --- Unified Macro System (v2) ---
    MAX_SOURCES_PER_MACRO : Integer = 2  // 100 * 2 = 200, under 256
-   MAX_BINDINGS_PER_LAYER : Integer = 2  // GP array limit: 256 max. 100*2=200 fits (no layer dimension).
+   MAX_BINDINGS_PER_LAYER : Integer = 8  // OTZ redesign: free mix of base+overlay bindings per macro
    MAX_OVERLAY_BINDINGS : Integer = 128
+
+   // OTZ Mode constants (Mac_Layer_Mode values)
+   MODE_POINT : Integer = 0  // min==max: trigger at exact value
+   MODE_RANGE : Integer = 1  // min<max: trigger inside range
+   MODE_DIR   : Integer = 2  // directional: plus=ON, minus=OFF, 10s debounce
 
    // Source arrays: which hardware controls feed each macro
    Mac_SourceCount : Integer Array       // [MAX_MACROS]
    Mac_SourceDev : Integer Array         // [MAX_MACROS * MAX_SOURCES_PER_MACRO]
    Mac_SourceLabel : String Array        // [MAX_MACROS * MAX_SOURCES_PER_MACRO] DeviceConfig label (e.g. Enc1, Fader3)
 
-   // Per-macro bindings: flat arrays (no layer dimension — layer is in source)
-   // Index = macroIdx * MAX_BINDINGS_PER_LAYER + bindIdx
-   Mac_Layer_BindCount : Integer Array   // [MAX_LAYER_MACROS]
-   Mac_Layer_TargetType : String Array   // VST/CC/KEYWORD/SYSACT/OVERLAY
-   Mac_Layer_Target : String Array       // serialized target string
-   Mac_Layer_RangeMin : Double Array
-   Mac_Layer_RangeMax : Double Array
-   Mac_Layer_Channel : Integer Array     // for overlay targets (MIDI channel)
-   Mac_Layer_VSTIdx : Integer Array      // for VST targets
-   Mac_Layer_ParamIdx : Integer Array    // for VST targets
-   Mac_Layer_ParamLabel : String Array   // cached param names from VST
+   // Per-macro bindings: 4-bank split (GPScript 256-element array limit).
+   // Bank 0 holds bindings 0-1, Bank 1 holds 2-3, Bank 2 holds 4-5, Bank 3 holds 6-7.
+   // Each bank is 200 elements (100 macros × 2 bindings/bank).
+   // Use helper functions GetMacX(macroIdx, bindIdx) / SetMacX(...) for access.
+   Mac_Layer_BindCount : Integer Array     // [MAX_LAYER_MACROS] total bindings (0-8)
+
+   // Bank 0 (bindIdx 0-1)
+   Mac_Layer_TargetType  : String Array
+   Mac_Layer_Target      : String Array
+   Mac_Layer_RangeMin    : Double Array
+   Mac_Layer_RangeMax    : Double Array
+   Mac_Layer_Channel     : Integer Array
+   Mac_Layer_VSTIdx      : Integer Array
+   Mac_Layer_ParamIdx    : Integer Array
+   Mac_Layer_ParamLabel  : String Array
+   Mac_Layer_IsOTZ       : Boolean Array
+   Mac_Layer_Mode        : Integer Array
+   Mac_Layer_HasReset    : Boolean Array
+
+   // Bank 1 (bindIdx 2-3)
+   Mac_Layer_TargetType_B : String Array
+   Mac_Layer_Target_B     : String Array
+   Mac_Layer_RangeMin_B   : Double Array
+   Mac_Layer_RangeMax_B   : Double Array
+   Mac_Layer_Channel_B    : Integer Array
+   Mac_Layer_VSTIdx_B     : Integer Array
+   Mac_Layer_ParamIdx_B   : Integer Array
+   Mac_Layer_ParamLabel_B : String Array
+   Mac_Layer_IsOTZ_B      : Boolean Array
+   Mac_Layer_Mode_B       : Integer Array
+   Mac_Layer_HasReset_B   : Boolean Array
+
+   // Bank 2 (bindIdx 4-5)
+   Mac_Layer_TargetType_C : String Array
+   Mac_Layer_Target_C     : String Array
+   Mac_Layer_RangeMin_C   : Double Array
+   Mac_Layer_RangeMax_C   : Double Array
+   Mac_Layer_Channel_C    : Integer Array
+   Mac_Layer_VSTIdx_C     : Integer Array
+   Mac_Layer_ParamIdx_C   : Integer Array
+   Mac_Layer_ParamLabel_C : String Array
+   Mac_Layer_IsOTZ_C      : Boolean Array
+   Mac_Layer_Mode_C       : Integer Array
+   Mac_Layer_HasReset_C   : Boolean Array
+
+   // Bank 3 (bindIdx 6-7)
+   Mac_Layer_TargetType_D : String Array
+   Mac_Layer_Target_D     : String Array
+   Mac_Layer_RangeMin_D   : Double Array
+   Mac_Layer_RangeMax_D   : Double Array
+   Mac_Layer_Channel_D    : Integer Array
+   Mac_Layer_VSTIdx_D     : Integer Array
+   Mac_Layer_ParamIdx_D   : Integer Array
+   Mac_Layer_ParamLabel_D : String Array
+   Mac_Layer_IsOTZ_D      : Boolean Array
+   Mac_Layer_Mode_D       : Integer Array
+   Mac_Layer_HasReset_D   : Boolean Array
 
    // Default map (persistent, cloned on song switch)
    Def_Mac_SourceCount : Integer Array
    Def_Mac_SourceDev : Integer Array
    Def_Mac_SourceLabel : String Array
    Def_Mac_Layer_BindCount : Integer Array
+
+   // Default-bank A (bindIdx 0-1)
    Def_Mac_Layer_TargetType : String Array
    Def_Mac_Layer_Target : String Array
    Def_Mac_Layer_RangeMin : Double Array
@@ -746,6 +812,48 @@ Var
    Def_Mac_Layer_VSTIdx : Integer Array
    Def_Mac_Layer_ParamIdx : Integer Array
    Def_Mac_Layer_ParamLabel : String Array
+   Def_Mac_Layer_IsOTZ : Boolean Array
+   Def_Mac_Layer_Mode : Integer Array
+   Def_Mac_Layer_HasReset : Boolean Array
+
+   // Default-bank B (bindIdx 2-3)
+   Def_Mac_Layer_TargetType_B : String Array
+   Def_Mac_Layer_Target_B : String Array
+   Def_Mac_Layer_RangeMin_B : Double Array
+   Def_Mac_Layer_RangeMax_B : Double Array
+   Def_Mac_Layer_Channel_B : Integer Array
+   Def_Mac_Layer_VSTIdx_B : Integer Array
+   Def_Mac_Layer_ParamIdx_B : Integer Array
+   Def_Mac_Layer_ParamLabel_B : String Array
+   Def_Mac_Layer_IsOTZ_B : Boolean Array
+   Def_Mac_Layer_Mode_B : Integer Array
+   Def_Mac_Layer_HasReset_B : Boolean Array
+
+   // Default-bank C (bindIdx 4-5)
+   Def_Mac_Layer_TargetType_C : String Array
+   Def_Mac_Layer_Target_C : String Array
+   Def_Mac_Layer_RangeMin_C : Double Array
+   Def_Mac_Layer_RangeMax_C : Double Array
+   Def_Mac_Layer_Channel_C : Integer Array
+   Def_Mac_Layer_VSTIdx_C : Integer Array
+   Def_Mac_Layer_ParamIdx_C : Integer Array
+   Def_Mac_Layer_ParamLabel_C : String Array
+   Def_Mac_Layer_IsOTZ_C : Boolean Array
+   Def_Mac_Layer_Mode_C : Integer Array
+   Def_Mac_Layer_HasReset_C : Boolean Array
+
+   // Default-bank D (bindIdx 6-7)
+   Def_Mac_Layer_TargetType_D : String Array
+   Def_Mac_Layer_Target_D : String Array
+   Def_Mac_Layer_RangeMin_D : Double Array
+   Def_Mac_Layer_RangeMax_D : Double Array
+   Def_Mac_Layer_Channel_D : Integer Array
+   Def_Mac_Layer_VSTIdx_D : Integer Array
+   Def_Mac_Layer_ParamIdx_D : Integer Array
+   Def_Mac_Layer_ParamLabel_D : String Array
+   Def_Mac_Layer_IsOTZ_D : Boolean Array
+   Def_Mac_Layer_Mode_D : Integer Array
+   Def_Mac_Layer_HasReset_D : Boolean Array
 
    // VST declarations per map
    MAX_VST_DECL : Integer = 10
@@ -758,17 +866,44 @@ Var
    Def_Mac_SourceLayer : Integer Array      // default clone
 
    // Reverse lookups (rebuilt on map load) — per-layer CC dispatch
-   Mac_ReverseLookup_L0 : Integer Array     // [256] CC -> macroIdx for LAY0
-   Mac_ReverseLookup_L1 : Integer Array     // [256] CC -> macroIdx for LAY1
-   Mac_ReverseLookup_L2 : Integer Array     // [256] CC -> macroIdx for LAY2
-   Mac_ReverseLookup_L3 : Integer Array     // [256] CC -> macroIdx for LAY3
+   LOOKUP_SIZE : Integer = 256   // GPScript array limit; fallback linear search for overflow
+   Mac_ReverseLookup_L0 : Integer Array     // [LOOKUP_SIZE] ch*128+cc -> macroIdx for LAY0
+   Mac_ReverseLookup_L1 : Integer Array     // [LOOKUP_SIZE] ch*128+cc -> macroIdx for LAY1
+   Mac_ReverseLookup_L2 : Integer Array     // [LOOKUP_SIZE] ch*128+cc -> macroIdx for LAY2
+   Mac_ReverseLookup_L3 : Integer Array     // [LOOKUP_SIZE] ch*128+cc -> macroIdx for LAY3
    Mac_ReverseLookup_SysAct : Integer Array // [MAX_MACROS] macroIdx -> sysActionIdx
 
-   // Debounce state for full-range movement-toggle overlays
+   // Debounce state for full-range movement-toggle overlays (legacy, kept for compat)
    Debounce_Active : Boolean Array     // [MAX_OVERLAY_BINDINGS]
    Debounce_Timer : Double Array       // [MAX_OVERLAY_BINDINGS]
    Debounce_State : Integer Array      // [MAX_OVERLAY_BINDINGS] 0=OFF, 1=ON
    DEBOUNCE_TIMEOUT : Double = 10.0
+
+   // === OTZ Redesign — global overlay state + per-control timers ===
+   // Overlay func indices (used to compute Overlay_FuncState index)
+   FUNC_SMART_SOLO   : Integer = 0
+   FUNC_STRICT_SOLO  : Integer = 1
+   FUNC_USER_MUTE    : Integer = 2
+   FUNC_ROOT         : Integer = 3
+   FUNC_OCTAVER      : Integer = 4
+   FUNC_HUMANIZE     : Integer = 5
+   FUNC_SCALE        : Integer = 6
+   FUNC_RANGE        : Integer = 7
+   FUNC_AUTO_SUSTAIN : Integer = 8
+   MAX_OVERLAY_FUNCS : Integer = 16
+   OTZ_DEBOUNCE_MS   : Double = 10000.0   // 10s per-control block after OTZ fire
+   OTZ_ECHO_BLOCK_MS : Double = 200.0     // 200ms after GP→HW write
+
+   // Persistent global overlay state — index = funcIdx * 16 + channel
+   Overlay_FuncState : Integer Array  // [MAX_OVERLAY_FUNCS * 16] = 256, fits
+
+   // Per-control runtime state — one slot per macro
+   Control_DebounceUntil  : Double Array  // [MAX_LAYER_MACROS]
+   Control_EchoBlockUntil : Double Array  // [MAX_LAYER_MACROS]
+   Control_LastValue      : Double Array  // [MAX_LAYER_MACROS] for DIR plus/minus
+
+   // ControllerInfo dirty flag (Live-State refresh)
+   ControllerInfoDirty : Boolean = false
 
    // ========================================================================
    // SECTION 9: ENGINE DATA — VST DATABASE & REPLACER
@@ -1587,18 +1722,17 @@ End
 // Parses DeviceConfig.txt (INI format) and fills DEV_*, CTRL_*, SYSEX_* registries.
 Function ParseDeviceConfig()
    var content, line, key, val, section : String
-   var lines : String Array
    var i, eqPos, currentDevIdx, currentCtrlIdx, currentSysExIdx : Integer
    var currentSwitchIdx, currentMapIdx, currentPermIdx, currentOvlIdx, stateNum, sw : Integer
    var d, r : Integer
    var routeStream, trigName : String
    var routeIdx : Integer
+   var pos, nlPos, lineCount, maxIter : Integer
 
    if not FileExists(DeviceConfigFilePath) then
       Trace("HAL: No DeviceConfig.txt found at " + DeviceConfigFilePath + ". Running in fallback mode.")
    else
       content = LoadStringFromTextFile(DeviceConfigFilePath)
-      lines = SplitString(content, NEW_LINE)
       section = ""
       currentDevIdx = -1
       currentCtrlIdx = -1
@@ -1622,8 +1756,17 @@ Function ParseDeviceConfig()
       End
       DEV_TriggerCount = 0
 
-      For i = 0; i < Size(lines); i = i + 1 Do
-         line = TrimString(lines[i])
+      pos = 0; lineCount = 0; maxIter = 2000
+      While pos < Length(content) and lineCount < maxIter Do
+         nlPos = IndexOfSubstring(CopySubstring(content, pos, Length(content) - pos), NEW_LINE, false)
+         if nlPos >= 0 then
+            line = TrimString(CopySubstring(content, pos, nlPos))
+            pos = pos + nlPos + Length(NEW_LINE)
+         else
+            line = TrimString(CopySubstring(content, pos, Length(content) - pos))
+            pos = Length(content)
+         end
+         lineCount = lineCount + 1
 
          if Length(line) == 0 then
             // skip empty line
@@ -1740,6 +1883,7 @@ Function ParseDeviceConfig()
                      key == "Type"     Do LayerSwitch_Type[currentSwitchIdx] = val
                      key == "OnData"   Do LayerSwitch_OnData[currentSwitchIdx] = val
                      key == "OffData"  Do LayerSwitch_OffData[currentSwitchIdx] = val
+                     key == "Channel"  Do LayerSwitch_Channel[currentSwitchIdx] = StringToInt(val)
                   End
 
                elsif section == "LAYERMAP" and currentMapIdx >= 0 then
@@ -1780,7 +1924,7 @@ Function ParseDeviceConfig()
       if LayerSwitch_Count > 0 then
          Trace("HAL: " + IntToString(LayerSwitch_Count) + " layer switches, " + IntToString(Permanent_Count) + " permanent bindings, " + IntToString(Overlay_Count) + " overlay actions")
          For sw = 0; sw < LayerSwitch_Count; sw = sw + 1 Do
-            Trace("  Switch " + IntToString(sw) + ": " + LayerSwitch_Label[sw] + " [" + LayerSwitch_Type[sw] + "]")
+            Trace("  Switch " + IntToString(sw) + ": " + LayerSwitch_Label[sw] + " [" + LayerSwitch_Type[sw] + "] OnData=" + LayerSwitch_OnData[sw] + " Ch=" + LayerSwitch_Channel[sw])
          End
       end
 
@@ -1869,6 +2013,9 @@ Function UpdateActiveLayer()
             FireOverlayAction(Overlay_Action[ov])
          end
       End
+      // Hardware sync: physical knobs now map to different macros,
+      // so push VST parameter values back to the arranger faders.
+      HardwareSyncTimer = TimeSinceStartup() + 400.0
    end
 End
 
@@ -3198,10 +3345,11 @@ Function AppendBoolN(arr : Boolean Array, count : Integer, val : Boolean) Return
 End
 
 // GP has a hard limit of 256 elements per array.
-// All arrays must stay under 256. With MAX_LAYER_MACROS=100, MAX_BINDINGS_PER_LAYER=2:
-//   Sources: 100 * 4 = 400 → use MAX_SOURCES=256 (cap at 64 macros with 4 sources)
+// MAX_LAYER_MACROS=100, MAX_BINDINGS_PER_LAYER=8:
+//   Sources: MAX_SOURCES_PER_MACRO=2 → 100*2=200  ✓
 //   BindCount: 100  ✓
-//   Bindings: 100 * 2 = 200  ✓
+//   Bindings: split across 4 banks (A/B/C/D) of 200 elements each.
+//             Bank A=binds 0-1, B=2-3, C=4-5, D=6-7. Use Get/Set helpers.
 //   SourceLayer: 100  ✓
 Function InitMacroArrays_Active()
    var i : Integer
@@ -3210,6 +3358,8 @@ Function InitMacroArrays_Active()
    Mac_SourceDev = []; For i = 0; i < 200; i = i + 1 Do Mac_SourceDev <-- -1 End
    Mac_SourceLabel = []; For i = 0; i < 200; i = i + 1 Do Mac_SourceLabel <-- "" End
    Mac_Layer_BindCount = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Mac_Layer_BindCount <-- 0 End
+
+   // Bank A (bindIdx 0-1)
    Mac_Layer_TargetType = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_TargetType <-- "" End
    Mac_Layer_Target = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Target <-- "" End
    Mac_Layer_RangeMin = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_RangeMin <-- 0.0 End
@@ -3218,6 +3368,48 @@ Function InitMacroArrays_Active()
    Mac_Layer_VSTIdx = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_VSTIdx <-- -1 End
    Mac_Layer_ParamIdx = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_ParamIdx <-- -1 End
    Mac_Layer_ParamLabel = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_ParamLabel <-- "" End
+   Mac_Layer_IsOTZ = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_IsOTZ <-- false End
+   Mac_Layer_Mode = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Mode <-- 0 End
+   Mac_Layer_HasReset = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_HasReset <-- false End
+
+   // Bank B (bindIdx 2-3)
+   Mac_Layer_TargetType_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_TargetType_B <-- "" End
+   Mac_Layer_Target_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Target_B <-- "" End
+   Mac_Layer_RangeMin_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_RangeMin_B <-- 0.0 End
+   Mac_Layer_RangeMax_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_RangeMax_B <-- 1.0 End
+   Mac_Layer_Channel_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Channel_B <-- -1 End
+   Mac_Layer_VSTIdx_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_VSTIdx_B <-- -1 End
+   Mac_Layer_ParamIdx_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_ParamIdx_B <-- -1 End
+   Mac_Layer_ParamLabel_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_ParamLabel_B <-- "" End
+   Mac_Layer_IsOTZ_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_IsOTZ_B <-- false End
+   Mac_Layer_Mode_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Mode_B <-- 0 End
+   Mac_Layer_HasReset_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_HasReset_B <-- false End
+
+   // Bank C (bindIdx 4-5)
+   Mac_Layer_TargetType_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_TargetType_C <-- "" End
+   Mac_Layer_Target_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Target_C <-- "" End
+   Mac_Layer_RangeMin_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_RangeMin_C <-- 0.0 End
+   Mac_Layer_RangeMax_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_RangeMax_C <-- 1.0 End
+   Mac_Layer_Channel_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Channel_C <-- -1 End
+   Mac_Layer_VSTIdx_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_VSTIdx_C <-- -1 End
+   Mac_Layer_ParamIdx_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_ParamIdx_C <-- -1 End
+   Mac_Layer_ParamLabel_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_ParamLabel_C <-- "" End
+   Mac_Layer_IsOTZ_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_IsOTZ_C <-- false End
+   Mac_Layer_Mode_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Mode_C <-- 0 End
+   Mac_Layer_HasReset_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_HasReset_C <-- false End
+
+   // Bank D (bindIdx 6-7)
+   Mac_Layer_TargetType_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_TargetType_D <-- "" End
+   Mac_Layer_Target_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Target_D <-- "" End
+   Mac_Layer_RangeMin_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_RangeMin_D <-- 0.0 End
+   Mac_Layer_RangeMax_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_RangeMax_D <-- 1.0 End
+   Mac_Layer_Channel_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Channel_D <-- -1 End
+   Mac_Layer_VSTIdx_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_VSTIdx_D <-- -1 End
+   Mac_Layer_ParamIdx_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_ParamIdx_D <-- -1 End
+   Mac_Layer_ParamLabel_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_ParamLabel_D <-- "" End
+   Mac_Layer_IsOTZ_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_IsOTZ_D <-- false End
+   Mac_Layer_Mode_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Mode_D <-- 0 End
+   Mac_Layer_HasReset_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_HasReset_D <-- false End
 End
 
 Function InitMacroArrays_Default()
@@ -3227,6 +3419,8 @@ Function InitMacroArrays_Default()
    Def_Mac_SourceDev = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_SourceDev <-- -1 End
    Def_Mac_SourceLabel = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_SourceLabel <-- "" End
    Def_Mac_Layer_BindCount = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Def_Mac_Layer_BindCount <-- 0 End
+
+   // Bank A
    Def_Mac_Layer_TargetType = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_TargetType <-- "" End
    Def_Mac_Layer_Target = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Target <-- "" End
    Def_Mac_Layer_RangeMin = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_RangeMin <-- 0.0 End
@@ -3235,19 +3429,67 @@ Function InitMacroArrays_Default()
    Def_Mac_Layer_VSTIdx = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_VSTIdx <-- -1 End
    Def_Mac_Layer_ParamIdx = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_ParamIdx <-- -1 End
    Def_Mac_Layer_ParamLabel = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_ParamLabel <-- "" End
+   Def_Mac_Layer_IsOTZ = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_IsOTZ <-- false End
+   Def_Mac_Layer_Mode = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Mode <-- 0 End
+   Def_Mac_Layer_HasReset = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_HasReset <-- false End
+
+   // Bank B
+   Def_Mac_Layer_TargetType_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_TargetType_B <-- "" End
+   Def_Mac_Layer_Target_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Target_B <-- "" End
+   Def_Mac_Layer_RangeMin_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_RangeMin_B <-- 0.0 End
+   Def_Mac_Layer_RangeMax_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_RangeMax_B <-- 1.0 End
+   Def_Mac_Layer_Channel_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Channel_B <-- -1 End
+   Def_Mac_Layer_VSTIdx_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_VSTIdx_B <-- -1 End
+   Def_Mac_Layer_ParamIdx_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_ParamIdx_B <-- -1 End
+   Def_Mac_Layer_ParamLabel_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_ParamLabel_B <-- "" End
+   Def_Mac_Layer_IsOTZ_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_IsOTZ_B <-- false End
+   Def_Mac_Layer_Mode_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Mode_B <-- 0 End
+   Def_Mac_Layer_HasReset_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_HasReset_B <-- false End
+
+   // Bank C
+   Def_Mac_Layer_TargetType_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_TargetType_C <-- "" End
+   Def_Mac_Layer_Target_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Target_C <-- "" End
+   Def_Mac_Layer_RangeMin_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_RangeMin_C <-- 0.0 End
+   Def_Mac_Layer_RangeMax_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_RangeMax_C <-- 1.0 End
+   Def_Mac_Layer_Channel_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Channel_C <-- -1 End
+   Def_Mac_Layer_VSTIdx_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_VSTIdx_C <-- -1 End
+   Def_Mac_Layer_ParamIdx_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_ParamIdx_C <-- -1 End
+   Def_Mac_Layer_ParamLabel_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_ParamLabel_C <-- "" End
+   Def_Mac_Layer_IsOTZ_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_IsOTZ_C <-- false End
+   Def_Mac_Layer_Mode_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Mode_C <-- 0 End
+   Def_Mac_Layer_HasReset_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_HasReset_C <-- false End
+
+   // Bank D
+   Def_Mac_Layer_TargetType_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_TargetType_D <-- "" End
+   Def_Mac_Layer_Target_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Target_D <-- "" End
+   Def_Mac_Layer_RangeMin_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_RangeMin_D <-- 0.0 End
+   Def_Mac_Layer_RangeMax_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_RangeMax_D <-- 1.0 End
+   Def_Mac_Layer_Channel_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Channel_D <-- -1 End
+   Def_Mac_Layer_VSTIdx_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_VSTIdx_D <-- -1 End
+   Def_Mac_Layer_ParamIdx_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_ParamIdx_D <-- -1 End
+   Def_Mac_Layer_ParamLabel_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_ParamLabel_D <-- "" End
+   Def_Mac_Layer_IsOTZ_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_IsOTZ_D <-- false End
+   Def_Mac_Layer_Mode_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Mode_D <-- 0 End
+   Def_Mac_Layer_HasReset_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_HasReset_D <-- false End
 End
 
 Function InitMacroArrays_Lookups()
    var i : Integer
    // Per-layer reverse CC lookups (layer-aware dispatch)
-   Mac_ReverseLookup_L0 = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_L0 <-- -1 End
-   Mac_ReverseLookup_L1 = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_L1 <-- -1 End
-   Mac_ReverseLookup_L2 = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_L2 <-- -1 End
-   Mac_ReverseLookup_L3 = []; For i = 0; i < 256; i = i + 1 Do Mac_ReverseLookup_L3 <-- -1 End
+   Mac_ReverseLookup_L0 = []; For i = 0; i < LOOKUP_SIZE; i = i + 1 Do Mac_ReverseLookup_L0 <-- -1 End
+   Mac_ReverseLookup_L1 = []; For i = 0; i < LOOKUP_SIZE; i = i + 1 Do Mac_ReverseLookup_L1 <-- -1 End
+   Mac_ReverseLookup_L2 = []; For i = 0; i < LOOKUP_SIZE; i = i + 1 Do Mac_ReverseLookup_L2 <-- -1 End
+   Mac_ReverseLookup_L3 = []; For i = 0; i < LOOKUP_SIZE; i = i + 1 Do Mac_ReverseLookup_L3 <-- -1 End
    Mac_ReverseLookup_SysAct = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Mac_ReverseLookup_SysAct <-- -1 End
    Debounce_Active = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_Active <-- false End
    Debounce_Timer = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_Timer <-- 0.0 End
    Debounce_State = []; For i = 0; i < MAX_OVERLAY_BINDINGS; i = i + 1 Do Debounce_State <-- 0 End
+
+   // OTZ Redesign: global overlay state + per-control timers
+   Overlay_FuncState = []; For i = 0; i < MAX_OVERLAY_FUNCS * 16; i = i + 1 Do Overlay_FuncState <-- 0 End
+   Control_DebounceUntil = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Control_DebounceUntil <-- 0.0 End
+   Control_EchoBlockUntil = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Control_EchoBlockUntil <-- 0.0 End
+   Control_LastValue = []; For i = 0; i < MAX_LAYER_MACROS; i = i + 1 Do Control_LastValue <-- 0.0 End
 End
 
 Function InitMacroArrays()
@@ -3255,6 +3497,351 @@ Function InitMacroArrays()
    InitMacroArrays_Default()
    InitMacroArrays_Lookups()
    Trace("MACRO INIT: VSTIdx=" + IntToString(Size(Mac_Layer_VSTIdx)) + " SourceDev=" + IntToString(Size(Mac_SourceDev)) + " Lookups=" + IntToString(Size(Mac_ReverseLookup_L0)))
+End
+
+// =====================================================================
+// MAC LAYER BANK HELPERS — 4 banks of 200 elements each (256-array limit)
+// Bank A (binds 0-1), Bank B (2-3), Bank C (4-5), Bank D (6-7)
+// =====================================================================
+
+Function GetMacTargetType(macroIdx : Integer, bindIdx : Integer) Returns String
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_TargetType[slot]
+   elsif bank == 1 then result = Mac_Layer_TargetType_B[slot]
+   elsif bank == 2 then result = Mac_Layer_TargetType_C[slot]
+   else result = Mac_Layer_TargetType_D[slot] end
+End
+
+Function SetMacTargetType(macroIdx : Integer, bindIdx : Integer, val : String)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_TargetType[slot] = val
+   elsif bank == 1 then Mac_Layer_TargetType_B[slot] = val
+   elsif bank == 2 then Mac_Layer_TargetType_C[slot] = val
+   else Mac_Layer_TargetType_D[slot] = val end
+End
+
+Function GetMacTarget(macroIdx : Integer, bindIdx : Integer) Returns String
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_Target[slot]
+   elsif bank == 1 then result = Mac_Layer_Target_B[slot]
+   elsif bank == 2 then result = Mac_Layer_Target_C[slot]
+   else result = Mac_Layer_Target_D[slot] end
+End
+
+Function SetMacTarget(macroIdx : Integer, bindIdx : Integer, val : String)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_Target[slot] = val
+   elsif bank == 1 then Mac_Layer_Target_B[slot] = val
+   elsif bank == 2 then Mac_Layer_Target_C[slot] = val
+   else Mac_Layer_Target_D[slot] = val end
+End
+
+Function GetMacRangeMin(macroIdx : Integer, bindIdx : Integer) Returns Double
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_RangeMin[slot]
+   elsif bank == 1 then result = Mac_Layer_RangeMin_B[slot]
+   elsif bank == 2 then result = Mac_Layer_RangeMin_C[slot]
+   else result = Mac_Layer_RangeMin_D[slot] end
+End
+
+Function SetMacRangeMin(macroIdx : Integer, bindIdx : Integer, val : Double)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_RangeMin[slot] = val
+   elsif bank == 1 then Mac_Layer_RangeMin_B[slot] = val
+   elsif bank == 2 then Mac_Layer_RangeMin_C[slot] = val
+   else Mac_Layer_RangeMin_D[slot] = val end
+End
+
+Function GetMacRangeMax(macroIdx : Integer, bindIdx : Integer) Returns Double
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_RangeMax[slot]
+   elsif bank == 1 then result = Mac_Layer_RangeMax_B[slot]
+   elsif bank == 2 then result = Mac_Layer_RangeMax_C[slot]
+   else result = Mac_Layer_RangeMax_D[slot] end
+End
+
+Function SetMacRangeMax(macroIdx : Integer, bindIdx : Integer, val : Double)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_RangeMax[slot] = val
+   elsif bank == 1 then Mac_Layer_RangeMax_B[slot] = val
+   elsif bank == 2 then Mac_Layer_RangeMax_C[slot] = val
+   else Mac_Layer_RangeMax_D[slot] = val end
+End
+
+Function GetMacChannel(macroIdx : Integer, bindIdx : Integer) Returns Integer
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_Channel[slot]
+   elsif bank == 1 then result = Mac_Layer_Channel_B[slot]
+   elsif bank == 2 then result = Mac_Layer_Channel_C[slot]
+   else result = Mac_Layer_Channel_D[slot] end
+End
+
+Function SetMacChannel(macroIdx : Integer, bindIdx : Integer, val : Integer)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_Channel[slot] = val
+   elsif bank == 1 then Mac_Layer_Channel_B[slot] = val
+   elsif bank == 2 then Mac_Layer_Channel_C[slot] = val
+   else Mac_Layer_Channel_D[slot] = val end
+End
+
+Function GetMacVSTIdx(macroIdx : Integer, bindIdx : Integer) Returns Integer
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_VSTIdx[slot]
+   elsif bank == 1 then result = Mac_Layer_VSTIdx_B[slot]
+   elsif bank == 2 then result = Mac_Layer_VSTIdx_C[slot]
+   else result = Mac_Layer_VSTIdx_D[slot] end
+End
+
+Function SetMacVSTIdx(macroIdx : Integer, bindIdx : Integer, val : Integer)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_VSTIdx[slot] = val
+   elsif bank == 1 then Mac_Layer_VSTIdx_B[slot] = val
+   elsif bank == 2 then Mac_Layer_VSTIdx_C[slot] = val
+   else Mac_Layer_VSTIdx_D[slot] = val end
+End
+
+Function GetMacParamIdx(macroIdx : Integer, bindIdx : Integer) Returns Integer
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_ParamIdx[slot]
+   elsif bank == 1 then result = Mac_Layer_ParamIdx_B[slot]
+   elsif bank == 2 then result = Mac_Layer_ParamIdx_C[slot]
+   else result = Mac_Layer_ParamIdx_D[slot] end
+End
+
+Function SetMacParamIdx(macroIdx : Integer, bindIdx : Integer, val : Integer)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_ParamIdx[slot] = val
+   elsif bank == 1 then Mac_Layer_ParamIdx_B[slot] = val
+   elsif bank == 2 then Mac_Layer_ParamIdx_C[slot] = val
+   else Mac_Layer_ParamIdx_D[slot] = val end
+End
+
+Function GetMacParamLabel(macroIdx : Integer, bindIdx : Integer) Returns String
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_ParamLabel[slot]
+   elsif bank == 1 then result = Mac_Layer_ParamLabel_B[slot]
+   elsif bank == 2 then result = Mac_Layer_ParamLabel_C[slot]
+   else result = Mac_Layer_ParamLabel_D[slot] end
+End
+
+Function SetMacParamLabel(macroIdx : Integer, bindIdx : Integer, val : String)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_ParamLabel[slot] = val
+   elsif bank == 1 then Mac_Layer_ParamLabel_B[slot] = val
+   elsif bank == 2 then Mac_Layer_ParamLabel_C[slot] = val
+   else Mac_Layer_ParamLabel_D[slot] = val end
+End
+
+Function GetMacIsOTZ(macroIdx : Integer, bindIdx : Integer) Returns Boolean
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_IsOTZ[slot]
+   elsif bank == 1 then result = Mac_Layer_IsOTZ_B[slot]
+   elsif bank == 2 then result = Mac_Layer_IsOTZ_C[slot]
+   else result = Mac_Layer_IsOTZ_D[slot] end
+End
+
+Function SetMacIsOTZ(macroIdx : Integer, bindIdx : Integer, val : Boolean)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_IsOTZ[slot] = val
+   elsif bank == 1 then Mac_Layer_IsOTZ_B[slot] = val
+   elsif bank == 2 then Mac_Layer_IsOTZ_C[slot] = val
+   else Mac_Layer_IsOTZ_D[slot] = val end
+End
+
+Function GetMacMode(macroIdx : Integer, bindIdx : Integer) Returns Integer
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_Mode[slot]
+   elsif bank == 1 then result = Mac_Layer_Mode_B[slot]
+   elsif bank == 2 then result = Mac_Layer_Mode_C[slot]
+   else result = Mac_Layer_Mode_D[slot] end
+End
+
+Function SetMacMode(macroIdx : Integer, bindIdx : Integer, val : Integer)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_Mode[slot] = val
+   elsif bank == 1 then Mac_Layer_Mode_B[slot] = val
+   elsif bank == 2 then Mac_Layer_Mode_C[slot] = val
+   else Mac_Layer_Mode_D[slot] = val end
+End
+
+Function GetMacHasReset(macroIdx : Integer, bindIdx : Integer) Returns Boolean
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_HasReset[slot]
+   elsif bank == 1 then result = Mac_Layer_HasReset_B[slot]
+   elsif bank == 2 then result = Mac_Layer_HasReset_C[slot]
+   else result = Mac_Layer_HasReset_D[slot] end
+End
+
+Function SetMacHasReset(macroIdx : Integer, bindIdx : Integer, val : Boolean)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_HasReset[slot] = val
+   elsif bank == 1 then Mac_Layer_HasReset_B[slot] = val
+   elsif bank == 2 then Mac_Layer_HasReset_C[slot] = val
+   else Mac_Layer_HasReset_D[slot] = val end
+End
+
+// Default-bank setters (used in ParseMacroLine when isDefault=true)
+Function SetDefMacAll(macroIdx : Integer, bindIdx : Integer)
+   // Copies current Mac_Layer_* values to Def_Mac_Layer_* at same (macroIdx, bindIdx)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then
+      Def_Mac_Layer_TargetType[slot] = Mac_Layer_TargetType[slot]
+      Def_Mac_Layer_Target[slot]     = Mac_Layer_Target[slot]
+      Def_Mac_Layer_RangeMin[slot]   = Mac_Layer_RangeMin[slot]
+      Def_Mac_Layer_RangeMax[slot]   = Mac_Layer_RangeMax[slot]
+      Def_Mac_Layer_Channel[slot]    = Mac_Layer_Channel[slot]
+      Def_Mac_Layer_VSTIdx[slot]     = Mac_Layer_VSTIdx[slot]
+      Def_Mac_Layer_ParamIdx[slot]   = Mac_Layer_ParamIdx[slot]
+      Def_Mac_Layer_ParamLabel[slot] = Mac_Layer_ParamLabel[slot]
+      Def_Mac_Layer_IsOTZ[slot]      = Mac_Layer_IsOTZ[slot]
+      Def_Mac_Layer_Mode[slot]       = Mac_Layer_Mode[slot]
+      Def_Mac_Layer_HasReset[slot]   = Mac_Layer_HasReset[slot]
+   elsif bank == 1 then
+      Def_Mac_Layer_TargetType_B[slot] = Mac_Layer_TargetType_B[slot]
+      Def_Mac_Layer_Target_B[slot]     = Mac_Layer_Target_B[slot]
+      Def_Mac_Layer_RangeMin_B[slot]   = Mac_Layer_RangeMin_B[slot]
+      Def_Mac_Layer_RangeMax_B[slot]   = Mac_Layer_RangeMax_B[slot]
+      Def_Mac_Layer_Channel_B[slot]    = Mac_Layer_Channel_B[slot]
+      Def_Mac_Layer_VSTIdx_B[slot]     = Mac_Layer_VSTIdx_B[slot]
+      Def_Mac_Layer_ParamIdx_B[slot]   = Mac_Layer_ParamIdx_B[slot]
+      Def_Mac_Layer_ParamLabel_B[slot] = Mac_Layer_ParamLabel_B[slot]
+      Def_Mac_Layer_IsOTZ_B[slot]      = Mac_Layer_IsOTZ_B[slot]
+      Def_Mac_Layer_Mode_B[slot]       = Mac_Layer_Mode_B[slot]
+      Def_Mac_Layer_HasReset_B[slot]   = Mac_Layer_HasReset_B[slot]
+   elsif bank == 2 then
+      Def_Mac_Layer_TargetType_C[slot] = Mac_Layer_TargetType_C[slot]
+      Def_Mac_Layer_Target_C[slot]     = Mac_Layer_Target_C[slot]
+      Def_Mac_Layer_RangeMin_C[slot]   = Mac_Layer_RangeMin_C[slot]
+      Def_Mac_Layer_RangeMax_C[slot]   = Mac_Layer_RangeMax_C[slot]
+      Def_Mac_Layer_Channel_C[slot]    = Mac_Layer_Channel_C[slot]
+      Def_Mac_Layer_VSTIdx_C[slot]     = Mac_Layer_VSTIdx_C[slot]
+      Def_Mac_Layer_ParamIdx_C[slot]   = Mac_Layer_ParamIdx_C[slot]
+      Def_Mac_Layer_ParamLabel_C[slot] = Mac_Layer_ParamLabel_C[slot]
+      Def_Mac_Layer_IsOTZ_C[slot]      = Mac_Layer_IsOTZ_C[slot]
+      Def_Mac_Layer_Mode_C[slot]       = Mac_Layer_Mode_C[slot]
+      Def_Mac_Layer_HasReset_C[slot]   = Mac_Layer_HasReset_C[slot]
+   else
+      Def_Mac_Layer_TargetType_D[slot] = Mac_Layer_TargetType_D[slot]
+      Def_Mac_Layer_Target_D[slot]     = Mac_Layer_Target_D[slot]
+      Def_Mac_Layer_RangeMin_D[slot]   = Mac_Layer_RangeMin_D[slot]
+      Def_Mac_Layer_RangeMax_D[slot]   = Mac_Layer_RangeMax_D[slot]
+      Def_Mac_Layer_Channel_D[slot]    = Mac_Layer_Channel_D[slot]
+      Def_Mac_Layer_VSTIdx_D[slot]     = Mac_Layer_VSTIdx_D[slot]
+      Def_Mac_Layer_ParamIdx_D[slot]   = Mac_Layer_ParamIdx_D[slot]
+      Def_Mac_Layer_ParamLabel_D[slot] = Mac_Layer_ParamLabel_D[slot]
+      Def_Mac_Layer_IsOTZ_D[slot]      = Mac_Layer_IsOTZ_D[slot]
+      Def_Mac_Layer_Mode_D[slot]       = Mac_Layer_Mode_D[slot]
+      Def_Mac_Layer_HasReset_D[slot]   = Mac_Layer_HasReset_D[slot]
+   end
+End
+
+// Reverse (used in CloneDefaultToActive)
+Function CloneDefBindToActive(macroIdx : Integer, bindIdx : Integer)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then
+      Mac_Layer_TargetType[slot] = Def_Mac_Layer_TargetType[slot]
+      Mac_Layer_Target[slot]     = Def_Mac_Layer_Target[slot]
+      Mac_Layer_RangeMin[slot]   = Def_Mac_Layer_RangeMin[slot]
+      Mac_Layer_RangeMax[slot]   = Def_Mac_Layer_RangeMax[slot]
+      Mac_Layer_Channel[slot]    = Def_Mac_Layer_Channel[slot]
+      Mac_Layer_VSTIdx[slot]     = Def_Mac_Layer_VSTIdx[slot]
+      Mac_Layer_ParamIdx[slot]   = Def_Mac_Layer_ParamIdx[slot]
+      Mac_Layer_ParamLabel[slot] = Def_Mac_Layer_ParamLabel[slot]
+      Mac_Layer_IsOTZ[slot]      = Def_Mac_Layer_IsOTZ[slot]
+      Mac_Layer_Mode[slot]       = Def_Mac_Layer_Mode[slot]
+      Mac_Layer_HasReset[slot]   = Def_Mac_Layer_HasReset[slot]
+   elsif bank == 1 then
+      Mac_Layer_TargetType_B[slot] = Def_Mac_Layer_TargetType_B[slot]
+      Mac_Layer_Target_B[slot]     = Def_Mac_Layer_Target_B[slot]
+      Mac_Layer_RangeMin_B[slot]   = Def_Mac_Layer_RangeMin_B[slot]
+      Mac_Layer_RangeMax_B[slot]   = Def_Mac_Layer_RangeMax_B[slot]
+      Mac_Layer_Channel_B[slot]    = Def_Mac_Layer_Channel_B[slot]
+      Mac_Layer_VSTIdx_B[slot]     = Def_Mac_Layer_VSTIdx_B[slot]
+      Mac_Layer_ParamIdx_B[slot]   = Def_Mac_Layer_ParamIdx_B[slot]
+      Mac_Layer_ParamLabel_B[slot] = Def_Mac_Layer_ParamLabel_B[slot]
+      Mac_Layer_IsOTZ_B[slot]      = Def_Mac_Layer_IsOTZ_B[slot]
+      Mac_Layer_Mode_B[slot]       = Def_Mac_Layer_Mode_B[slot]
+      Mac_Layer_HasReset_B[slot]   = Def_Mac_Layer_HasReset_B[slot]
+   elsif bank == 2 then
+      Mac_Layer_TargetType_C[slot] = Def_Mac_Layer_TargetType_C[slot]
+      Mac_Layer_Target_C[slot]     = Def_Mac_Layer_Target_C[slot]
+      Mac_Layer_RangeMin_C[slot]   = Def_Mac_Layer_RangeMin_C[slot]
+      Mac_Layer_RangeMax_C[slot]   = Def_Mac_Layer_RangeMax_C[slot]
+      Mac_Layer_Channel_C[slot]    = Def_Mac_Layer_Channel_C[slot]
+      Mac_Layer_VSTIdx_C[slot]     = Def_Mac_Layer_VSTIdx_C[slot]
+      Mac_Layer_ParamIdx_C[slot]   = Def_Mac_Layer_ParamIdx_C[slot]
+      Mac_Layer_ParamLabel_C[slot] = Def_Mac_Layer_ParamLabel_C[slot]
+      Mac_Layer_IsOTZ_C[slot]      = Def_Mac_Layer_IsOTZ_C[slot]
+      Mac_Layer_Mode_C[slot]       = Def_Mac_Layer_Mode_C[slot]
+      Mac_Layer_HasReset_C[slot]   = Def_Mac_Layer_HasReset_C[slot]
+   else
+      Mac_Layer_TargetType_D[slot] = Def_Mac_Layer_TargetType_D[slot]
+      Mac_Layer_Target_D[slot]     = Def_Mac_Layer_Target_D[slot]
+      Mac_Layer_RangeMin_D[slot]   = Def_Mac_Layer_RangeMin_D[slot]
+      Mac_Layer_RangeMax_D[slot]   = Def_Mac_Layer_RangeMax_D[slot]
+      Mac_Layer_Channel_D[slot]    = Def_Mac_Layer_Channel_D[slot]
+      Mac_Layer_VSTIdx_D[slot]     = Def_Mac_Layer_VSTIdx_D[slot]
+      Mac_Layer_ParamIdx_D[slot]   = Def_Mac_Layer_ParamIdx_D[slot]
+      Mac_Layer_ParamLabel_D[slot] = Def_Mac_Layer_ParamLabel_D[slot]
+      Mac_Layer_IsOTZ_D[slot]      = Def_Mac_Layer_IsOTZ_D[slot]
+      Mac_Layer_Mode_D[slot]       = Def_Mac_Layer_Mode_D[slot]
+      Mac_Layer_HasReset_D[slot]   = Def_Mac_Layer_HasReset_D[slot]
+   end
+End
+
+// =====================================================================
+// OTZ FUNCTION INDEX HELPERS
+// =====================================================================
+
+Function FuncIdxFromTarget(targetName : String) Returns Integer
+   if targetName == "SMART_SOLO" then result = FUNC_SMART_SOLO
+   elsif targetName == "STRICT_SOLO" then result = FUNC_STRICT_SOLO
+   elsif targetName == "USER_MUTE" then result = FUNC_USER_MUTE
+   elsif targetName == "ROOT" then result = FUNC_ROOT
+   elsif targetName == "OCTAVER" then result = FUNC_OCTAVER
+   elsif targetName == "HUMANIZE" then result = FUNC_HUMANIZE
+   elsif targetName == "SCALE" then result = FUNC_SCALE
+   elsif targetName == "RANGE" then result = FUNC_RANGE
+   elsif targetName == "AUTO_SUSTAIN" then result = FUNC_AUTO_SUSTAIN
+   else result = -1 end
+End
+
+Function GetOverlayState(funcIdx : Integer, channel : Integer) Returns Integer
+   if funcIdx >= 0 and funcIdx < MAX_OVERLAY_FUNCS and channel >= 0 and channel < 16 then
+      result = Overlay_FuncState[funcIdx * 16 + channel]
+   else
+      result = 0
+   end
+End
+
+Function SetOverlayState(funcIdx : Integer, channel : Integer, state : Integer)
+   if funcIdx >= 0 and funcIdx < MAX_OVERLAY_FUNCS and channel >= 0 and channel < 16 then
+      Overlay_FuncState[funcIdx * 16 + channel] = state
+   end
 End
 
 // --- Unified Macro Parser ---
@@ -3307,52 +3894,96 @@ Function ParseMacroSource(macroIdx : Integer, sourceStr : String) Returns Intege
    result = count
 End
 
-// Parses one binding token, stores at flat index. Returns 0 (layer is now in source, not binding).
-// Recognizes OTZ marker: {OTZ,min,max} sets targetType=OVERLAY
+// Parses one binding token, stores via Set helpers (4-bank routing).
+// New keyword syntax (OTZ Redesign):
+//   {x,y}   numeric: x==y=POINT, x<y=RANGE
+//   {MAX}   shorthand for {1.0,1.0}
+//   {MIN}   shorthand for {0.0,0.0}
+//   {DIR}   directional: plus=ON, minus=OFF, 10s debounce
+//   {RESET} write hardware back to 0.5 after fire (non-OTZ only)
+//   {OTZ,...}  mark binding as read-only overlay (must be first SPEC token)
+// Tokens are comma-separated. Combinations allowed: {DIR,RESET}, {OTZ,MAX}, {0.4,0.6,RESET}.
 Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx : Integer, bindIdx : Integer) Returns Integer
-   var trimmed, rest, targetType, label, vstPart, rangeStr, firstToken, afterFirstComma : String
-   var flatIdx, colonPos, colonPos2, bracePos, commaPos, commaPos2, closeBrace, underPos, vstIdx, paramIdx : Integer
-   var isOTZ : Boolean = false
-   var rangeMin, rangeMax : Double = 0.0
-   rangeMax = 1.0
+   var trimmed, rest, targetType, label, vstPart, rangeStr, tokStr, remaining : String
+   var colonPos, colonPos2, bracePos, closeBrace, underPos, vstIdx, paramIdx : Integer
+   var commaPos, mode, numCount : Integer
+   var isOTZ, hasReset : Boolean
+   var rangeMin, rangeMax, numVal : Double = 0.0
+   var firstSpecToken : Boolean
+
+   isOTZ = false; hasReset = false; mode = MODE_RANGE
+   rangeMin = 0.0; rangeMax = 1.0; numCount = 0
+   firstSpecToken = true
 
    trimmed = TrimString(token)
 
-   // Extract range {min,max} or {OTZ,min,max} if present
+   // Extract braces content if present
    bracePos = IndexOfSubstring(trimmed, "{", false)
    if bracePos >= 0 then
       closeBrace = IndexOfSubstring(trimmed, "}", false)
       rangeStr = CopySubstring(trimmed, bracePos + 1, closeBrace - bracePos - 1)
-      commaPos = IndexOfSubstring(rangeStr, ",", false)
-      if commaPos > 0 then
-         firstToken = TrimString(CopySubstring(rangeStr, 0, commaPos))
-         afterFirstComma = CopySubstring(rangeStr, commaPos + 1, Length(rangeStr) - commaPos - 1)
-         if firstToken == "OTZ" then
-            isOTZ = true
-            commaPos2 = IndexOfSubstring(afterFirstComma, ",", false)
-            if commaPos2 > 0 then
-               rangeMin = StringToDouble(TrimString(CopySubstring(afterFirstComma, 0, commaPos2)))
-               rangeMax = StringToDouble(TrimString(CopySubstring(afterFirstComma, commaPos2 + 1, Length(afterFirstComma) - commaPos2 - 1)))
-            else
-               rangeMin = StringToDouble(TrimString(afterFirstComma))
-               rangeMax = rangeMin
-            end
+      // Parse comma-separated tokens
+      remaining = TrimString(rangeStr)
+      While Length(remaining) > 0 Do
+         commaPos = IndexOfSubstring(remaining, ",", false)
+         if commaPos < 0 then
+            tokStr = TrimString(remaining)
+            remaining = ""
          else
-            rangeMin = StringToDouble(firstToken)
-            rangeMax = StringToDouble(TrimString(afterFirstComma))
+            tokStr = TrimString(CopySubstring(remaining, 0, commaPos))
+            remaining = TrimString(CopySubstring(remaining, commaPos + 1, Length(remaining) - commaPos - 1))
          end
+
+         if tokStr == "OTZ" then
+            if firstSpecToken then
+               isOTZ = true
+            else
+               if DebugMode then Trace("PARSE: OTZ must be first SPEC token — ignored at " + tokStr) end
+            end
+         elsif tokStr == "MAX" then
+            mode = MODE_POINT; rangeMin = 1.0; rangeMax = 1.0
+         elsif tokStr == "MIN" then
+            mode = MODE_POINT; rangeMin = 0.0; rangeMax = 0.0
+         elsif tokStr == "DIR" then
+            mode = MODE_DIR
+         elsif tokStr == "RESET" then
+            hasReset = true
+         elsif Length(tokStr) > 0 then
+            // Numeric value
+            numVal = StringToDouble(tokStr)
+            if numCount == 0 then
+               rangeMin = numVal; rangeMax = numVal; mode = MODE_POINT
+            elsif numCount == 1 then
+               rangeMax = numVal
+               if rangeMin == rangeMax then mode = MODE_POINT
+               elsif rangeMin < rangeMax then mode = MODE_RANGE
+               else mode = MODE_POINT
+                  if DebugMode then Trace("PARSE: reversed range {" + rangeMin + "," + rangeMax + "} treated as POINT at " + rangeMin) end
+                  rangeMax = rangeMin
+               end
+            else
+               if DebugMode then Trace("PARSE: extra numeric value '" + tokStr + "' ignored") end
+            end
+            numCount = numCount + 1
+         end
+         firstSpecToken = false
+      End
+
+      if isOTZ and hasReset then
+         if DebugMode then Trace("PARSE: RESET ignored on OTZ binding (read-only)") end
+         hasReset = false
       end
+
       trimmed = TrimString(CopySubstring(trimmed, 0, bracePos))
    end
 
-   flatIdx = MacLayerBindIdx(macroIdx, 0, bindIdx)
-
    // Classify target type
-   if isOTZ and IndexOfSubstring(trimmed, ":CH", false) > 0 then
-      // OTZ overlay: SMART_SOLO:CH3{OTZ,0.0,1.0}
+   if IndexOfSubstring(trimmed, ":CH", false) > 0 and IndexOfSubstring(trimmed, "Ch", false) <> 0 then
+      // Overlay: SMART_SOLO:CH3, OCTAVER:CH1, ROOT:CH2 etc.
+      // (Note: "Ch11:CC..." starts with lowercase Ch, distinct from CH overlay channels)
       targetType = "OVERLAY"
       colonPos = IndexOfSubstring(trimmed, ":CH", false)
-      Mac_Layer_Channel[flatIdx] = StringToInt(CopySubstring(trimmed, colonPos + 3, Length(trimmed) - colonPos - 3))
+      SetMacChannel(macroIdx, bindIdx, StringToInt(CopySubstring(trimmed, colonPos + 3, Length(trimmed) - colonPos - 3)))
       trimmed = CopySubstring(trimmed, 0, colonPos)
 
    elsif IndexOfSubstring(trimmed, "VST", false) == 0 and IndexOfSubstring(trimmed, ":", false) > 0 then
@@ -3361,14 +3992,12 @@ Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx :
       if colonPos > 0 then
          vstPart = CopySubstring(trimmed, 0, colonPos)
          rest = CopySubstring(trimmed, colonPos + 1, Length(trimmed) - colonPos - 1)
-         // Extract VST index from "VST1" or "VST1_GRS"
          underPos = IndexOfSubstring(vstPart, "_", false)
          if underPos > 0 then
             vstIdx = StringToInt(CopySubstring(vstPart, 3, underPos - 3))
          else
             vstIdx = StringToInt(CopySubstring(vstPart, 3, Length(vstPart) - 3))
          end
-         // Parse paramIdx and optional label
          colonPos2 = IndexOfSubstring(rest, ":", false)
          if colonPos2 >= 0 then
             paramIdx = StringToInt(CopySubstring(rest, 0, colonPos2))
@@ -3377,9 +4006,9 @@ Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx :
             paramIdx = StringToInt(rest)
             label = ""
          end
-         Mac_Layer_VSTIdx[flatIdx] = vstIdx
-         Mac_Layer_ParamIdx[flatIdx] = paramIdx
-         Mac_Layer_ParamLabel[flatIdx] = label
+         SetMacVSTIdx(macroIdx, bindIdx, vstIdx)
+         SetMacParamIdx(macroIdx, bindIdx, paramIdx)
+         SetMacParamLabel(macroIdx, bindIdx, label)
       end
 
    elsif IndexOfSubstring(trimmed, "Ch", false) == 0 and IndexOfSubstring(trimmed, ":CC", false) > 0 then
@@ -3388,22 +4017,18 @@ Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx :
    elsif IndexOfSubstring(trimmed, "SYSACT_", false) == 0 then
       targetType = "SYSACT"
 
-   elsif IndexOfSubstring(trimmed, ":CH", false) > 0 then
-      // Non-OTZ overlay (legacy): SMART_SOLO:CH3{1.0,1.0}
-      targetType = "OVERLAY"
-      colonPos = IndexOfSubstring(trimmed, ":CH", false)
-      Mac_Layer_Channel[flatIdx] = StringToInt(CopySubstring(trimmed, colonPos + 3, Length(trimmed) - colonPos - 3))
-      trimmed = CopySubstring(trimmed, 0, colonPos)
-
    else
       // Keyword (CROSSFADER, SCRUBBER, VST_SCOPE, CHANNEL_BOUND_LFO, etc.)
       targetType = "KEYWORD"
    end
 
-   Mac_Layer_TargetType[flatIdx] = targetType
-   Mac_Layer_Target[flatIdx] = trimmed
-   Mac_Layer_RangeMin[flatIdx] = rangeMin
-   Mac_Layer_RangeMax[flatIdx] = rangeMax
+   SetMacTargetType(macroIdx, bindIdx, targetType)
+   SetMacTarget(macroIdx, bindIdx, trimmed)
+   SetMacRangeMin(macroIdx, bindIdx, rangeMin)
+   SetMacRangeMax(macroIdx, bindIdx, rangeMax)
+   SetMacIsOTZ(macroIdx, bindIdx, isOTZ)
+   SetMacMode(macroIdx, bindIdx, mode)
+   SetMacHasReset(macroIdx, bindIdx, hasReset)
 
    result = 0
 End
@@ -3442,7 +4067,7 @@ Function ParseMacroLine(line : String, isDefault : Boolean)
             dummy = ParseMacroSource(macroIdx, sourceStr)
          end
 
-         // Parse pipe-separated bindings — all go to layer 0 (flat)
+         // Parse pipe-separated bindings — up to MAX_BINDINGS_PER_LAYER (8)
          bindCount = 0
          remaining = bindingsStr
          For iteration = 0; iteration < MAX_BINDINGS_PER_LAYER; iteration = iteration + 1 Do
@@ -3462,10 +4087,27 @@ Function ParseMacroLine(line : String, isDefault : Boolean)
             end
          End
 
-         // Store bind count (no layer dimension)
+         // Warn if more pipes were present
+         if Length(remaining) > 0 then
+            if DebugMode then Trace("PARSE: Macro" + macroIdx + " — bindings beyond " + MAX_BINDINGS_PER_LAYER + " ignored: " + remaining) end
+         end
+
+         // Store bind count
          Mac_Layer_BindCount[macroIdx] = bindCount
 
-         // If storing to default, copy to Def_* arrays
+         // OTZ Redesign: Overlay-Alone promotion
+         // If first binding is an OVERLAY-target without OTZ marker, treat as base.
+         // (Handled inline by parser since IsOTZ is per-binding; verify no ambiguity.)
+         // Edge case: if no non-OTZ binding found, promote the first OTZ to base.
+         if bindCount > 0 then
+            if GetMacIsOTZ(macroIdx, 0) then
+               // First binding is OTZ — illegal as base. Demote OTZ flag.
+               if DebugMode then Trace("PARSE: Macro" + macroIdx + " — first binding had OTZ; demoted to base (no other base present)") end
+               SetMacIsOTZ(macroIdx, 0, false)
+            end
+         end
+
+         // If storing to default, copy to Def_* arrays via SetDefMacAll
          if isDefault then
             Def_Mac_SourceCount[macroIdx] = Mac_SourceCount[macroIdx]
             Def_Mac_SourceLayer[macroIdx] = Mac_SourceLayer[macroIdx]
@@ -3475,15 +4117,7 @@ Function ParseMacroLine(line : String, isDefault : Boolean)
             End
             Def_Mac_Layer_BindCount[macroIdx] = Mac_Layer_BindCount[macroIdx]
             For bi = 0; bi < bindCount; bi = bi + 1 Do
-               fi = MacLayerBindIdx(macroIdx, 0, bi)
-               Def_Mac_Layer_TargetType[fi] = Mac_Layer_TargetType[fi]
-               Def_Mac_Layer_Target[fi] = Mac_Layer_Target[fi]
-               Def_Mac_Layer_RangeMin[fi] = Mac_Layer_RangeMin[fi]
-               Def_Mac_Layer_RangeMax[fi] = Mac_Layer_RangeMax[fi]
-               Def_Mac_Layer_Channel[fi] = Mac_Layer_Channel[fi]
-               Def_Mac_Layer_VSTIdx[fi] = Mac_Layer_VSTIdx[fi]
-               Def_Mac_Layer_ParamIdx[fi] = Mac_Layer_ParamIdx[fi]
-               Def_Mac_Layer_ParamLabel[fi] = Mac_Layer_ParamLabel[fi]
+               SetDefMacAll(macroIdx, bi)
             End
          end
       end
@@ -3796,27 +4430,49 @@ Function UpdateControllerInfoDisplay()
          end
          CtrlInfo_Lines <-- "Macro " + IntToString(m) + " [" + srcDesc + "]:"
 
-         // Show all bindings (flat, no layer dimension)
+         // Show all bindings — OTZ Redesign: bank-aware Get helpers
          lay0Count = Mac_Layer_BindCount[m]
          For b = 0; b < lay0Count; b = b + 1 Do
-            fi = MacLayerBindIdx(m, 0, b)
-            targetDesc = Mac_Layer_Target[fi]
-            if Mac_Layer_TargetType[fi] == "OVERLAY" then
-               targetDesc = targetDesc + ":CH" + IntToString(Mac_Layer_Channel[fi])
+            targetDesc = ""
+            // OTZ marker prefix
+            if GetMacIsOTZ(m, b) then
+               targetDesc = "OTZ "
             end
-            if Length(Mac_Layer_ParamLabel[fi]) > 0 then
-               targetDesc = targetDesc + " " + Mac_Layer_ParamLabel[fi]
+            targetDesc = targetDesc + GetMacTarget(m, b)
+            if GetMacTargetType(m, b) == "OVERLAY" then
+               targetDesc = targetDesc + ":CH" + IntToString(GetMacChannel(m, b))
             end
-            if Mac_Layer_RangeMin[fi] <> 0.0 or Mac_Layer_RangeMax[fi] <> 1.0 then
-               targetDesc = targetDesc + " {" + DoubleToString(Mac_Layer_RangeMin[fi], 1) + "," + DoubleToString(Mac_Layer_RangeMax[fi], 1) + "}"
+            if Length(GetMacParamLabel(m, b)) > 0 then
+               targetDesc = targetDesc + " " + GetMacParamLabel(m, b)
             end
-            // Check VST validity
-            if Mac_Layer_TargetType[fi] == "VST" then
-               vstV = Mac_Layer_VSTIdx[fi]
+            // Mode + range/keyword
+            if GetMacMode(m, b) == MODE_DIR then
+               targetDesc = targetDesc + " DIR"
+            elsif GetMacRangeMin(m, b) == 1.0 and GetMacRangeMax(m, b) == 1.0 then
+               targetDesc = targetDesc + " MAX"
+            elsif GetMacRangeMin(m, b) == 0.0 and GetMacRangeMax(m, b) == 0.0 then
+               targetDesc = targetDesc + " MIN"
+            elsif GetMacRangeMin(m, b) <> 0.0 or GetMacRangeMax(m, b) <> 1.0 then
+               targetDesc = targetDesc + " {" + DoubleToString(GetMacRangeMin(m, b), 2) + "," + DoubleToString(GetMacRangeMax(m, b), 2) + "}"
+            end
+            // RESET modifier
+            if GetMacHasReset(m, b) then
+               targetDesc = targetDesc + " + RESET"
+            end
+            // VST validity
+            if GetMacTargetType(m, b) == "VST" then
+               vstV = GetMacVSTIdx(m, b)
                if vstV >= 1 and vstV < MAX_VST_DECL then
                   if MapVST_Valid[vstV] > 1 then
                      targetDesc = targetDesc + "  [BLOCKED: VST" + IntToString(vstV) + " invalid]"
                   end
+               end
+            end
+            // Live-State indicator for OTZ overlays
+            if GetMacIsOTZ(m, b) and GetMacTargetType(m, b) == "OVERLAY" then
+               vstV = FuncIdxFromTarget(GetMacTarget(m, b))
+               if vstV >= 0 and GetOverlayState(vstV, GetMacChannel(m, b)) == 1 then
+                  targetDesc = targetDesc + " *"
                end
             end
             CtrlInfo_Lines <-- "    -> " + targetDesc
@@ -4148,41 +4804,116 @@ Function MorphSend(sliderIdx : Integer, val : Double)
     end
 End
 
-// Read values directly from the plugin and update Mac_Layer_* ranges
+// Read values directly from the plugin and update Mac_Layer_* ranges.
+// SuperKnob support: iterates ALL non-OTZ base bindings on the macro.
+// OTZ overlays are skipped (they have fixed trigger ranges).
 Function CaptureSmartRanges(isMin : Boolean)
-   var macIdx, fi, bc, vstIdx, paramIdx, count : Integer = 0
-   var currentVal, diff : Double = 0.0
+   var macIdx, b, bc, vstIdx, paramIdx, count : Integer
+   var currentVal, diff, oldMin, oldMax : Double = 0.0
    var sIdx : Integer
 
+   count = 0
    For macIdx = 1; macIdx <= 16; macIdx = macIdx + 1 Do
        sIdx = macIdx - 1
        if CurrentEditScope == -1 or CurrentEditScope == sIdx then
-           bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
-           if bc > 0 then
-               fi = MacLayerBindIdx(macIdx, 0, 0)
-               // Skip non-VST targets (CCs, keywords, etc.)
-               if Mac_Layer_TargetType[fi] == "VST" then
-                   vstIdx = Mac_Layer_VSTIdx[fi]
-                   paramIdx = Mac_Layer_ParamIdx[fi]
-                   currentVal = 0.0
-                   if vstIdx >= 1 and vstIdx <= MAX_VSTS then
-                       currentVal = GetParameter(BLK_VST[vstIdx], paramIdx)
-                   end
+           // Skip LFO-bound macros — plugin value is mid-oscillation, not a meaningful min/max
+           if LFO_ByMacro[sIdx] >= 0 then
+               if DebugMode then Trace("Editor: Macro " + macIdx + " skipped (LFO bound: " + LFO_Names[LFO_ByMacro[sIdx]] + ")") end
+           else
+           bc = Mac_Layer_BindCount[macIdx]
+           For b = 0; b < bc; b = b + 1 Do
+               // Skip OTZ overlays — fixed trigger ranges, not a learn target
+               if not GetMacIsOTZ(macIdx, b) then
+                   if GetMacTargetType(macIdx, b) == "VST" then
+                       vstIdx = GetMacVSTIdx(macIdx, b)
+                       paramIdx = GetMacParamIdx(macIdx, b)
+                       currentVal = 0.0
+                       if vstIdx >= 1 and vstIdx <= MAX_VSTS then
+                           currentVal = GetParameter(BLK_VST[vstIdx], paramIdx)
+                       end
+                       oldMin = GetMacRangeMin(macIdx, b)
+                       oldMax = GetMacRangeMax(macIdx, b)
 
-                   if isMin then
-                       diff = Abs(currentVal - Mac_Layer_RangeMax[fi])
-                       if diff > 0.001 then Mac_Layer_RangeMin[fi] = currentVal; count = count + 1 end
-                   else
-                       diff = Abs(currentVal - Mac_Layer_RangeMin[fi])
-                       if diff > 0.001 then Mac_Layer_RangeMax[fi] = currentVal; count = count + 1 end
+                       if isMin then
+                           diff = Abs(currentVal - oldMax)
+                           if diff > 0.001 then
+                               SetMacRangeMin(macIdx, b, currentVal)
+                               count = count + 1
+                           end
+                       else
+                           diff = Abs(currentVal - oldMin)
+                           if diff > 0.001 then
+                               SetMacRangeMax(macIdx, b, currentVal)
+                               count = count + 1
+                           end
+                       end
                    end
                end
+           End
            end
        end
    End
    if isMin then Trace("Editor: Captured MIN (A) values for " + count + " bindings.") else Trace("Editor: Captured MAX (B) values for " + count + " bindings.") end
    SyncArrangerToCurrentMap()
    UpdateControllerInfoDisplay()
+End
+
+// --------------------------------------------------------------------
+// FORMAT BINDING — emit one binding in canonical syntax
+// (used by ExportSmartConfig + UpdateControllerInfoDisplay)
+// --------------------------------------------------------------------
+Function FormatBinding(macIdx : Integer, bindIdx : Integer) Returns String
+   var t, label, target, specs, paramLbl : String
+   var ch, mode : Integer
+   var rmin, rmax : Double = 0.0
+
+   t = GetMacTargetType(macIdx, bindIdx)
+   target = GetMacTarget(macIdx, bindIdx)
+   label = target
+
+   if t == "OVERLAY" then
+      ch = GetMacChannel(macIdx, bindIdx)
+      label = label + ":CH" + IntToString(ch)
+   elsif t == "VST" then
+      paramLbl = GetMacParamLabel(macIdx, bindIdx)
+      if Length(paramLbl) > 0 then
+         label = label + ":" + paramLbl
+      end
+   end
+
+   // Build SPEC tokens
+   specs = ""
+   if GetMacIsOTZ(macIdx, bindIdx) then specs = "OTZ" end
+
+   mode = GetMacMode(macIdx, bindIdx)
+   rmin = GetMacRangeMin(macIdx, bindIdx)
+   rmax = GetMacRangeMax(macIdx, bindIdx)
+
+   if mode == MODE_DIR then
+      if Length(specs) > 0 then specs = specs + "," end
+      specs = specs + "DIR"
+   elsif mode == MODE_POINT and rmin == 1.0 then
+      if Length(specs) > 0 then specs = specs + "," end
+      specs = specs + "MAX"
+   elsif mode == MODE_POINT and rmin == 0.0 then
+      if Length(specs) > 0 then specs = specs + "," end
+      specs = specs + "MIN"
+   else
+      // Numeric range — always emit (preserves Min/Max captured values)
+      if Length(specs) > 0 then specs = specs + "," end
+      specs = specs + DoubleToString(rmin, 3) + "," + DoubleToString(rmax, 3)
+   end
+
+   if GetMacHasReset(macIdx, bindIdx) then
+      if Length(specs) > 0 then specs = specs + "," end
+      specs = specs + "RESET"
+   end
+
+   if Length(specs) > 0 then
+      result = label + "{" + specs + "}"
+   else
+      result = label
+   end
 End
 
 // --------------------------------------------------------------------
@@ -4235,25 +4966,30 @@ Function ExportSmartConfig()
                    newBlock = newBlock + line + " = SYSTEM_TOGGLE" + NEW_LINE
                
                else
-                   // --- CHECK Mac_Layer_* BINDINGS ---
+                   // --- BUILD MULTI-BINDING (Base + OTZ overlays) ---
                    if not isCC then
-                       lfoPrefix = ""
-                       if LFO_ByMacro[s] >= 0 then
-                           lfoPrefix = "LFO:" + LFO_Names[LFO_ByMacro[s]] + " | "
-                       end
                        macIdx = s + 1
-                       bc = Mac_Layer_BindCount[MacLayerIdx(macIdx, 0)]
-                       if bc > 0 then
-                           fi = MacLayerBindIdx(macIdx, 0, 0)
-                           line = line + " = " + lfoPrefix + Mac_Layer_Target[fi]
-                           if Length(Mac_Layer_ParamLabel[fi]) > 0 then
-                               line = line + ":" + Mac_Layer_ParamLabel[fi]
+                       if macIdx < MAX_LAYER_MACROS then
+                           bc = Mac_Layer_BindCount[macIdx]
+                           if bc > 0 then
+                               lfoPrefix = ""
+                               if LFO_ByMacro[s] >= 0 then
+                                   lfoPrefix = "LFO:" + LFO_Names[LFO_ByMacro[s]] + " | "
+                               end
+                               // Pipe-separated bindings
+                               valStr = ""
+                               For lnk = 0; lnk < bc; lnk = lnk + 1 Do
+                                   if Length(valStr) > 0 then valStr = valStr + " | " end
+                                   valStr = valStr + FormatBinding(macIdx, lnk)
+                               End
+                               if Length(valStr) > 0 then
+                                   line = line + " = " + lfoPrefix + valStr
+                                   linkFound = true
+                               end
                            end
-                           valStr = " {" + Round(Mac_Layer_RangeMin[fi]*1000)/1000.0 + ", " + Round(Mac_Layer_RangeMax[fi]*1000)/1000.0 + "}"
-                           line = line + valStr
-                           linkFound = true
                        end
                    end
+                   // Skip empty macros — only write when something is bound
                    if linkFound then newBlock = newBlock + line + NEW_LINE end
                end
            End
@@ -6528,6 +7264,40 @@ Function BuildLFOUsageIndex()
 End
 
 // ---------------------------------------------------------
+// SYNC LFO_ByMacro — populate from LFO_Usage for active map
+// Must be called after every BuildLFOUsageIndex().
+// ---------------------------------------------------------
+Function SyncLFOByMacro()
+   var i, activeMapIdx : Integer
+
+   // Reset all slots to unbound
+   For i = 0; i < MAX_MACROS; i = i + 1 Do
+      LFO_ByMacro[i] = -1
+   End
+
+   // Find current map index in CtrlMapList
+   activeMapIdx = -1
+   For i = 0; i < Size(CtrlMapList); i = i + 1 Do
+      if CtrlMapList[i] == CurrentCtrlMapName then activeMapIdx = i end
+   End
+
+   // Populate from usage index entries that match the active map
+   For i = 0; i < Size(LFO_Usage_LfoIdx); i = i + 1 Do
+      if LFO_Usage_MapIdx[i] == activeMapIdx and LFO_Usage_MacroIdx[i] >= 0 and LFO_Usage_MacroIdx[i] < MAX_MACROS then
+         LFO_ByMacro[LFO_Usage_MacroIdx[i]] = LFO_Usage_LfoIdx[i]
+      end
+   End
+
+   if DebugMode then
+      activeMapIdx = 0
+      For i = 0; i < MAX_MACROS; i = i + 1 Do
+         if LFO_ByMacro[i] >= 0 then activeMapIdx = activeMapIdx + 1 end
+      End
+      Trace("LFO v2: SyncLFOByMacro complete, " + activeMapIdx + " bound slots for map '" + CurrentCtrlMapName + "'")
+   end
+End
+
+// ---------------------------------------------------------
 // BUILD LFO BIND LINES (v2)
 // Populates LFOBind_Lines with the head-line-only display of every
 // binding for a given LFO, grouped by map. Called from
@@ -7257,7 +8027,7 @@ End
 
 // Copies all Def_Mac_* arrays into Mac_* (active) arrays
 Function CloneDefaultToActive()
-   var m, s, b, fi : Integer
+   var m, s, b : Integer
    For m = 1; m < MAX_LAYER_MACROS; m = m + 1 Do
       Mac_SourceCount[m] = Def_Mac_SourceCount[m]
       Mac_SourceLayer[m] = Def_Mac_SourceLayer[m]
@@ -7267,15 +8037,7 @@ Function CloneDefaultToActive()
       End
       Mac_Layer_BindCount[m] = Def_Mac_Layer_BindCount[m]
       For b = 0; b < MAX_BINDINGS_PER_LAYER; b = b + 1 Do
-         fi = MacLayerBindIdx(m, 0, b)
-         Mac_Layer_TargetType[fi] = Def_Mac_Layer_TargetType[fi]
-         Mac_Layer_Target[fi] = Def_Mac_Layer_Target[fi]
-         Mac_Layer_RangeMin[fi] = Def_Mac_Layer_RangeMin[fi]
-         Mac_Layer_RangeMax[fi] = Def_Mac_Layer_RangeMax[fi]
-         Mac_Layer_Channel[fi] = Def_Mac_Layer_Channel[fi]
-         Mac_Layer_VSTIdx[fi] = Def_Mac_Layer_VSTIdx[fi]
-         Mac_Layer_ParamIdx[fi] = Def_Mac_Layer_ParamIdx[fi]
-         Mac_Layer_ParamLabel[fi] = Def_Mac_Layer_ParamLabel[fi]
+         CloneDefBindToActive(m, b)
       End
    End
    // Clone VST declarations
@@ -7317,7 +8079,7 @@ Function RebuildReverseLookups()
    var actionName, label : String
 
    // Clear all 4 per-layer reverse lookup arrays
-   For m = 0; m < 256; m = m + 1 Do
+   For m = 0; m < LOOKUP_SIZE; m = m + 1 Do
       Mac_ReverseLookup_L0[m] = -1
       Mac_ReverseLookup_L1[m] = -1
       Mac_ReverseLookup_L2[m] = -1
@@ -7357,7 +8119,7 @@ Function RebuildReverseLookups()
             physCh = ResolveControlChannel(devIdx, label)
             if physCC >= 0 and physCh >= 0 then
                lookupIdx = physCh * 128 + physCC
-               if lookupIdx >= 0 and lookupIdx < 256 then
+               if lookupIdx >= 0 and lookupIdx < LOOKUP_SIZE then
                   if layer == 0 then
                      Mac_ReverseLookup_L0[lookupIdx] = m
                   elsif layer == 1 then
@@ -7382,6 +8144,7 @@ Function LoadControllerMap(mapName : String)
    var inDefaultMap, inTargetMap, isFirstLoad, targetMapFound : Boolean
    var savedEditScope, dbIdx : Integer
    var ctrlMapFilePath : String
+   var strippedLine : String; var lfoPipePos : Integer
 
    savedEditScope = CurrentEditScope
    ctrlMapFilePath = UserSnapshotPath + "/ControllerMaps.txt"
@@ -7454,7 +8217,20 @@ Function LoadControllerMap(mapName : String)
                      end
                   // Macro lines (per-layer merge)
                   elsif IndexOfSubstring(key, "Macro", false) == 0 then
-                     ParseMacroLine(trimmedLine, false)
+                     // Strip LFO:<name> | prefix before parsing bindings.
+                     // LFO bindings are tracked separately via BuildLFOUsageIndex.
+                     // If only an LFO prefix remains (no bindings), skip parsing
+                     // entirely so Default bindings stay inherited via CloneDefaultToActive.
+                     if IndexOfSubstring(val, "LFO:", false) == 0 then
+                        lfoPipePos = IndexOfSubstring(val, "|", false)
+                        if lfoPipePos >= 0 then
+                           strippedLine = key + " = " + TrimString(CopySubstring(val, lfoPipePos + 1, Length(val) - (lfoPipePos + 1)))
+                           ParseMacroLine(strippedLine, false)
+                        end
+                        // else: LFO-only line, no pipe → skip, keep Default inheritance
+                     else
+                        ParseMacroLine(trimmedLine, false)
+                     end
                   end
                end
             end
@@ -10061,7 +10837,7 @@ Function ProcessMidiLearn(m : NoteMessage)
    var noteNum, pIdx, vel, i : Integer
    var paramVal : Double = 0.0
 
-   if (IsLearningMin or IsLearningMax or IsLearningOctRangeMin or IsLearningOctRangeMax) and IsNoteOn(m) then
+   if LearnMode != LEARN_NONE and IsNoteOn(m) then
 
        noteNum = GetNoteNumber(m)
        paramVal = noteNum / 127.0
@@ -10069,21 +10845,21 @@ Function ProcessMidiLearn(m : NoteMessage)
        For i = 0; i < 16; i = i + 1 Do
           if OutputScope[i] then
 
-             if IsLearningMin then
+             if LearnMode == LEARN_MIN then
                 SetParameter(BLK_NoteProcessor[i], 0, paramVal)
-             elsif IsLearningMax then
+             elsif LearnMode == LEARN_MAX then
                 SetParameter(BLK_NoteProcessor[i], 1, paramVal)
-             elsif IsLearningOctRangeMin then
+             elsif LearnMode == LEARN_OCT_MIN then
                 pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_OctRangeMin")
                 if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) end
                 Mem_NP_OctRangeMin[i] = noteNum
-             elsif IsLearningOctRangeMax then
+             elsif LearnMode == LEARN_OCT_MAX then
                 pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_OctRangeMax")
                 if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) end
                 Mem_NP_OctRangeMax[i] = noteNum
              end
 
-             if IsLearningMin or IsLearningMax then
+             if LearnMode == LEARN_MIN or LearnMode == LEARN_MAX then
                  UpdateChannelFade(i, 4, 0, 0.0)
              end
 
@@ -10091,10 +10867,7 @@ Function ProcessMidiLearn(m : NoteMessage)
           end
        End
 
-       IsLearningMin = false
-       IsLearningMax = false
-       IsLearningOctRangeMin = false
-       IsLearningOctRangeMax = false
+       LearnMode = LEARN_NONE
        SetWidgetValue(BTN_LearnMin, 0.0)
        SetWidgetValue(BTN_LearnMax, 0.0)
        SetWidgetValue(BTN_LearnOctRangeMin, 0.0)
@@ -10107,28 +10880,27 @@ Function ProcessMidiLearn(m : NoteMessage)
        if DebugMode then Trace("LEARN SUCCESS: Injected Note " + noteNum + " to Scope.") end
    end
    
-   if (IsLearningVelMin or IsLearningVelMax) and IsNoteOn(m) then
+   if VelLearnMode != VLEARN_NONE and IsNoteOn(m) then
            vel = GetVelocity(m)
            paramVal = IntToFloat(vel) / 127.0
-           
+
            For i = 0; i < 16; i = i + 1 Do
               if OutputScope[i] then
-                 if IsLearningVelMin then
+                 if VelLearnMode == VLEARN_MIN then
                     Mem_NP_MinVel[i] = vel
                     pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_MinVel")
                  else
                     Mem_NP_MaxVel[i] = vel
                     pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_MaxVel")
                  end
-                 
+
                  // Inject into plugin
                  if pIdx > -1 then SetParameter(BLK_NoteProcessor[i], pIdx, paramVal) end
               end
            End
-           
+
            // Auto-Off: End learn mode
-           IsLearningVelMin = false
-           IsLearningVelMax = false
+           VelLearnMode = VLEARN_NONE
            SetWidgetValue(BTN_Inject_NP_VelMinLearn, 0.0)
            SetWidgetValue(BTN_Inject_NP_VelMaxLearn, 0.0)
            
@@ -11343,83 +12115,255 @@ Function ExecuteKeywordBinding(keyword : String, val : Double)
    end
 End
 
-// Macro dispatch — layer already resolved by per-layer reverse lookup
-Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
-   var b, fi, bindingKey, bindCount, vstIdx, paramIdx, chPos, ccPos, ccCh, ccNum, labelPos, actionIdx, channel : Integer
-   var targetType, target, funcName, ccTarget, afterCC, actionName : String
-   var scaledVal, rMin, rMax, scaledCC, rMinCC, rMaxCC : Double = 0.0
+// Push overlay event to LBL_MacroFeedback (Path B in spec §8.1)
+Function ShowOverlayFeedback(targetName : String, channel : Integer, state : Integer)
+   var msg : String
+   var lockOK : Boolean
+   lockOK = TimeSinceStartup() > MacroFeedbackLockTimer
+   if lockOK then
+      if state == 1 then
+         msg = targetName + ":CH" + IntToString(channel) + " : ON"
+      else
+         msg = targetName + ":CH" + IntToString(channel) + " : OFF"
+      end
+      OSC_SendStringSpecific("/UI/SetMacroFeedback", msg, Local_IP, Local_PORT)
+      MacroFeedbackTimer = TimeSinceStartup() + 1500.0
+   end
+End
+
+// Returns true if an OTZ overlay just transitioned state (suppresses base feedback).
+// Handles MODE_POINT, MODE_RANGE, MODE_DIR. Updates Overlay_FuncState + arms debounce.
+Function EvaluateOTZ(macroIdx : Integer, bindIdx : Integer, val : Double, isNote : Boolean) Returns Boolean
+   var funcIdx, channel, currentState, shouldFire, mode : Integer
+   var rMin, rMax, lastVal : Double = 0.0
+   var targetName : String
+   var fired : Boolean = false
+
+   targetName = GetMacTarget(macroIdx, bindIdx)
+   funcIdx = FuncIdxFromTarget(targetName)
+   channel = GetMacChannel(macroIdx, bindIdx)
+   if funcIdx < 0 or channel < 0 or channel >= 16 then
+      result = false
+   else
+      currentState = GetOverlayState(funcIdx, channel)
+      shouldFire = -1
+
+      if isNote then
+         // Buttons always ON/OFF — ignore mode/range
+         if val > 0.0 then shouldFire = 1 else shouldFire = 0 end
+      else
+         mode = GetMacMode(macroIdx, bindIdx)
+         rMin = GetMacRangeMin(macroIdx, bindIdx)
+         rMax = GetMacRangeMax(macroIdx, bindIdx)
+
+         if mode == MODE_POINT then
+            if Abs(val - rMin) < 0.02 then shouldFire = 1 else shouldFire = 0 end
+         elsif mode == MODE_RANGE then
+            if val >= rMin and val <= rMax then shouldFire = 1 else shouldFire = 0 end
+         elsif mode == MODE_DIR then
+            lastVal = Control_LastValue[macroIdx]
+            if val > lastVal + 0.02 then shouldFire = 1
+            elsif val < lastVal - 0.02 then shouldFire = 0 end
+         end
+      end
+
+      if shouldFire >= 0 and shouldFire != currentState then
+         if shouldFire == 1 then
+            ActivateOverlay(targetName, channel)
+         else
+            DeactivateOverlay(targetName, channel)
+         end
+         SetOverlayState(funcIdx, channel, shouldFire)
+         Control_DebounceUntil[macroIdx] = TimeSinceStartup() + OTZ_DEBOUNCE_MS
+         ControllerInfoDirty = true
+         ShowOverlayFeedback(targetName, channel, shouldFire)
+         fired = true
+      end
+      result = fired
+   end
+End
+
+// Sends MIDI value 64 (≈0.5) back to the hardware control's CC for this macro.
+// Sets EchoBlock so the rebound CC won't trigger OTZ.
+Function SendResetToHW(macroIdx : Integer)
+   var devIdx, physCC, physCh : Integer
+   var labelStr : String
+   if Mac_SourceCount[macroIdx] > 0 then
+      devIdx = Mac_SourceDev[MacSourceIdx(macroIdx, 0)]
+      labelStr = Mac_SourceLabel[MacSourceIdx(macroIdx, 0)]
+      physCC = ResolveControlCC(devIdx, labelStr)
+      physCh = ResolveControlChannel(devIdx, labelStr)
+      if physCC >= 0 and physCh >= 0 then
+         Pending_HAL_FaderSync[macroIdx - 1] = true
+         Pending_HAL_FaderVal[macroIdx - 1] = 0.5
+         Control_EchoBlockUntil[macroIdx] = TimeSinceStartup() + OTZ_ECHO_BLOCK_MS
+      end
+   end
+End
+
+// Push base + active-overlay summary to LBL_MacroFeedback (Path A in spec §8.1)
+Function ShowBaseFeedback(macroIdx : Integer, val : Double)
+   var bindCount, b, vstIdx, funcIdx, channel, firstBaseIdx : Integer
+   var msg, pName, paramName, targetName : String
+   var rMin, rMax, mappedVal : Double = 0.0
+   var lockOK : Boolean
+   var firstBaseFound : Boolean = false
+
+   if TimeSinceStartup() > MacroFeedbackLockTimer then
+      bindCount = Mac_Layer_BindCount[macroIdx]
+      msg = ""
+      firstBaseIdx = -1
+
+      // Find first non-OTZ base binding
+      For b = 0; b < bindCount; b = b + 1 Do
+         if not GetMacIsOTZ(macroIdx, b) and not firstBaseFound then
+            firstBaseIdx = b
+            firstBaseFound = true
+         end
+      End
+
+      if firstBaseFound then
+         if GetMacTargetType(macroIdx, firstBaseIdx) == "VST" then
+            vstIdx = GetMacVSTIdx(macroIdx, firstBaseIdx)
+            if vstIdx >= 1 and vstIdx <= MAX_VSTS then
+               pName = GetPluginInfo(BLK_VST[vstIdx], 0)
+            else
+               pName = "VST?"
+            end
+         else
+            pName = GetMacTargetType(macroIdx, firstBaseIdx)
+         end
+         paramName = GetMacParamLabel(macroIdx, firstBaseIdx)
+         if Length(paramName) == 0 then paramName = GetMacTarget(macroIdx, firstBaseIdx) end
+         rMin = GetMacRangeMin(macroIdx, firstBaseIdx)
+         rMax = GetMacRangeMax(macroIdx, firstBaseIdx)
+         mappedVal = rMin + (val * (rMax - rMin))
+         msg = pName + " | " + paramName + " : " + Round(mappedVal * 100.0) + "%"
+      end
+
+      // Append active OTZ overlays
+      For b = 0; b < bindCount; b = b + 1 Do
+         if GetMacIsOTZ(macroIdx, b) then
+            targetName = GetMacTarget(macroIdx, b)
+            funcIdx = FuncIdxFromTarget(targetName)
+            channel = GetMacChannel(macroIdx, b)
+            if funcIdx >= 0 and GetOverlayState(funcIdx, channel) == 1 then
+               msg = msg + " | " + targetName + " ON"
+            end
+         end
+      End
+
+      if Length(msg) > 0 then
+         OSC_SendStringSpecific("/UI/SetMacroFeedback", msg, Local_IP, Local_PORT)
+         MacroFeedbackTimer = TimeSinceStartup() + 1500.0
+      end
+   end
+End
+
+// Macro dispatch — orchestrates Base + OTZ overlays for one macro.
+// isEcho=true means the value originated from GP→HW (LFO, RESET) — skip OTZ to prevent rebound.
+Function DispatchMacro(matchedMacro : Integer, val : Double, isNote : Boolean, isEcho : Boolean)
+   var b, bindCount, vstIdx, paramIdx, chPos, ccPos, ccCh, ccNum, labelPos, actionIdx, channel : Integer
+   var targetType, target, ccTarget, afterCC, actionName : String
+   var scaledVal, rMin, rMax, scaledCC : Double = 0.0
+   var otzFired : Boolean = false
+   var ctrlEchoActive : Boolean
 
    // Guard: plugin safety during init/snapshot
    if not IsLoadingSnapshot and TimeSinceStartup() > FaderSafetyTimer then
       bindCount = Mac_Layer_BindCount[matchedMacro]
-      For b = 0; b < bindCount; b = b + 1 Do
-         fi = MacLayerBindIdx(matchedMacro, 0, b)
-         targetType = Mac_Layer_TargetType[fi]
-         target = Mac_Layer_Target[fi]
+      ctrlEchoActive = TimeSinceStartup() < Control_EchoBlockUntil[matchedMacro]
 
-         if targetType == "VST" then
-            vstIdx = Mac_Layer_VSTIdx[fi]
-            paramIdx = Mac_Layer_ParamIdx[fi]
-            if vstIdx >= 1 and vstIdx < MAX_VST_DECL then
-               if MapVST_Valid[vstIdx] == 1 or MapVST_Valid[vstIdx] == 0 then
-                  scaledVal = 0.0
-                  rMin = Mac_Layer_RangeMin[fi]
-                  rMax = Mac_Layer_RangeMax[fi]
-                  scaledVal = rMin + (val * (rMax - rMin))
-                  if vstIdx <= MAX_VSTS then
-                     SetParameter(BLK_VST[vstIdx], paramIdx, scaledVal)
+      For b = 0; b < bindCount; b = b + 1 Do
+         targetType = GetMacTargetType(matchedMacro, b)
+         target = GetMacTarget(matchedMacro, b)
+
+         if GetMacIsOTZ(matchedMacro, b) then
+            // OTZ Overlay path — read-only, debounced, echo-protected
+            if not isEcho and not ctrlEchoActive then
+               if TimeSinceStartup() >= Control_DebounceUntil[matchedMacro] then
+                  if EvaluateOTZ(matchedMacro, b, val, isNote) then otzFired = true end
+               end
+            end
+
+         else
+            // Base binding — write to target
+            if targetType == "VST" then
+               vstIdx = GetMacVSTIdx(matchedMacro, b)
+               paramIdx = GetMacParamIdx(matchedMacro, b)
+               if vstIdx >= 1 and vstIdx < MAX_VST_DECL then
+                  if MapVST_Valid[vstIdx] == 1 or MapVST_Valid[vstIdx] == 0 then
+                     rMin = GetMacRangeMin(matchedMacro, b)
+                     rMax = GetMacRangeMax(matchedMacro, b)
+                     scaledVal = rMin + (val * (rMax - rMin))
+                     if vstIdx <= MAX_VSTS then
+                        SetParameter(BLK_VST[vstIdx], paramIdx, scaledVal)
+                        if DebugMode then
+                           Trace("VST-WRITE: Macro" + matchedMacro + " bind" + b + " VST" + vstIdx + " param" + paramIdx + " = " + DoubleToString(scaledVal, 4) + " | readback=" + DoubleToString(GetParameter(BLK_VST[vstIdx], paramIdx), 4))
+                        end
+                     end
                   end
                end
+
+            elsif targetType == "CC" then
+               ccTarget = target
+               chPos = IndexOfSubstring(ccTarget, "Ch", false)
+               ccPos = IndexOfSubstring(ccTarget, ":CC", false)
+               if chPos >= 0 and ccPos > 0 then
+                  ccCh = StringToInt(CopySubstring(ccTarget, chPos + 2, ccPos - chPos - 2)) - 1
+                  afterCC = CopySubstring(ccTarget, ccPos + 3, Length(ccTarget) - ccPos - 3)
+                  labelPos = IndexOfSubstring(afterCC, ":", false)
+                  if labelPos >= 0 then
+                     ccNum = StringToInt(CopySubstring(afterCC, 0, labelPos))
+                  else
+                     ccNum = StringToInt(afterCC)
+                  end
+                  rMin = GetMacRangeMin(matchedMacro, b)
+                  rMax = GetMacRangeMax(matchedMacro, b)
+                  scaledCC = rMin + (val * (rMax - rMin))
+                  SendNowToMidiOutDevice(GetDeviceRoute(arrangerDevIdx, ROUTE_CONTROL), MakeControlChangeMessageEx(ccNum, Round(scaledCC * 127.0), ccCh))
+               end
+
+            elsif targetType == "KEYWORD" then
+               ExecuteKeywordBinding(target, val)
+
+            elsif targetType == "SYSACT" then
+               if val > 0.5 then
+                  actionName = target
+                  if IndexOfSubstring(actionName, "SYSACT_", false) == 0 then
+                     actionName = CopySubstring(actionName, 7, Length(actionName) - 7)
+                  end
+                  actionIdx = SysActIdx(actionName)
+                  if actionIdx >= 0 then
+                     PendingSysActionIdx = actionIdx
+                  end
+               end
+
+            elsif targetType == "OVERLAY" then
+               // Overlay-alone promoted to base — same dispatch as OTZ but writes to ActivateOverlay
+               channel = GetMacChannel(matchedMacro, b)
+               if EvaluateOTZ(matchedMacro, b, val, isNote) then otzFired = true end
             end
 
-         elsif targetType == "CC" then
-            // Parse Ch<c>:CC<n> from target string
-            ccTarget = target
-            chPos = IndexOfSubstring(ccTarget, "Ch", false)
-            ccPos = IndexOfSubstring(ccTarget, ":CC", false)
-            if chPos >= 0 and ccPos > 0 then
-               ccCh = StringToInt(CopySubstring(ccTarget, chPos + 2, ccPos - chPos - 2)) - 1
-               afterCC = CopySubstring(ccTarget, ccPos + 3, Length(ccTarget) - ccPos - 3)
-               // Strip label after ":"
-               labelPos = IndexOfSubstring(afterCC, ":", false)
-               if labelPos >= 0 then
-                  ccNum = StringToInt(CopySubstring(afterCC, 0, labelPos))
-               else
-                  ccNum = StringToInt(afterCC)
-               end
-               scaledCC = 0.0
-               rMinCC = Mac_Layer_RangeMin[fi]
-               rMaxCC = Mac_Layer_RangeMax[fi]
-               scaledCC = rMinCC + (val * (rMaxCC - rMinCC))
-               SendNowToMidiOutDevice(GetDeviceRoute(arrangerDevIdx, ROUTE_CONTROL), MakeControlChangeMessageEx(ccNum, Round(scaledCC * 127.0), ccCh))
-            end
-
-         elsif targetType == "KEYWORD" then
-            ExecuteKeywordBinding(target, val)
-
-         elsif targetType == "SYSACT" then
-            if val > 0.5 then
-               actionName = target
-               if IndexOfSubstring(actionName, "SYSACT_", false) == 0 then
-                  actionName = CopySubstring(actionName, 7, Length(actionName) - 7)
-               end
-               actionIdx = SysActIdx(actionName)
-               if actionIdx >= 0 then
-                  // Deferred: FireSystemAction is defined after this function
-                  PendingSysActionIdx = actionIdx
-               end
-            end
-
-         elsif targetType == "OVERLAY" then
-            funcName = target
-            channel = Mac_Layer_Channel[fi]
-            bindingKey = fi
-            if bindingKey < MAX_OVERLAY_BINDINGS then
-               FireOverlayTrigger(funcName, channel, val, Mac_Layer_RangeMin[fi], Mac_Layer_RangeMax[fi], bindingKey)
+            // RESET: write hardware back to 0.5 after fire
+            if GetMacHasReset(matchedMacro, b) then
+               SendResetToHW(matchedMacro)
             end
          end
       End
+
+      Control_LastValue[matchedMacro] = val
+
+      // Display: Path B already shown in EvaluateOTZ. Path A only if no OTZ event.
+      if not otzFired and not isEcho then
+         ShowBaseFeedback(matchedMacro, val)
+      end
    end
+End
+
+// Backward-compat shim — old call sites pass through to DispatchMacro
+Function ExecuteHardwareMacro(matchedMacro : Integer, val : Double)
+   DispatchMacro(matchedMacro, val, false, false)
 End
 
 // ---------------------------------------------------------
@@ -11600,7 +12544,7 @@ Function FireSystemAction(actionIdx : Integer)
 End
 
 Function ProcessHardwareCC(m : ControlChangeMessage)
-   var ch, cc, i, lookupIdx, macroFromLookup, pIdx : Integer
+   var ch, cc, i, lookupIdx, macroFromLookup, pIdx, scanIdx : Integer
    var val : Double = 0.0
    var mName : String = ""
 
@@ -11611,9 +12555,6 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
    val = IntToFloat(GetCCValue(m)) / 127.0
 
    if DebugMode then Trace("MACRO-IN: Ch" + IntToString(ch + 1) + ":CC" + IntToString(cc) + " -> " + IntToString(GetCCValue(m))) end
-
-   // --- UNIVERSAL FEEDBACK ANFEUERN ---
-   TriggerMacroFeedback(cc, true, val)
 
    // 1. LEARN MODE (hardware sources are now configured in ControllerMaps.txt)
    if IsHardwareLearning then
@@ -11714,8 +12655,9 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
 
        // --- C: REVERSE LOOKUP (CC -> Macro) — layer-aware dispatch ---
        lookupIdx = ch * 128 + cc
-       if lookupIdx >= 0 and lookupIdx < 256 then
-          // Select lookup by ActiveLayer
+       macroFromLookup = -1
+       if lookupIdx >= 0 and lookupIdx < LOOKUP_SIZE then
+          // Fast path: array lookup
           if ActiveLayer == 0 then
              macroFromLookup = Mac_ReverseLookup_L0[lookupIdx]
           elsif ActiveLayer == 1 then
@@ -11725,13 +12667,24 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
           elsif ActiveLayer == 3 then
              macroFromLookup = Mac_ReverseLookup_L3[lookupIdx]
           end
-          if macroFromLookup > 0 then
-             ExecuteHardwareMacro(macroFromLookup, val)
-             // Deferred SYSACT dispatch (ExecuteHardwareMacro can't call FireSystemAction directly)
-             if PendingSysActionIdx >= 0 then
-                FireSystemAction(PendingSysActionIdx)
-                PendingSysActionIdx = -1
+       else
+          // Slow path: linear scan (ch*128+cc >= 256, e.g. CC7 on ch2+)
+          For scanIdx = 1; scanIdx < MAX_LAYER_MACROS; scanIdx = scanIdx + 1 Do
+             if Mac_SourceCount[scanIdx] > 0 and Mac_SourceLayer[scanIdx] == ActiveLayer then
+                if ResolveControlCC(Mac_SourceDev[MacSourceIdx(scanIdx, 0)], Mac_SourceLabel[MacSourceIdx(scanIdx, 0)]) == cc then
+                   if ResolveControlChannel(Mac_SourceDev[MacSourceIdx(scanIdx, 0)], Mac_SourceLabel[MacSourceIdx(scanIdx, 0)]) == ch then
+                      macroFromLookup = scanIdx
+                   end
+                end
              end
+          End
+       end
+       if macroFromLookup > 0 then
+          DispatchMacro(macroFromLookup, val, false, false)
+          // Deferred SYSACT dispatch (DispatchMacro can't call FireSystemAction directly)
+          if PendingSysActionIdx >= 0 then
+             FireSystemAction(PendingSysActionIdx)
+             PendingSysActionIdx = -1
           end
        end
 
@@ -11839,7 +12792,7 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
 End
 
 Function ProcessHardwareNote(m : NoteMessage)
-    var chan, noteNum, lookupIdx, macroFromLookup : Integer
+    var chan, noteNum, lookupIdx, macroFromLookup, scanIdx : Integer
     var val : Double = 0.0
     chan = GetChannel(m)
     noteNum = GetNoteNumber(m)
@@ -11864,8 +12817,8 @@ Function ProcessHardwareNote(m : NoteMessage)
 
         // Note-based macro dispatch — layer-aware reverse lookup
         lookupIdx = chan * 128 + noteNum
-        if lookupIdx >= 0 and lookupIdx < 256 then
-           // Select lookup by ActiveLayer
+        macroFromLookup = -1
+        if lookupIdx >= 0 and lookupIdx < LOOKUP_SIZE then
            if ActiveLayer == 0 then
               macroFromLookup = Mac_ReverseLookup_L0[lookupIdx]
            elsif ActiveLayer == 1 then
@@ -11875,12 +12828,23 @@ Function ProcessHardwareNote(m : NoteMessage)
            elsif ActiveLayer == 3 then
               macroFromLookup = Mac_ReverseLookup_L3[lookupIdx]
            end
-           if macroFromLookup > 0 then
-              ExecuteHardwareMacro(macroFromLookup, val)
-              if PendingSysActionIdx >= 0 then
-                 FireSystemAction(PendingSysActionIdx)
-                 PendingSysActionIdx = -1
+        else
+           // Slow path: linear scan (overflow)
+           For scanIdx = 1; scanIdx < MAX_LAYER_MACROS; scanIdx = scanIdx + 1 Do
+              if Mac_SourceCount[scanIdx] > 0 and Mac_SourceLayer[scanIdx] == ActiveLayer then
+                 if ResolveControlCC(Mac_SourceDev[MacSourceIdx(scanIdx, 0)], Mac_SourceLabel[MacSourceIdx(scanIdx, 0)]) == noteNum then
+                    if ResolveControlChannel(Mac_SourceDev[MacSourceIdx(scanIdx, 0)], Mac_SourceLabel[MacSourceIdx(scanIdx, 0)]) == chan then
+                       macroFromLookup = scanIdx
+                    end
+                 end
               end
+           End
+        end
+        if macroFromLookup > 0 then
+           DispatchMacro(macroFromLookup, val, true, false)
+           if PendingSysActionIdx >= 0 then
+              FireSystemAction(PendingSysActionIdx)
+              PendingSysActionIdx = -1
            end
         end
     end
@@ -13246,6 +14210,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
 
             LoadControllerMap(targetCtrlMap)
             BuildLFOUsageIndex()  // v2: rebuild reverse index against the freshly loaded map
+            SyncLFOByMacro()
             HardwareSyncTimer = TimeSinceStartup() + 3500.0
             SyncInputFeedback()
             TriggerSongTextLoad(songName)
@@ -13304,6 +14269,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
        
        LoadControllerMap("Standard")
        BuildLFOUsageIndex()  // v2: rebuild reverse index against the freshly loaded map
+       SyncLFOByMacro()
        HardwareSyncTimer = TimeSinceStartup() + 100.0
 
        SyncInputFeedback()
@@ -13959,6 +14925,7 @@ Initialization
    if DebugMode then Trace("LFO v2: reverse index + draft + flash state initialized") end
    LoadLFOConfig()   // v1: populate registry after arrays are zeroed
    BuildLFOUsageIndex()  // v2: scan ControllerMaps.txt for bindings
+   SyncLFOByMacro()
 
    // ====================================================================================
    // PHASE 5: DATABASE LOADING
@@ -14526,34 +15493,30 @@ End
 
 On WidgetValueChanged(val : Double) from BTN_LearnMin
    if val > 0.5 then
-       IsLearningMin = true
-       IsLearningMax = false; IsLearningOctRangeMin = false; IsLearningOctRangeMax = false
+       LearnMode = LEARN_MIN
        SetWidgetValue(BTN_LearnMax, 0.0); SetWidgetValue(BTN_LearnOctRangeMin, 0.0); SetWidgetValue(BTN_LearnOctRangeMax, 0.0)
-   else IsLearningMin = false end
+   else LearnMode = LEARN_NONE end
 End
 
 On WidgetValueChanged(val : Double) from BTN_LearnMax
    if val > 0.5 then
-       IsLearningMax = true
-       IsLearningMin = false; IsLearningOctRangeMin = false; IsLearningOctRangeMax = false
+       LearnMode = LEARN_MAX
        SetWidgetValue(BTN_LearnMin, 0.0); SetWidgetValue(BTN_LearnOctRangeMin, 0.0); SetWidgetValue(BTN_LearnOctRangeMax, 0.0)
-   else IsLearningMax = false end
+   else LearnMode = LEARN_NONE end
 End
 
 On WidgetValueChanged(val : Double) from BTN_LearnOctRangeMin
    if val > 0.5 then
-       IsLearningOctRangeMin = true
-       IsLearningOctRangeMax = false; IsLearningMin = false; IsLearningMax = false
+       LearnMode = LEARN_OCT_MIN
        SetWidgetValue(BTN_LearnOctRangeMax, 0.0); SetWidgetValue(BTN_LearnMin, 0.0); SetWidgetValue(BTN_LearnMax, 0.0)
-   else IsLearningOctRangeMin = false end
+   else LearnMode = LEARN_NONE end
 End
 
 On WidgetValueChanged(val : Double) from BTN_LearnOctRangeMax
    if val > 0.5 then
-       IsLearningOctRangeMax = true
-       IsLearningOctRangeMin = false; IsLearningMin = false; IsLearningMax = false
+       LearnMode = LEARN_OCT_MAX
        SetWidgetValue(BTN_LearnOctRangeMin, 0.0); SetWidgetValue(BTN_LearnMin, 0.0); SetWidgetValue(BTN_LearnMax, 0.0)
-   else IsLearningOctRangeMax = false end
+   else LearnMode = LEARN_NONE end
 End
 
 On WidgetValueChanged(val : Double) from BTN_Inject_NP_OctRangeFade
@@ -14724,13 +15687,13 @@ On WidgetValueChanged(val : Double) from BTN_Inject_NP_VelMax_Up
 End
 
 On WidgetValueChanged(val : Double) from BTN_Inject_NP_VelMinLearn
-   if val > 0.5 then IsLearningVelMin = true; IsLearningVelMax = false; SetWidgetValue(BTN_Inject_NP_VelMaxLearn, 0.0)
-   else IsLearningVelMin = false end
+   if val > 0.5 then VelLearnMode = VLEARN_MIN; SetWidgetValue(BTN_Inject_NP_VelMaxLearn, 0.0)
+   else VelLearnMode = VLEARN_NONE end
 End
 
 On WidgetValueChanged(val : Double) from BTN_Inject_NP_VelMaxLearn
-   if val > 0.5 then IsLearningVelMax = true; IsLearningVelMin = false; SetWidgetValue(BTN_Inject_NP_VelMinLearn, 0.0)
-   else IsLearningVelMax = false end
+   if val > 0.5 then VelLearnMode = VLEARN_MAX; SetWidgetValue(BTN_Inject_NP_VelMinLearn, 0.0)
+   else VelLearnMode = VLEARN_NONE end
 End
 
 // --- CALLBACKS: HUMANIZER ---
@@ -15203,7 +16166,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Run
                LFO_Draft_Running = false
                Mem_Fader_Buffer[LFO_Draft_Slot] = LFO_Draft_PreValue
                SendArrangerVolumeFeedback(LFO_Draft_PreValue, LFO_Draft_Slot + 1)
-               ExecuteHardwareMacro(LFO_Draft_Slot + 1, LFO_Draft_PreValue)
+               DispatchMacro(LFO_Draft_Slot + 1, LFO_Draft_PreValue, false, true)  // isEcho=true
                SetWidgetValue(METER_LFO_H, 0.0)
                SetWidgetValue(METER_LFO_V, 0.0)
                LFO_Draft_Slot = -1
@@ -15360,7 +16323,13 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Save
                                if DebugMode then Trace("LFO v2: DRAFT save, wrote LFO:" + lfoName + " prefix to [" + mapName + "] Macro" + (scopeSlot + 1) + " (saved=" + saved + ")") end
                            end
                        else
-                           if DebugMode then Trace("LFO v2: BTN_LFO_Save: Macro" + (scopeSlot + 1) + " not found in section [" + mapName + "]") end
+                           // Macro not in song section (inherited from Default).
+                           // Append an LFO-only line — bindings stay inherited.
+                           newLine = "Macro" + (scopeSlot + 1) + " = LFO:" + lfoName
+                           section = section + newLine + NEW_LINE
+                           content = CopySubstring(content, 0, mapSectionStart + Length("[Map:" + mapName + "]")) + section + CopySubstring(content, mapSectionStart + Length("[Map:" + mapName + "]") + mapSectionEnd, Length(content) - (mapSectionStart + Length("[Map:" + mapName + "]") + mapSectionEnd))
+                           saved = SaveStringToTextFile(ControllerMapFilePath, content)
+                           if DebugMode then Trace("LFO v2: DRAFT save, appended LFO-only line to [" + mapName + "] Macro" + (scopeSlot + 1) + " (inherited, saved=" + saved + ")") end
                        end
                    end
                end
@@ -15382,6 +16351,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Save
                UpdateEditScopeDisplay()
                UpdateControllerInfoDisplay()
                BuildLFOUsageIndex()
+               SyncLFOByMacro()
                RefreshLFOInspector()
            end
        end
@@ -15483,6 +16453,7 @@ On WidgetValueChanged(val : Double) from BTN_LFO_Delete
                CurrentEditScope = scopeSlot
                UpdateEditScopeDisplay()
                BuildLFOUsageIndex()
+               SyncLFOByMacro()
                RefreshLFOInspector()
            end
        end
@@ -15527,6 +16498,35 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_A
     var cc : Integer = GetCCNumber(m)
     var val : Integer = GetCCValue(m)
     var ccChan : Integer = GetChannel(m)
+    var swC, guardC : Integer
+
+    // 0. Layer Switch matching (Type=CC)
+    For swC = 0; swC < LayerSwitch_Count; swC = swC + 1 Do
+       if LayerSwitch_DevIdx[swC] == 0 and LayerSwitch_Type[swC] == "CC" then
+          if StringToInt(LayerSwitch_OnData[swC]) == cc and (LayerSwitch_Channel[swC] == -1 or LayerSwitch_Channel[swC] == ccChan) then
+             if val > 63 then
+                if LayerSwitch_State[swC] == 0 then
+                   LayerSwitch_State[swC] = 1
+                   UpdateActiveLayer()
+                   For guardC = 0; guardC < LayerSwitch_Count; guardC = guardC + 1 Do
+                      if guardC != swC then IgnoreSwitchOffUntil[guardC] = TimeSinceStartup() + 200.0 end
+                   End
+                   if DebugMode then Trace("LAYERSWITCH " + IntToString(swC) + " (" + LayerSwitch_Label[swC] + "): ON [CC" + cc + "=" + val + "]") end
+                end
+             else
+                if LayerSwitch_State[swC] == 1 then
+                   if TimeSinceStartup() < IgnoreSwitchOffUntil[swC] then
+                      if DebugMode then Trace("LAYERSWITCH " + IntToString(swC) + " (" + LayerSwitch_Label[swC] + "): OFF suppressed (cross-talk) [CC]") end
+                   else
+                      LayerSwitch_State[swC] = 0
+                      UpdateActiveLayer()
+                      if DebugMode then Trace("LAYERSWITCH " + IntToString(swC) + " (" + LayerSwitch_Label[swC] + "): OFF [CC" + cc + "=" + val + "]") end
+                   end
+                end
+             end
+          end
+       end
+    End
 
     // --- Style feedback: CC5 on TriggerChannel = hardware start/stop ---
     if ccChan + 1 == DEV_TriggerChannel and cc == 5 then
@@ -15604,6 +16604,32 @@ End
 On NoteEvent(m : NoteMessage) from DeviceIn_0_A
     var chan : Integer = GetChannel(m)
     var inTrigIdx : Integer
+    var swN, guardN, noteNum : Integer
+
+    // 0. Layer Switch matching (Type=NOTE)
+    noteNum = GetNoteNumber(m)
+    For swN = 0; swN < LayerSwitch_Count; swN = swN + 1 Do
+       if LayerSwitch_DevIdx[swN] == 0 and LayerSwitch_Type[swN] == "NOTE" then
+          if StringToInt(LayerSwitch_OnData[swN]) == noteNum and (LayerSwitch_Channel[swN] == -1 or LayerSwitch_Channel[swN] == chan) then
+             if IsNoteOn(m) and GetVelocity(m) > 0 then
+                LayerSwitch_State[swN] = 1
+                UpdateActiveLayer()
+                For guardN = 0; guardN < LayerSwitch_Count; guardN = guardN + 1 Do
+                   if guardN != swN then IgnoreSwitchOffUntil[guardN] = TimeSinceStartup() + 200.0 end
+                End
+                if DebugMode then Trace("LAYERSWITCH " + IntToString(swN) + " (" + LayerSwitch_Label[swN] + "): ON [NOTE " + noteNum + "]") end
+             else
+                if TimeSinceStartup() < IgnoreSwitchOffUntil[swN] then
+                   if DebugMode then Trace("LAYERSWITCH " + IntToString(swN) + " (" + LayerSwitch_Label[swN] + "): OFF suppressed (cross-talk) [NOTE]") end
+                else
+                   LayerSwitch_State[swN] = 0
+                   UpdateActiveLayer()
+                   if DebugMode then Trace("LAYERSWITCH " + IntToString(swN) + " (" + LayerSwitch_Label[swN] + "): OFF [NOTE " + noteNum + "]") end
+                end
+             end
+          end
+       end
+    End
 
     // 1. Call central HAL logic for macros
     ProcessHardwareNote(m)
@@ -15717,6 +16743,8 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_B
        Arr_EchoBlockTimer[ccChan + 1] = TimeSinceStartup() + 200.0
        Arr_LastSentVol[ccChan + 1] = val
        if DebugMode then Trace("VOL-IN: Ch" + IntToString(ccChan + 1) + " <- " + IntToString(val) + " (scaled=" + scaledVol + ")") end
+       // CC7 also drives the macro system (encoder/fader → VST parameter)
+       ProcessHardwareCC(m)
 
     // --- Style feedback: CC5 on TriggerChannel = hardware start/stop ---
     elsif ccChan + 1 == DEV_TriggerChannel and cc == 5 then
@@ -15820,6 +16848,15 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_B
 
     // 5. Pass note to the block
     SendNow(DeviceIn_0_B, m)
+End
+
+On SysexEvent(m : SysexMessage) From DeviceIn_0_B
+   // DIN MIDI SysEx from Genos2 — heartbeat only.
+   // LayerSwitch matching is handled exclusively on Port A to avoid
+   // duplicate processing (both ports receive the same SysEx bursts).
+   if SM_Length(m) >= 6 and SM_GetValue(m, 1) == 0x43 then
+       LastHardwarePulseTime = TimeSinceStartup()
+   end
 End
 
 // ====================================================
@@ -16270,11 +17307,11 @@ End
 On SysexEvent(m : SysexMessage) From DeviceIn_0_A
    var byte1, byte2, byte3, byte5, msgSize : Integer; val4, val5, val6, val7 : Integer
    var regButtonIndex, i, microSecs : Integer
-   var newBPM : Double = 0.0; var incomingHex : String; var switchOk : Boolean 
+   var newBPM : Double = 0.0; var incomingHex : String; var switchOk : Boolean
    var regNameDecoded, regNameSlug, gpSongSlug, gpArtistSlug : String
    var foundMatch : Boolean = false; var currentSongName : String
-   var regNumber, byteIdx, swIdx : Integer
-   var incomingHexFull : String = ""
+   var regNumber, byteIdx, swIdx, guardIdx : Integer
+   var incomingHexFull : String = ""; var hexByte : String
 
    msgSize = SM_Length(m)
    If msgSize >= 6 Then
@@ -16293,7 +17330,9 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0_A
          if byteIdx > 0 then
             incomingHexFull = incomingHexFull + " "
          end
-         incomingHexFull = incomingHexFull + IntToHexString(SM_GetValue(m, byteIdx))
+         hexByte = IntToHexString(SM_GetValue(m, byteIdx))
+         if Length(hexByte) == 1 then hexByte = "0" + hexByte end
+         incomingHexFull = incomingHexFull + hexByte
       End
       incomingHexFull = MyToUpper(incomingHexFull)
 
@@ -16302,19 +17341,20 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0_A
             if incomingHexFull == MyToUpper(LayerSwitch_OnData[swIdx]) then
                LayerSwitch_State[swIdx] = 1
                UpdateActiveLayer()
-               // Cross-talk guard: TALK ON triggers a phantom VH OFF burst.
-               // Set a 200ms ignore window so the VH OFF is suppressed.
-               if MyToUpper(LayerSwitch_Label[swIdx]) == "TALK" then
-                  IgnoreVHOffUntil = TimeSinceStartup() + 200.0
-               end
+               // Cross-talk guard: protect all OTHER switches from phantom OFF
+               For guardIdx = 0; guardIdx < LayerSwitch_Count; guardIdx = guardIdx + 1 Do
+                  if guardIdx != swIdx then
+                     IgnoreSwitchOffUntil[guardIdx] = TimeSinceStartup() + 200.0
+                  end
+               End
                if DebugMode then
                   Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): ON")
                end
             elsif incomingHexFull == MyToUpper(LayerSwitch_OffData[swIdx]) then
-               // Cross-talk guard: suppress VH OFF within the ignore window
-               if MyToUpper(LayerSwitch_Label[swIdx]) == "HARMONY" and TimeSinceStartup() < IgnoreVHOffUntil then
+               // Cross-talk guard: suppress OFF if this switch is protected
+               if TimeSinceStartup() < IgnoreSwitchOffUntil[swIdx] then
                   if DebugMode then
-                     Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): OFF suppressed (TALK cross-talk)")
+                     Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): OFF suppressed (cross-talk)")
                   end
                else
                   LayerSwitch_State[swIdx] = 0
@@ -16632,6 +17672,13 @@ On TimerTick(ms : Double)
    if SoloMuteStateDirty then
       SoloMuteStateDirty = false
       UpdateSoloMuteState()
+   end
+
+   // OTZ Redesign: Live-State indicator refresh in LBL_ControllerInfo
+   if ControllerInfoDirty then
+      ControllerInfoDirty = false
+      UpdateControllerInfoDisplay()
+      RefreshCtrlInfoDisplay()
    end
 
    // ========================================================================
@@ -17064,7 +18111,7 @@ On TimerTick(ms : Double)
                 a_val = Anim_Start[a_idx] + ((Anim_Target[a_idx] - Anim_Start[a_idx]) * t_progress)
                 Mem_Fader_Buffer[a_idx] = a_val
                 SendArrangerVolumeFeedback(a_val, a_idx + 1)
-                ExecuteHardwareMacro(a_idx + 1, a_val)
+                DispatchMacro(a_idx + 1, a_val, false, true)  // isEcho=true → OTZ ignored
             end
         End
 
