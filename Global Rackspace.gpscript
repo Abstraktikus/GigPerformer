@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-14.025"
+   SCRIPT_VERSION : String = "2026-04-15.008"
 
    DebugMode : Boolean = true
 
@@ -1054,10 +1054,13 @@ End
 // --- Unified Macro System: Index Helpers ---
 
 // Flat index into Mac_Layer_* binding arrays (layer dimension removed — layer is in source)
-// layerIdx parameter kept for API compatibility but ignored (always 0)
+// layerIdx parameter kept for API compatibility but ignored (always 0).
+// IMPORTANT: Returns Bank A slot only (bindIdx 0-1). Storage is split across 4 banks
+// (A: binds 0-1, B: 2-3, C: 4-5, D: 6-7), each with MAX_LAYER_MACROS*2=200 slots.
+// Callers needing bindIdx>=2 must use GetMac*(macroIdx, bindIdx) helpers instead.
 Function MacLayerBindIdx(macroIdx : Integer, layerIdx : Integer, bindIdx : Integer) Returns Integer
    var idx : Integer
-   idx = (macroIdx * MAX_BINDINGS_PER_LAYER) + bindIdx
+   idx = (macroIdx * 2) + bindIdx
    result = idx
 End
 
@@ -3977,60 +3980,67 @@ Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx :
       trimmed = TrimString(CopySubstring(trimmed, 0, bracePos))
    end
 
-   // Classify target type
-   if IndexOfSubstring(trimmed, ":CH", false) > 0 and IndexOfSubstring(trimmed, "Ch", false) <> 0 then
-      // Overlay: SMART_SOLO:CH3, OCTAVER:CH1, ROOT:CH2 etc.
-      // (Note: "Ch11:CC..." starts with lowercase Ch, distinct from CH overlay channels)
-      targetType = "OVERLAY"
-      colonPos = IndexOfSubstring(trimmed, ":CH", false)
-      SetMacChannel(macroIdx, bindIdx, StringToInt(CopySubstring(trimmed, colonPos + 3, Length(trimmed) - colonPos - 3)))
-      trimmed = CopySubstring(trimmed, 0, colonPos)
+   // Empty target after spec strip = legacy "{0.0,1.0}" with no binding target.
+   // Skip storage so Default-map binding stays inherited.
+   if Length(trimmed) == 0 then
+      if DebugMode then Trace("PARSE: Macro" + macroIdx + " bind" + bindIdx + " — empty target (legacy range-only), skipping to preserve Default inheritance") end
+      result = -1
+   else
+      // Classify target type
+      if IndexOfSubstring(trimmed, ":CH", false) > 0 and IndexOfSubstring(trimmed, "Ch", false) <> 0 then
+         // Overlay: SMART_SOLO:CH3, OCTAVER:CH1, ROOT:CH2 etc.
+         // (Note: "Ch11:CC..." starts with lowercase Ch, distinct from CH overlay channels)
+         targetType = "OVERLAY"
+         colonPos = IndexOfSubstring(trimmed, ":CH", false)
+         SetMacChannel(macroIdx, bindIdx, StringToInt(CopySubstring(trimmed, colonPos + 3, Length(trimmed) - colonPos - 3)))
+         trimmed = CopySubstring(trimmed, 0, colonPos)
 
-   elsif IndexOfSubstring(trimmed, "VST", false) == 0 and IndexOfSubstring(trimmed, ":", false) > 0 then
-      targetType = "VST"
-      colonPos = IndexOfSubstring(trimmed, ":", false)
-      if colonPos > 0 then
-         vstPart = CopySubstring(trimmed, 0, colonPos)
-         rest = CopySubstring(trimmed, colonPos + 1, Length(trimmed) - colonPos - 1)
-         underPos = IndexOfSubstring(vstPart, "_", false)
-         if underPos > 0 then
-            vstIdx = StringToInt(CopySubstring(vstPart, 3, underPos - 3))
-         else
-            vstIdx = StringToInt(CopySubstring(vstPart, 3, Length(vstPart) - 3))
+      elsif IndexOfSubstring(trimmed, "VST", false) == 0 and IndexOfSubstring(trimmed, ":", false) > 0 then
+         targetType = "VST"
+         colonPos = IndexOfSubstring(trimmed, ":", false)
+         if colonPos > 0 then
+            vstPart = CopySubstring(trimmed, 0, colonPos)
+            rest = CopySubstring(trimmed, colonPos + 1, Length(trimmed) - colonPos - 1)
+            underPos = IndexOfSubstring(vstPart, "_", false)
+            if underPos > 0 then
+               vstIdx = StringToInt(CopySubstring(vstPart, 3, underPos - 3))
+            else
+               vstIdx = StringToInt(CopySubstring(vstPart, 3, Length(vstPart) - 3))
+            end
+            colonPos2 = IndexOfSubstring(rest, ":", false)
+            if colonPos2 >= 0 then
+               paramIdx = StringToInt(CopySubstring(rest, 0, colonPos2))
+               label = CopySubstring(rest, colonPos2 + 1, Length(rest) - colonPos2 - 1)
+            else
+               paramIdx = StringToInt(rest)
+               label = ""
+            end
+            SetMacVSTIdx(macroIdx, bindIdx, vstIdx)
+            SetMacParamIdx(macroIdx, bindIdx, paramIdx)
+            SetMacParamLabel(macroIdx, bindIdx, label)
          end
-         colonPos2 = IndexOfSubstring(rest, ":", false)
-         if colonPos2 >= 0 then
-            paramIdx = StringToInt(CopySubstring(rest, 0, colonPos2))
-            label = CopySubstring(rest, colonPos2 + 1, Length(rest) - colonPos2 - 1)
-         else
-            paramIdx = StringToInt(rest)
-            label = ""
-         end
-         SetMacVSTIdx(macroIdx, bindIdx, vstIdx)
-         SetMacParamIdx(macroIdx, bindIdx, paramIdx)
-         SetMacParamLabel(macroIdx, bindIdx, label)
+
+      elsif IndexOfSubstring(trimmed, "Ch", false) == 0 and IndexOfSubstring(trimmed, ":CC", false) > 0 then
+         targetType = "CC"
+
+      elsif IndexOfSubstring(trimmed, "SYSACT_", false) == 0 then
+         targetType = "SYSACT"
+
+      else
+         // Keyword (CROSSFADER, SCRUBBER, VST_SCOPE, CHANNEL_BOUND_LFO, etc.)
+         targetType = "KEYWORD"
       end
 
-   elsif IndexOfSubstring(trimmed, "Ch", false) == 0 and IndexOfSubstring(trimmed, ":CC", false) > 0 then
-      targetType = "CC"
+      SetMacTargetType(macroIdx, bindIdx, targetType)
+      SetMacTarget(macroIdx, bindIdx, trimmed)
+      SetMacRangeMin(macroIdx, bindIdx, rangeMin)
+      SetMacRangeMax(macroIdx, bindIdx, rangeMax)
+      SetMacIsOTZ(macroIdx, bindIdx, isOTZ)
+      SetMacMode(macroIdx, bindIdx, mode)
+      SetMacHasReset(macroIdx, bindIdx, hasReset)
 
-   elsif IndexOfSubstring(trimmed, "SYSACT_", false) == 0 then
-      targetType = "SYSACT"
-
-   else
-      // Keyword (CROSSFADER, SCRUBBER, VST_SCOPE, CHANNEL_BOUND_LFO, etc.)
-      targetType = "KEYWORD"
+      result = 0
    end
-
-   SetMacTargetType(macroIdx, bindIdx, targetType)
-   SetMacTarget(macroIdx, bindIdx, trimmed)
-   SetMacRangeMin(macroIdx, bindIdx, rangeMin)
-   SetMacRangeMax(macroIdx, bindIdx, rangeMax)
-   SetMacIsOTZ(macroIdx, bindIdx, isOTZ)
-   SetMacMode(macroIdx, bindIdx, mode)
-   SetMacHasReset(macroIdx, bindIdx, hasReset)
-
-   result = 0
 End
 
 // Parses one complete "MacroN = DEV0:LAY1:BTN1; VST1_GRS:48{0.0,1.0} | SMART_SOLO:CH1{OTZ,0.0,1.0}" line
@@ -4082,7 +4092,9 @@ Function ParseMacroLine(line : String, isDefault : Boolean)
                end
                if Length(token) > 0 then
                   dummy = ParseSingleBinding(macroIdx, token, 0, bindCount)
-                  bindCount = bindCount + 1
+                  // ParseSingleBinding returns -1 for legacy empty-target tokens (e.g. "{0.0,1.0}")
+                  // In that case don't increment bindCount — Default binding stays inherited.
+                  if dummy == 0 then bindCount = bindCount + 1 end
                end
             end
          End
@@ -4092,8 +4104,11 @@ Function ParseMacroLine(line : String, isDefault : Boolean)
             if DebugMode then Trace("PARSE: Macro" + macroIdx + " — bindings beyond " + MAX_BINDINGS_PER_LAYER + " ignored: " + remaining) end
          end
 
-         // Store bind count
-         Mac_Layer_BindCount[macroIdx] = bindCount
+         // Store bind count — but only if we actually parsed something.
+         // bindCount==0 means all tokens were empty legacy placeholders → keep Default inheritance intact.
+         if bindCount > 0 or isDefault then
+            Mac_Layer_BindCount[macroIdx] = bindCount
+         end
 
          // OTZ Redesign: Overlay-Alone promotion
          // If first binding is an OVERLAY-target without OTZ marker, treat as base.
@@ -4811,6 +4826,7 @@ Function CaptureSmartRanges(isMin : Boolean)
    var macIdx, b, bc, vstIdx, paramIdx, count : Integer
    var currentVal, diff, oldMin, oldMax : Double = 0.0
    var sIdx : Integer
+   var pName : String
 
    count = 0
    For macIdx = 1; macIdx <= 16; macIdx = macIdx + 1 Do
@@ -4828,8 +4844,14 @@ Function CaptureSmartRanges(isMin : Boolean)
                        vstIdx = GetMacVSTIdx(macIdx, b)
                        paramIdx = GetMacParamIdx(macIdx, b)
                        currentVal = 0.0
+                       // BLK_VST is 0-based; macro-stored vstIdx is 1-based
                        if vstIdx >= 1 and vstIdx <= MAX_VSTS then
-                           currentVal = GetParameter(BLK_VST[vstIdx], paramIdx)
+                           currentVal = GetParameter(BLK_VST[vstIdx - 1], paramIdx)
+                           // Persist ParamLabel so ExportSmartConfig writes name into map file
+                           if Length(GetMacParamLabel(macIdx, b)) == 0 then
+                               pName = TrimString(GetParameterName(BLK_VST[vstIdx - 1], paramIdx))
+                               if Length(pName) > 0 then SetMacParamLabel(macIdx, b, pName) end
+                           end
                        end
                        oldMin = GetMacRangeMin(macIdx, b)
                        oldMax = GetMacRangeMax(macIdx, b)
@@ -8282,13 +8304,13 @@ Function EvaluateSmartAdapt()
 
     // 1. GUARD: Skip during snapshot load (bypass changes fire this via UpdateSoloMuteState)
     if IsLoadingSnapshot then
-       // Do nothing — song switch is in progress, SmartAdapt will be evaluated after
+       if DebugMode then Trace("SMART ADAPT: SKIP (IsLoadingSnapshot=true)") end
     elsif GetWidgetValue(BTN_SmartAdapt) > 0.5 then
-        
+
         // 2. HOW MANY VSTS ARE CURRENTLY ACTIVE? (Definitive count)
         activeVSTs = 0
         targetVstIdx = -1
-        
+
         For i = 0; i < MAX_VSTS; i = i + 1 Do
             // IsPluginBypassed == false means the VST is ACTIVE (not bypassed)
             if not IsPluginBypassed(BLK_VST[i]) and GetPluginInfo(BLK_VST[i], 0) != "Element" then
@@ -8296,6 +8318,7 @@ Function EvaluateSmartAdapt()
                 targetVstIdx = i
             end
         End
+        if DebugMode then Trace("SMART ADAPT: activeVSTs=" + activeVSTs + " targetVstIdx=" + targetVstIdx + " CurrentCtrlMapName='" + CurrentCtrlMapName + "'") end
 
         // 3. ISOLATION ACTIVE: Exactly ONE VST is active! (regardless of mode)
         if activeVSTs == 1 then
@@ -8306,16 +8329,19 @@ Function EvaluateSmartAdapt()
             else
                targetMap = "Standard"  // fallback if plugin name is empty
             end
-            
+            if DebugMode then Trace("SMART ADAPT: solo plugin='" + pluginName + "' targetMap='" + targetMap + "'") end
+
             // Only switch if we are not already on this map
-            if CurrentCtrlMapName != targetMap then
-                
+            if CurrentCtrlMapName == targetMap then
+                if DebugMode then Trace("SMART ADAPT: already on '" + targetMap + "', no switch needed") end
+            else
+
                 // Save current map (but only if we are just entering solo!)
                 if not IsAutoSoloMapActive then
                     PreSoloMapName = CurrentCtrlMapName
                     IsAutoSoloMapActive = true
                 end
-                
+
                 Trace("SMART ADAPT: VST " + (targetVstIdx + 1) + " playing solo. Loading " + targetMap)
                 LoadControllerMap(targetMap)
                 
@@ -12225,8 +12251,9 @@ Function ShowBaseFeedback(macroIdx : Integer, val : Double)
       if firstBaseFound then
          if GetMacTargetType(macroIdx, firstBaseIdx) == "VST" then
             vstIdx = GetMacVSTIdx(macroIdx, firstBaseIdx)
+            // BLK_VST is 0-based; macro-stored vstIdx is 1-based ("VST1" → slot 0)
             if vstIdx >= 1 and vstIdx <= MAX_VSTS then
-               pName = GetPluginInfo(BLK_VST[vstIdx], 0)
+               pName = GetPluginInfo(BLK_VST[vstIdx - 1], 0)
             else
                pName = "VST?"
             end
@@ -12234,6 +12261,14 @@ Function ShowBaseFeedback(macroIdx : Integer, val : Double)
             pName = GetMacTargetType(macroIdx, firstBaseIdx)
          end
          paramName = GetMacParamLabel(macroIdx, firstBaseIdx)
+         // Lazy auto-populate: fetch name from plugin and cache it in ParamLabel
+         if Length(paramName) == 0 and GetMacTargetType(macroIdx, firstBaseIdx) == "VST" then
+            vstIdx = GetMacVSTIdx(macroIdx, firstBaseIdx)
+            if vstIdx >= 1 and vstIdx <= MAX_VSTS then
+               paramName = TrimString(GetParameterName(BLK_VST[vstIdx - 1], GetMacParamIdx(macroIdx, firstBaseIdx)))
+               if Length(paramName) > 0 then SetMacParamLabel(macroIdx, firstBaseIdx, paramName) end
+            end
+         end
          if Length(paramName) == 0 then paramName = GetMacTarget(macroIdx, firstBaseIdx) end
          rMin = GetMacRangeMin(macroIdx, firstBaseIdx)
          rMax = GetMacRangeMax(macroIdx, firstBaseIdx)
@@ -12296,10 +12331,11 @@ Function DispatchMacro(matchedMacro : Integer, val : Double, isNote : Boolean, i
                      rMin = GetMacRangeMin(matchedMacro, b)
                      rMax = GetMacRangeMax(matchedMacro, b)
                      scaledVal = rMin + (val * (rMax - rMin))
+                     // BLK_VST is 0-based; macro-stored vstIdx is 1-based
                      if vstIdx <= MAX_VSTS then
-                        SetParameter(BLK_VST[vstIdx], paramIdx, scaledVal)
+                        SetParameter(BLK_VST[vstIdx - 1], paramIdx, scaledVal)
                         if DebugMode then
-                           Trace("VST-WRITE: Macro" + matchedMacro + " bind" + b + " VST" + vstIdx + " param" + paramIdx + " = " + DoubleToString(scaledVal, 4) + " | readback=" + DoubleToString(GetParameter(BLK_VST[vstIdx], paramIdx), 4))
+                           Trace("VST-WRITE: Macro" + matchedMacro + " bind" + b + " VST" + vstIdx + " param" + paramIdx + " = " + DoubleToString(scaledVal, 4) + " | readback=" + DoubleToString(GetParameter(BLK_VST[vstIdx - 1], paramIdx), 4))
                         end
                      end
                   end
@@ -12667,6 +12703,7 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
           elsif ActiveLayer == 3 then
              macroFromLookup = Mac_ReverseLookup_L3[lookupIdx]
           end
+          if DebugMode then Trace("HW-RESOLVE: ch=" + ch + " cc=" + cc + " layer=" + ActiveLayer + " path=FAST lookupIdx=" + lookupIdx + " -> macro=" + macroFromLookup) end
        else
           // Slow path: linear scan (ch*128+cc >= 256, e.g. CC7 on ch2+)
           For scanIdx = 1; scanIdx < MAX_LAYER_MACROS; scanIdx = scanIdx + 1 Do
@@ -12674,10 +12711,12 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
                 if ResolveControlCC(Mac_SourceDev[MacSourceIdx(scanIdx, 0)], Mac_SourceLabel[MacSourceIdx(scanIdx, 0)]) == cc then
                    if ResolveControlChannel(Mac_SourceDev[MacSourceIdx(scanIdx, 0)], Mac_SourceLabel[MacSourceIdx(scanIdx, 0)]) == ch then
                       macroFromLookup = scanIdx
+                      if DebugMode then Trace("HW-RESOLVE: ch=" + ch + " cc=" + cc + " layer=" + ActiveLayer + " path=SLOW match scanIdx=" + scanIdx + " sourceLabel='" + Mac_SourceLabel[MacSourceIdx(scanIdx, 0)] + "' dev=" + Mac_SourceDev[MacSourceIdx(scanIdx, 0)]) end
                    end
                 end
              end
           End
+          if DebugMode and macroFromLookup < 0 then Trace("HW-RESOLVE: ch=" + ch + " cc=" + cc + " layer=" + ActiveLayer + " path=SLOW no match") end
        end
        if macroFromLookup > 0 then
           DispatchMacro(macroFromLookup, val, false, false)
@@ -18225,6 +18264,11 @@ On TimerTick(ms : Double)
               UpdateUsageLabelDisplay()
               IsLoadingSnapshot = false
               SnapshotPostLoadTimer = 0.0
+
+              // Re-evaluate SmartAdapt now that snapshot load is finished.
+              // During load IsLoadingSnapshot blocked EvaluateSmartAdapt; give it
+              // one chance post-unlock to auto-switch maps if exactly one VST is solo.
+              EvaluateSmartAdapt()
 
               // ========================================================
               // ---> NEW: INITIAL AUTO-SHOW AFTER SONG LOADING <---

@@ -24,34 +24,133 @@
 ; =============================================================================
 
 [Map:Default]
-
-; ========== TEST 1: Simple base binding (single VST param) ==========
-Macro1 = DEV0:LAY0:Enc1; VST1_GRS:48{0.0,1.0}
-
-; ========== TEST 2: Super-Knob (multiple VST bases, no overlays) ==========
-Macro2 = DEV0:LAY0:Enc2; VST1_GRS:49{0.0,1.0} | VST1_GRS:50{0.0,0.5}
-
-; ========== TEST 3: Base + OTZ-MAX point trigger ==========
-Macro3 = DEV0:LAY0:Enc3; VST1_GRS:51{0.0,1.0} | OCTAVER:CH1{OTZ,MAX}
-
-; ========== TEST 4: Base + OTZ-MIN point trigger ==========
-Macro4 = DEV0:LAY0:Enc4; VST1_GRS:52{0.0,1.0} | ROOT:CH1{OTZ,MIN}
-
-; ========== TEST 5: Base + OTZ range trigger (40-60%) ==========
-Macro5 = DEV0:LAY0:Enc5; VST1_GRS:53{0.0,1.0} | HUMANIZE:CH1{OTZ,0.4,0.6}
-
-; ========== TEST 6: Multi-OTZ on one control (10s debounce test) ==========
+Macro1 = DEV0:LAY0:Enc1; VST1_GRS:48{0.0,1.0} 
+Macro2 = DEV0:LAY0:Enc2; VST1_GRS:49{0.0,1.0} 
+Macro3 = DEV0:LAY0:Enc3; VST1_GRS:51{0.0,1.0} 
+Macro4 = DEV0:LAY0:Enc4; VST1_GRS:52{0.0,1.0} 
+Macro5 = DEV0:LAY0:Enc5; VST1_GRS:53{0.0,1.0} 
 Macro6 = DEV0:LAY0:Enc6; VST1_GRS:54{0.0,1.0} | ROOT:CH2{OTZ,MIN} | OCTAVER:CH2{OTZ,MAX} | HUMANIZE:CH2{OTZ,0.4,0.6}
+Macro7 = DEV0:LAY0:Fader1; VST1_GRS:1:Level (p2) {0.000, 0.442} 
+Macro8 = DEV0:LAY0:Fader2; Ch13:CC7:Volume Triton | ROOT:OTZ,{0.0,0.5} | SMART_SOLO:CH13{OTZ,0.8,1.0} | OCTAVER:CH13{OTZ,0.6,1.0}
+Macro9 = DEV0:LAY0:Fader3; VST1_GRS:2:Level (p3) {0.000, 0.464} | VST1_GRS:3:Level (p4) {0.000, 0.182}
+Macro10 = DEV0:LAY0:Fader4; VST1_GRS:0:Level (p1) {0.000, 0.289} | SMART_SOLO:CH1{OTZ,MAX}
+Macro11 = DEV0:LAY0:Fader5; Ch11:CC17:Master Volume {0.0, 1.0} | SMART_SOLO:CH11{OTZ,DIR}
+Macro12 = DEV0:LAY0:Fader6; Ch12:CC17:Master Volume {0.0, 1.0} | ROOT:CH12{OTZ,0.0,0.5} | SMART_SOLO:CH12{OTZ,0.8,1.0} | OCTAVER:CH12{OTZ,0.6,1.0}
+Macro13 = DEV0:LAY0:Fader7; VST1_GRS:7:Level (p8) {0.000, 0.235} | SMART_SOLO:CH8{OTZ,MAX}
+Macro14 = DEV0:LAY0:Fader8; CROSSFADER
+Macro15 = DEV0:LAY0:Fader9; SCRUBBER
+Macro16 = DEV0:LAY1:Enc1; Ch11:CC74 {0.0, 1.0}
+Macro17 = DEV0:LAY1:Enc2; Ch11:CC76 {0.0, 1.0}
+Macro18 = DEV0:LAY1:Enc3; Ch11:CC93 {0.0, 1.0}
+Macro19 = DEV0:LAY1:Enc4; Ch11:CC18 {0.0, 1.0}
+Macro20 = DEV0:LAY1:Enc5; Ch11:CC19 {0.0, 1.0}
+Macro21 = DEV0:LAY1:Enc6; Ch11:CC16 {0.0, 1.0}
+Macro22 = DEV0:LAY1:Fader1; Ch11:CC73 {0.0, 1.0}
+Macro23 = DEV0:LAY1:Fader2; Ch11:CC72 {0.0, 1.0}
+Macro24 = DEV0:LAY1:Fader3; Ch11:CC80 {0.0, 1.0}
+Macro25 = DEV0:LAY1:Fader4; Ch11:CC81 {0.0, 1.0}
+Macro26 = DEV0:LAY1:Fader5; Ch11:CC82 {0.0, 1.0}
+Macro27 = DEV0:LAY1:Fader6; Ch11:CC80 {0.0, 1.0}
+Macro28 = DEV0:LAY1:Fader7; Ch11:CC81 {0.0, 1.0}
+Macro29 = DEV0:LAY1:Fader8; Ch11:CC82 {0.0, 1.0}
+Macro30 = DEV0:LAY1:Fader9; Ch11:CC83 {0.0, 1.0}
+Macro31 = DEV0:LAY2:Enc1; Ch12:CC74 {0.0, 1.0}
+Macro32 = DEV0:LAY2:Enc2; Ch12:CC76 {0.0, 1.0}
+Macro33 = DEV0:LAY2:Enc3; Ch12:CC93 {0.0, 1.0}
+Macro34 = DEV0:LAY2:Enc4; Ch12:CC18 {0.0, 1.0}
+Macro35 = DEV0:LAY2:Enc5; Ch12:CC19 {0.0, 1.0}
+Macro36 = DEV0:LAY2:Enc6; Ch12:CC16 {0.0, 1.0}
+Macro37 = DEV0:LAY2:Fader1; Ch12:CC73 {0.0, 1.0}
+Macro38 = DEV0:LAY2:Fader2; Ch12:CC72 {0.0, 1.0}
+Macro39 = DEV0:LAY2:Fader3; Ch12:CC80 {0.0, 1.0}
+Macro40 = DEV0:LAY2:Fader4; Ch12:CC81 {0.0, 1.0}
+Macro41 = DEV0:LAY2:Fader5; Ch12:CC82 {0.0, 1.0}
+Macro42 = DEV0:LAY2:Fader6; Ch12:CC80 {0.0, 1.0}
+Macro43 = DEV0:LAY2:Fader7; Ch12:CC81 {0.0, 1.0}
+Macro44 = DEV0:LAY2:Fader8; Ch12:CC82 {0.0, 1.0}
+Macro45 = DEV0:LAY2:Fader9; Ch12:CC83 {0.0, 1.0}
+Macro46 = DEV0:LAY3:Enc1; Ch13:CC17:Knob1 {0.0,1.0}
+Macro47 = DEV0:LAY3:Enc2; Ch13:CC19:Knob2 {0.0,1.0}
+Macro48 = DEV0:LAY3:Enc3; Ch13:CC20:Knob3 {0.0,1.0}
+Macro49 = DEV0:LAY3:Enc4; Ch13:CC21:Knob4 {0.0,1.0}
+Macro50 = DEV0:LAY3:Enc5; Ch12:CC83:External {0.0,1.0}
+Macro51 = DEV0:LAY3:Enc6; VST_BROWSE {0.0,1.0}
+Macro52 = DEV0:LAY3:Fader1; Ch13:CC18:Slider {0.0, 1.0}
+Macro53 = DEV0:LAY3:Fader2; Ch13:CC02:JSY {0.0, 1.0}
+Macro54 = DEV0:LAY3:Fader3; Ch13:CC16:Ribbon {0.0, 1.0}
+Macro55 = DEV0:LAY3:Fader4; Ch13:CC80:SW1 {0.0, 1.0}
+Macro56 = DEV0:LAY3:Fader5; Ch13:CC81:SW2 {0.0, 1.0}
+Macro57 = DEV0:LAY3:Fader6; Ch13:CC7:Volume Triton | ROOT:OTZ,{0.0,0.5} | SMART_SOLO:CH13{OTZ,0.8,1.0} | OCTAVER:CH13{OTZ,0.6,1.0}
+Macro58 = DEV0:LAY3:Fader7; Ch13:CC81 {0.0, 1.0}
+Macro59 = DEV0:LAY3:Fader8; CROSSFADER
+Macro60 = DEV0:LAY3:Fader9; SCRUBBER
 
-; ========== TEST 7: Overlay-alone with DIR + RESET (motorized center) ==========
-Macro7 = DEV0:LAY0:Fader1; SMART_SOLO:CH3{DIR,RESET}
+[Map:Omnisphere]
+Macro1 = DEV0:LAY0:Enc1; VST1_GRS:48{0.0,1.0} 
+Macro2 = DEV0:LAY0:Enc2; VST1_GRS:49{0.0,1.0} 
+Macro3 = DEV0:LAY0:Enc3; VST1_GRS:51{0.0,1.0} 
+Macro4 = DEV0:LAY0:Enc4; VST1_GRS:52{0.0,1.0} 
+Macro5 = DEV0:LAY0:Enc5; VST1_GRS:53{0.0,1.0} 
+Macro6 = DEV0:LAY0:Enc6; VST1_GRS:54{0.0,1.0} 
+Macro7 = DEV0:LAY0:Fader1; VST1_GRS:0:Level (p1) {0.0, 1.0} 
+Macro8 = DEV0:LAY0:Fader2; VST1_GRS:1:Level (p2) {0.0, 1.0}
+Macro9 = DEV0:LAY0:Fader3; VST1_GRS:2:Level (p3) {0.0, 1.0}
+Macro10 = DEV0:LAY0:Fader4; VST1_GRS:3:Level (p4) {0.0, 1.0}
+Macro11 = DEV0:LAY0:Fader5; VST1_GRS:4:Level (p5) {0.0, 1.0}
+Macro12 = DEV0:LAY0:Fader6; VST1_GRS:5:Level (p6) {0.0, 1.0}
+Macro13 = DEV0:LAY0:Fader7; VST1_GRS:6:Level (p7) {0.0, 1.0} 
+Macro14 = DEV0:LAY0:Fader8; VST1_GRS:7:Level (p8) {0.0, 1.0} | ROOT:OTZ,{0.0,0.5} | SMART_SOLO:CH13{OTZ,0.8,1.0} | OCTAVER:CH13{OTZ,0.6,1.0} 
+Macro15 = DEV0:LAY0:Fader9; CROSSFADER
 
-; ========== TEST 8: Base + OTZ-DIR (directional overlay) ==========
-Macro8 = DEV0:LAY0:Fader2; VST1_GRS:55{0.0,1.0} | USER_MUTE:CH3{OTZ,DIR}
+[Map:Analog Lab V]
+Macro1 = DEV0:LAY0:Enc1; Ch11:CC74 {0.0, 1.0}
+Macro2 = DEV0:LAY0:Enc2; Ch11:CC76 {0.0, 1.0}
+Macro3 = DEV0:LAY0:Enc3; Ch11:CC93 {0.0, 1.0}
+Macro4 = DEV0:LAY0:Enc4; Ch11:CC18 {0.0, 1.0}
+Macro5 = DEV0:LAY0:Enc5; Ch11:CC19 {0.0, 1.0}
+Macro6 = DEV0:LAY0:Enc6; Ch11:CC16 {0.0, 1.0}
+Macro7 = DEV0:LAY0:Fader1; Ch11:CC73 {0.0, 1.0}
+Macro8 = DEV0:LAY0:Fader2; Ch11:CC72 {0.0, 1.0}
+Macro9 = DEV0:LAY0:Fader3; Ch11:CC80 {0.0, 1.0}
+Macro10 = DEV0:LAY0:Fader4; Ch11:CC81 {0.0, 1.0}
+Macro11 = DEV0:LAY0:Fader5; Ch11:CC82 {0.0, 1.0}
+Macro12 = DEV0:LAY0:Fader6; Ch11:CC80 {0.0, 1.0}
+Macro13 = DEV0:LAY0:Fader7; Ch11:CC81 {0.0, 1.0}
+Macro14 = DEV0:LAY0:Fader8; Ch11:CC82 {0.0, 1.0}
+Macro15 = DEV0:LAY0:Fader9; Ch11:CC83 {0.0, 1.0}
+Macro16 = DEV0:LAY1:Enc1; Ch12:CC74 {0.0, 1.0} 
+Macro17 = DEV0:LAY1:Enc2; Ch12:CC76 {0.0, 1.0}
+Macro18 = DEV0:LAY1:Enc3; Ch12:CC93 {0.0, 1.0}
+Macro19 = DEV0:LAY1:Enc4; Ch12:CC18 {0.0, 1.0}
+Macro20 = DEV0:LAY1:Enc5; Ch12:CC19 {0.0, 1.0}
+Macro21 = DEV0:LAY1:Enc6; Ch12:CC16 {0.0, 1.0}
+Macro22 = DEV0:LAY1:Fader1; Ch12:CC73 {0.0, 1.0}
+Macro23 = DEV0:LAY1:Fader2; Ch12:CC72 {0.0, 1.0}
+Macro24 = DEV0:LAY1:Fader3; Ch12:CC80 {0.0, 1.0}
+Macro25 = DEV0:LAY1:Fader4; Ch12:CC81 {0.0, 1.0}
+Macro26 = DEV0:LAY1:Fader5; Ch12:CC82 {0.0, 1.0}
+Macro27 = DEV0:LAY1:Fader6; Ch12:CC80 {0.0, 1.0}
+Macro28 = DEV0:LAY1:Fader7; Ch12:CC81 {0.0, 1.0}
+Macro29 = DEV0:LAY1:Fader8; Ch12:CC82 {0.0, 1.0}
+Macro30 = DEV0:LAY1:Fader9; Ch12:CC83 {0.0, 1.0}
+Macro31 = DEV0:LAY2:Enc1; | ROOT:OTZ,{0.0,0.5} | SMART_SOLO:CH13{OTZ,0.8,1.0} | OCTAVER:CH13{OTZ,0.6,1.0}
 
-; ========== TEST 9: Layer-Scope test ==========
-; Same physical control (Enc1) on Layer 1 maps to different macro
-Macro9 = DEV0:LAY1:Enc1; VST1_GRS:56{0.0,1.0} | ROOT:CH5{OTZ,MAX}
+[Map:Triton Extreme]
+Macro46 = DEV0:LAY1:Enc1; Ch13:CC17:Knob1 {0.0,1.0}
+Macro47 = DEV0:LAY1:Enc2; Ch13:CC19:Knob2 {0.0,1.0}
+Macro48 = DEV0:LAY1:Enc3; Ch13:CC20:Knob3 {0.0,1.0}
+Macro49 = DEV0:LAY1:Enc4; Ch13:CC21:Knob4 {0.0,1.0}
+Macro50 = DEV0:LAY1:Enc5; Ch12:CC83:External {0.0,1.0}
+Macro51 = DEV0:LAY1:Enc6; VST_BROWSE {0.0,1.0}
+Macro52 = DEV0:LAY1:Fader1; Ch13:CC18:Slider {0.0, 1.0}
+Macro53 = DEV0:LAY1:Fader2; Ch13:CC02:JSY {0.0, 1.0}
+Macro54 = DEV0:LAY1:Fader3; Ch13:CC16:Ribbon {0.0, 1.0}
+Macro55 = DEV0:LAY1:Fader4; Ch13:CC80:SW1 {0.0, 1.0}
+Macro56 = DEV0:LAY1:Fader5; Ch13:CC81:SW2 {0.0, 1.0}
+Macro57 = DEV0:LAY1:Fader6; Ch13:CC7:Volume Triton | ROOT:OTZ,{0.0,0.5} | SMART_SOLO:CH13{OTZ,0.8,1.0} | OCTAVER:CH13{OTZ,0.6,1.0}
+Macro58 = DEV0:LAY1:Fader7; Ch13:CC81 {0.0, 1.0}
+Macro59 = DEV0:LAY1:Fader8; CROSSFADER
+Macro60 = DEV0:LAY1:Fader9; SCRUBBER
 
-; ========== TEST 10: Permanent-style binding via SYSACT ==========
-Macro10 = DEV0:LAY0:Fader3; SYSACT_TRANSPORT_TOGGLE
+[Map:SlowHip80erDream]
+
