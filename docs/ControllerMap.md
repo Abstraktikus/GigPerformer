@@ -91,13 +91,52 @@ If no `DEV...;` prefix is present in a song map line, the source is inherited fr
 
 | Kind | Syntax | Multi-`|` | Purpose |
 |---|---|---|---|
-| **VST parameter** | `VST<k>_GRS:<paramIdx>[:<label>] [{min,max}]` | yes | Route macro to a parameter on the k-th VST slot |
-| **Direct CC** | `Ch<c>:CC<n>[:<label>] [{min,max}]` | yes | Emit a CC message on channel c, number n |
+| **VST parameter** | `VST<k>_GRS:<paramIdx>[:<label>] [{SPEC}]` | yes (up to 8 bindings) | Route macro to a parameter on the k-th VST slot |
+| **Direct CC** | `Ch<c>:CC<n>[:<label>] [{SPEC}]` | yes | Emit a CC message on channel c, number n |
 | **Keyword** | See list below | one per role | Bind a fixed global system function |
 | **SYSACT role** | `SYSACT_<NAME>` | no (Isolation Rule) | Bind a virtual SYS-MODE action |
-| **Overlay trigger** | `<FuncName>:CH<c>{OTZ,min,max}` | yes | Trigger an overlay function on a channel |
+| **OTZ overlay** | `<FuncName>:CH<c>{OTZ,SPEC}` | yes | Read-only overlay riding on a base binding |
+| **Base overlay** | `<FuncName>:CH<c>{SPEC}` (alone) | yes | Overlay promoted to base (motorized RESET possible) |
 
-The `{min, max}` scaling suffix is optional; default is `{0.0, 1.0}` (pass-through).
+The `{SPEC}` suffix is optional; default is `{0.0, 1.0}` (full-range pass-through). See **SPEC tokens** below for keyword syntax (`MAX`, `MIN`, `DIR`, `RESET`).
+
+### SPEC tokens (OTZ Redesign)
+
+A binding's `{...}` suffix is a comma-separated list of tokens:
+
+| Token | Meaning |
+|---|---|
+| `x,y` (numeric) | `x==y` = **point trigger** at x. `x<y` = **range trigger** in [x, y]. |
+| `MAX` | Shorthand for `1.0,1.0` (trigger at full right/up) |
+| `MIN` | Shorthand for `0.0,0.0` (trigger at full left/down) |
+| `DIR` | **Directional**: each plus-movement = ON, each minus-movement = OFF, with 10s debounce |
+| `RESET` | Write hardware value back to 0.5 after fire (only valid on **base** bindings, ignored on OTZ) |
+| `OTZ` | Mark binding as **read-only overlay** (must be first token in SPEC) |
+
+### Base vs. OTZ
+
+Each macro line can contain multiple pipe-separated bindings, up to **8 total**:
+
+- **First pipe-entry** (no OTZ prefix) is the **Base binding** — it owns the value and can write back to hardware (`RESET`).
+- **Subsequent pipe-entries** with OTZ prefix are **Overlays** — read the base value, trigger ON/OFF transitions, never write.
+- **Overlay-alone** (single pipe-entry targeting an overlay function without OTZ, e.g. `SMART_SOLO:CH3{DIR,RESET}`) is **promoted to base** — it owns the value and can use RESET for motorized center-return.
+
+### Trigger modes
+
+| Binding mode | Example | Fire condition |
+|---|---|---|
+| POINT | `{OTZ,MAX}` or `{OTZ,1.0,1.0}` | Value equals trigger point (±0.02 tolerance) |
+| RANGE | `{OTZ,0.4,0.6}` | Value inside [min,max] → ON; outside → OFF |
+| DIR | `{OTZ,DIR}` | Value increased from last = ON; decreased = OFF. 10s debounce. |
+
+### Per-control debounce
+
+When any OTZ overlay fires on a physical control, **all** OTZ overlays on that control are blocked for 10 seconds. The base binding continues to accept value changes normally. This prevents double-triggering when a user lingers near a trigger point.
+
+### Echo protection
+
+- **RESET writes** (GP→hardware) trigger a 200ms echo block — incoming CC values during this window do not re-trigger OTZ overlays.
+- **LFO-generated values** (via `TickLFOs`) are tagged as echo → OTZ overlays are skipped while LFO modulates the base.
 
 ### Keywords
 
@@ -148,26 +187,33 @@ Song maps override per-macro. Unspecified macros and layers remain as defined in
 
 ## 4. Overlay Trigger Zones (OTZ)
 
-### The OTZ marker
+### Concept
 
-The `{OTZ,min,max}` marker in a binding distinguishes overlay triggers from normal value-passthrough targets.
+OTZ overlays **ride on top of** a base binding. The base owns the hardware value (writes to the VST); OTZ overlays watch that value and fire ON/OFF transitions at specific points or ranges. OTZ overlays are **read-only** — they never write back to hardware.
 
+**State is layer-persistent**: Once an OTZ triggers ON, it stays ON across layer changes until the user explicitly triggers OFF (by binding an OFF-capable control in any layer referencing the same target channel).
+
+### Example: slider with multiple OTZ overlays
+
+```ini
+Macro1 = DEV0:LAY0:Slider1; VST1_GRS:48{0.0,1.0} | ROOT:CH1{OTZ,MIN} | OCTAVER:CH1{OTZ,MAX} | HUMANIZE:CH1{OTZ,0.4,0.6}
 ```
-{0.0,1.0}          = Normal value scaling (default)
-{OTZ,1.0,1.0}      = Overlay: Point Max
-{OTZ,0.0,0.0}      = Overlay: Point Min
-{OTZ,0.5,0.8}      = Overlay: Zone (positional)
-{OTZ,0.0,1.0}      = Overlay: Full Range (movement-toggle)
+
+On Slider1:
+- Base binding drives VST1 parameter 48 with full range.
+- At value 0.0 (full left) → `ROOT:CH1` fires ON.
+- At value 1.0 (full right) → `OCTAVER:CH1` fires ON.
+- In range 0.4–0.6 → `HUMANIZE:CH1` is ON, outside → OFF.
+
+### Overlay-alone (promoted to base)
+
+If the only binding is an overlay target without OTZ prefix:
+
+```ini
+Macro7 = DEV0:LAY0:Enc1; SMART_SOLO:CH3{DIR,RESET}
 ```
 
-### Range types
-
-| Range | Type | Behavior |
-|---|---|---|
-| `{OTZ,1.0,1.0}` | Point Max | Positional: ON when value = max, OFF when away |
-| `{OTZ,0.0,0.0}` | Point Min | Positional: ON when value = min, OFF when away |
-| `{OTZ,0.3,0.7}` | Zone | Positional: ON when value inside range, OFF outside |
-| `{OTZ,0.0,1.0}` | Full Range | Movement-Toggle with **10-second debounce** -- any movement toggles state, then ignores further movement for 10 seconds |
+The overlay **becomes the base** — it owns the hardware value and can use `RESET` for motorized center-return. This is the typical pattern for an endless encoder dedicated to toggling a single overlay.
 
 ### Registered overlay functions
 
@@ -183,16 +229,23 @@ The `{OTZ,min,max}` marker in a binding distinguishes overlay triggers from norm
 | `RANGE` | `SetVelocityRange(ch, 1)` | `SetVelocityRange(ch, 0)` |
 | `AUTO_SUSTAIN` | `SetAutoSustain(ch, 1)` | `SetAutoSustain(ch, 0)` |
 
-Unknown function names combined with OTZ are ignored with a Trace warning. All registered functions route through `ActivateOverlay()` / `DeactivateOverlay()` -- the same entry points used by Strip Control UI and widget buttons.
+Unknown function names combined with OTZ are ignored with a Trace warning. All registered functions route through `ActivateOverlay()` / `DeactivateOverlay()` — the same entry points used by Strip Control UI and widget buttons. Timeline recording captures every transition automatically.
 
-### Example: slider with overlay on LAY1
+### Button overlays
+
+For NOTE-bound sources (buttons), range/keyword specs are ignored at runtime — press = ON, release = OFF:
 
 ```ini
-Macro1  = DEV0:LAY0:Fader1; VST1_GRS:0:Level (p1){0.0,1.0}
-Macro19 = DEV0:LAY1:Fader1; VST1_GRS:0:Level (p1){0.0,1.0} | SMART_SOLO:CH1{OTZ,0.0,1.0}
+Macro9 = DEV0:LAY0:BTN1; SMART_SOLO:CH4{OTZ,MAX}
 ```
 
-On LAY1, moving Fader1 both adjusts the VST parameter (normal target) and can toggle Smart Solo on channel 1 (overlay target with movement-toggle).
+BTN1 press triggers `SMART_SOLO:CH4` ON, release triggers OFF. The `MAX` keyword is kept for compatibility but has no runtime effect on buttons.
+
+### Display behavior
+
+- **Normal control movement (no OTZ transition):** `LBL_MacroFeedback` shows `"VST_GRS | Gain : 73% | HUMANIZE ON"` (base + currently-active OTZ overlays).
+- **OTZ transition event:** `LBL_MacroFeedback` shows just the overlay: `"OCTAVER:CH1 : ON"` (1.5s timer, then cleared).
+- **LBL_ControllerInfo:** Active OTZ overlays get a `*` suffix for live-state debugging.
 
 ---
 
@@ -390,10 +443,12 @@ SYSACT-exclusive macros are **not** recorded (filtered by `IsSystemActionMacro()
 
 ### "My overlay doesn't fire."
 
-1. Check that the binding uses the `{OTZ,min,max}` marker -- without `OTZ`, the range is treated as a normal value scaling, not an overlay trigger.
-2. Verify the function name is one of the 9 registered names (SMART_SOLO, STRICT_SOLO, ROOT, OCTAVER, USER_MUTE, HUMANIZE, SCALE, RANGE, AUTO_SUSTAIN). Unknown names with OTZ are silently ignored.
+1. Check that the binding uses the `{OTZ,...}` marker (or is the only binding on the macro, to be auto-promoted as base).
+2. Verify the function name is one of the 9 registered names (SMART_SOLO, STRICT_SOLO, ROOT, OCTAVER, USER_MUTE, HUMANIZE, SCALE, RANGE, AUTO_SUSTAIN).
 3. Check that the macro's source layer matches the currently active layer.
-4. For Full Range (`{OTZ,0.0,1.0}`): the 10-second debounce may be active. Wait and try again.
+4. For OTZ overlays: another OTZ on the same control may have fired recently → **10-second per-control debounce** blocks further OTZ triggers. Base binding keeps working.
+5. For `DIR` mode: the movement direction must exceed ±0.02 threshold from the last-recorded value.
+6. For LFO-bound macros: OTZ overlays are suppressed while the LFO modulates the base (echo protection).
 
 ### "Song loads the wrong map."
 
@@ -426,6 +481,7 @@ Last-wins semantics. If both `Macro5` and `Macro8` are bound to `CROSSFADER` in 
 
 ## Reference -- Key Specs
 
+- **OTZ/Overlay redesign (keyword syntax, base vs overlay, 8 bindings):** `docs/superpowers/specs/2026-04-14-otz-overlay-redesign.md`
 - **Unified ControllerMap, layer system, Smart Solo Enhanced:** `docs/superpowers/specs/2026-04-12-layer-system-unified-controllermap-design.md`
 - **Control label reference:** `docs/superpowers/specs/2026-04-12-control-label-reference-design.md`
 - **Layer-aware reverse lookup:** `docs/superpowers/specs/2026-04-12-layer-aware-reverse-lookup-design.md`
