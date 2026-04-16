@@ -13060,33 +13060,6 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
            if DebugMode then Trace(">>> SYSMODE-DIAG [B2] SELECT via CC=" + cc + " target=" + Round(val * 4.0) + " in ProcessHardwareCC") end
            SelectGlobalSystemMode(Round(val * 4.0))  // val 0.0-1.0 maps to mode 0-4
 
-       // SYSTEM TOGGLE FOR DIRECT CCs
-       elsif SYSTEM_TOGGLE_CCIdx == cc then
-           if val > 0.5 then
-               // SUSTAIN PRESS: Restore sticky state or enter fresh
-               SystemModeActive = true
-               if StickySystemMode >= 0 then
-                   if DebugMode then Trace(">>> SYSMODE-DIAG [C] STICKY RESTORE from " + GlobalSystemMode + " to " + StickySystemMode + " via SYSTEM_TOGGLE CC=" + cc) end
-                   GlobalSystemMode = StickySystemMode
-                   if StickySystemMode == 4 then
-                       TimelineSubMode = StickyTimelineSubMode
-                       TimelineRecState = StickyTimelineRecState
-                   end
-                   Trace("SYS-MODE: RESTORED -> " + SysModeNames[GlobalSystemMode])
-               end
-               mName = SysModeNames[GlobalSystemMode]
-               OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> " + mName + " <<<", Local_IP, Local_PORT)
-               SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
-           else
-               // SUSTAIN RELEASE: Save sticky state, do NOT stop Timeline recording
-               StickySystemMode = GlobalSystemMode
-               if GlobalSystemMode == 4 then
-                   StickyTimelineSubMode = TimelineSubMode
-                   StickyTimelineRecState = TimelineRecState
-               end
-               SystemModeActive = false
-               Trace("SYS-MODE: OFF (sticky=" + StickySystemMode + ")")
-           end
        end
        
        // --- B: Link_* CC routing removed (now handled by Mac_Layer_* via ExecuteHardwareMacro) ---
