@@ -2012,6 +2012,11 @@ Function RefreshLayerFeedback()
    var hasLower, hasAnySys : Boolean = false
    var loopRec, loopPlay, loopDub, loopArm, loopWait, loopCin : String
 
+   // Guard: arrays not yet initialized during early boot (DEFAULT_INIT)
+   if Size(LFO_Active) == 0 then
+      OSC_SendStringSpecific("/UI/SetLayerFeedback", "LAY" + IntToString(ActiveLayer) + " | " + CurrentCtrlMapName, Local_IP, Local_PORT)
+   else
+
    // --- LINE 1: Header ---
    line1 = "LAY" + IntToString(ActiveLayer) + " | " + CurrentCtrlMapName
 
@@ -2138,6 +2143,7 @@ Function RefreshLayerFeedback()
    end
 
    OSC_SendStringSpecific("/UI/SetLayerFeedback", line1, Local_IP, Local_PORT)
+   end // closes early-boot guard
 End
 
 // Computes active layer from switch states via LAYERMAP bitmask
