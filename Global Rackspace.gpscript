@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-15.008"
+   SCRIPT_VERSION : String = "2026-04-16.002"
 
    DebugMode : Boolean = true
 
@@ -757,6 +757,8 @@ Var
    Mac_Layer_IsOTZ       : Boolean Array
    Mac_Layer_Mode        : Integer Array
    Mac_Layer_HasReset    : Boolean Array
+   Mac_Layer_HasSet      : Boolean Array
+   Mac_Layer_SetVal      : Double Array
 
    // Bank 1 (bindIdx 2-3)
    Mac_Layer_TargetType_B : String Array
@@ -770,6 +772,8 @@ Var
    Mac_Layer_IsOTZ_B      : Boolean Array
    Mac_Layer_Mode_B       : Integer Array
    Mac_Layer_HasReset_B   : Boolean Array
+   Mac_Layer_HasSet_B     : Boolean Array
+   Mac_Layer_SetVal_B     : Double Array
 
    // Bank 2 (bindIdx 4-5)
    Mac_Layer_TargetType_C : String Array
@@ -783,6 +787,8 @@ Var
    Mac_Layer_IsOTZ_C      : Boolean Array
    Mac_Layer_Mode_C       : Integer Array
    Mac_Layer_HasReset_C   : Boolean Array
+   Mac_Layer_HasSet_C     : Boolean Array
+   Mac_Layer_SetVal_C     : Double Array
 
    // Bank 3 (bindIdx 6-7)
    Mac_Layer_TargetType_D : String Array
@@ -796,6 +802,8 @@ Var
    Mac_Layer_IsOTZ_D      : Boolean Array
    Mac_Layer_Mode_D       : Integer Array
    Mac_Layer_HasReset_D   : Boolean Array
+   Mac_Layer_HasSet_D     : Boolean Array
+   Mac_Layer_SetVal_D     : Double Array
 
    // Default map (persistent, cloned on song switch)
    Def_Mac_SourceCount : Integer Array
@@ -815,6 +823,8 @@ Var
    Def_Mac_Layer_IsOTZ : Boolean Array
    Def_Mac_Layer_Mode : Integer Array
    Def_Mac_Layer_HasReset : Boolean Array
+   Def_Mac_Layer_HasSet   : Boolean Array
+   Def_Mac_Layer_SetVal   : Double Array
 
    // Default-bank B (bindIdx 2-3)
    Def_Mac_Layer_TargetType_B : String Array
@@ -828,6 +838,8 @@ Var
    Def_Mac_Layer_IsOTZ_B : Boolean Array
    Def_Mac_Layer_Mode_B : Integer Array
    Def_Mac_Layer_HasReset_B : Boolean Array
+   Def_Mac_Layer_HasSet_B   : Boolean Array
+   Def_Mac_Layer_SetVal_B   : Double Array
 
    // Default-bank C (bindIdx 4-5)
    Def_Mac_Layer_TargetType_C : String Array
@@ -841,6 +853,8 @@ Var
    Def_Mac_Layer_IsOTZ_C : Boolean Array
    Def_Mac_Layer_Mode_C : Integer Array
    Def_Mac_Layer_HasReset_C : Boolean Array
+   Def_Mac_Layer_HasSet_C   : Boolean Array
+   Def_Mac_Layer_SetVal_C   : Double Array
 
    // Default-bank D (bindIdx 6-7)
    Def_Mac_Layer_TargetType_D : String Array
@@ -854,12 +868,20 @@ Var
    Def_Mac_Layer_IsOTZ_D : Boolean Array
    Def_Mac_Layer_Mode_D : Integer Array
    Def_Mac_Layer_HasReset_D : Boolean Array
+   Def_Mac_Layer_HasSet_D   : Boolean Array
+   Def_Mac_Layer_SetVal_D   : Double Array
 
    // VST declarations per map
    MAX_VST_DECL : Integer = 10
    MapVST_Name : String Array = ["", "", "", "", "", "", "", "", "", ""]
    MapVST_Valid : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
    DefMapVST_Name : String Array = ["", "", "", "", "", "", "", "", "", ""]
+
+   // CC Cache: sparse array for last-received CC values (all channels)
+   CC_CACHE_MAX  : Integer = 256
+   CC_CacheKey   : Integer Array     // ch*128+cc
+   CC_CacheVal   : Double Array      // 0.0-1.0 (normalized)
+   CC_CacheCount : Integer = 0
 
    // Source layer per macro (layer-in-source model)
    Mac_SourceLayer : Integer Array          // [MAX_LAYER_MACROS] layer index per macro
@@ -3374,6 +3396,8 @@ Function InitMacroArrays_Active()
    Mac_Layer_IsOTZ = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_IsOTZ <-- false End
    Mac_Layer_Mode = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Mode <-- 0 End
    Mac_Layer_HasReset = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_HasReset <-- false End
+   Mac_Layer_HasSet = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_HasSet <-- false End
+   Mac_Layer_SetVal = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_SetVal <-- 0.0 End
 
    // Bank B (bindIdx 2-3)
    Mac_Layer_TargetType_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_TargetType_B <-- "" End
@@ -3387,6 +3411,8 @@ Function InitMacroArrays_Active()
    Mac_Layer_IsOTZ_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_IsOTZ_B <-- false End
    Mac_Layer_Mode_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Mode_B <-- 0 End
    Mac_Layer_HasReset_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_HasReset_B <-- false End
+   Mac_Layer_HasSet_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_HasSet_B <-- false End
+   Mac_Layer_SetVal_B = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_SetVal_B <-- 0.0 End
 
    // Bank C (bindIdx 4-5)
    Mac_Layer_TargetType_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_TargetType_C <-- "" End
@@ -3400,6 +3426,8 @@ Function InitMacroArrays_Active()
    Mac_Layer_IsOTZ_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_IsOTZ_C <-- false End
    Mac_Layer_Mode_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Mode_C <-- 0 End
    Mac_Layer_HasReset_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_HasReset_C <-- false End
+   Mac_Layer_HasSet_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_HasSet_C <-- false End
+   Mac_Layer_SetVal_C = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_SetVal_C <-- 0.0 End
 
    // Bank D (bindIdx 6-7)
    Mac_Layer_TargetType_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_TargetType_D <-- "" End
@@ -3413,6 +3441,8 @@ Function InitMacroArrays_Active()
    Mac_Layer_IsOTZ_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_IsOTZ_D <-- false End
    Mac_Layer_Mode_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_Mode_D <-- 0 End
    Mac_Layer_HasReset_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_HasReset_D <-- false End
+   Mac_Layer_HasSet_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_HasSet_D <-- false End
+   Mac_Layer_SetVal_D = []; For i = 0; i < 200; i = i + 1 Do Mac_Layer_SetVal_D <-- 0.0 End
 End
 
 Function InitMacroArrays_Default()
@@ -3435,6 +3465,8 @@ Function InitMacroArrays_Default()
    Def_Mac_Layer_IsOTZ = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_IsOTZ <-- false End
    Def_Mac_Layer_Mode = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Mode <-- 0 End
    Def_Mac_Layer_HasReset = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_HasReset <-- false End
+   Def_Mac_Layer_HasSet = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_HasSet <-- false End
+   Def_Mac_Layer_SetVal = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_SetVal <-- 0.0 End
 
    // Bank B
    Def_Mac_Layer_TargetType_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_TargetType_B <-- "" End
@@ -3448,6 +3480,8 @@ Function InitMacroArrays_Default()
    Def_Mac_Layer_IsOTZ_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_IsOTZ_B <-- false End
    Def_Mac_Layer_Mode_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Mode_B <-- 0 End
    Def_Mac_Layer_HasReset_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_HasReset_B <-- false End
+   Def_Mac_Layer_HasSet_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_HasSet_B <-- false End
+   Def_Mac_Layer_SetVal_B = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_SetVal_B <-- 0.0 End
 
    // Bank C
    Def_Mac_Layer_TargetType_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_TargetType_C <-- "" End
@@ -3461,6 +3495,8 @@ Function InitMacroArrays_Default()
    Def_Mac_Layer_IsOTZ_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_IsOTZ_C <-- false End
    Def_Mac_Layer_Mode_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Mode_C <-- 0 End
    Def_Mac_Layer_HasReset_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_HasReset_C <-- false End
+   Def_Mac_Layer_HasSet_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_HasSet_C <-- false End
+   Def_Mac_Layer_SetVal_C = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_SetVal_C <-- 0.0 End
 
    // Bank D
    Def_Mac_Layer_TargetType_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_TargetType_D <-- "" End
@@ -3474,6 +3510,8 @@ Function InitMacroArrays_Default()
    Def_Mac_Layer_IsOTZ_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_IsOTZ_D <-- false End
    Def_Mac_Layer_Mode_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_Mode_D <-- 0 End
    Def_Mac_Layer_HasReset_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_HasReset_D <-- false End
+   Def_Mac_Layer_HasSet_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_HasSet_D <-- false End
+   Def_Mac_Layer_SetVal_D = []; For i = 0; i < 200; i = i + 1 Do Def_Mac_Layer_SetVal_D <-- 0.0 End
 End
 
 Function InitMacroArrays_Lookups()
@@ -3500,6 +3538,42 @@ Function InitMacroArrays()
    InitMacroArrays_Default()
    InitMacroArrays_Lookups()
    Trace("MACRO INIT: VSTIdx=" + IntToString(Size(Mac_Layer_VSTIdx)) + " SourceDev=" + IntToString(Size(Mac_SourceDev)) + " Lookups=" + IntToString(Size(Mac_ReverseLookup_L0)))
+End
+
+// =====================================================================
+// CC CACHE — sparse key/value store for last-received CC values
+// =====================================================================
+
+Function CC_CacheWrite(cacheKey : Integer, val : Double)
+   var i : Integer
+   var found : Boolean = false
+   For i = 0; i < CC_CacheCount; i = i + 1 Do
+      if CC_CacheKey[i] == cacheKey then
+         CC_CacheVal[i] = val
+         found = true
+      end
+   End
+   if not found and CC_CacheCount < CC_CACHE_MAX then
+      CC_CacheKey <-- cacheKey
+      CC_CacheVal <-- val
+      CC_CacheCount = CC_CacheCount + 1
+   end
+End
+
+Function CC_CacheRead(cacheKey : Integer) Returns Double
+   var i : Integer
+   result = -1.0
+   For i = 0; i < CC_CacheCount; i = i + 1 Do
+      if CC_CacheKey[i] == cacheKey then
+         result = CC_CacheVal[i]
+      end
+   End
+End
+
+Function CC_CacheReset()
+   CC_CacheKey = []
+   CC_CacheVal = []
+   CC_CacheCount = 0
 End
 
 // =====================================================================
@@ -3705,6 +3779,42 @@ Function SetMacHasReset(macroIdx : Integer, bindIdx : Integer, val : Boolean)
    else Mac_Layer_HasReset_D[slot] = val end
 End
 
+Function GetMacHasSet(macroIdx : Integer, bindIdx : Integer) Returns Boolean
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_HasSet[slot]
+   elsif bank == 1 then result = Mac_Layer_HasSet_B[slot]
+   elsif bank == 2 then result = Mac_Layer_HasSet_C[slot]
+   else result = Mac_Layer_HasSet_D[slot] end
+End
+
+Function SetMacHasSet(macroIdx : Integer, bindIdx : Integer, val : Boolean)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_HasSet[slot] = val
+   elsif bank == 1 then Mac_Layer_HasSet_B[slot] = val
+   elsif bank == 2 then Mac_Layer_HasSet_C[slot] = val
+   else Mac_Layer_HasSet_D[slot] = val end
+End
+
+Function GetMacSetVal(macroIdx : Integer, bindIdx : Integer) Returns Double
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then result = Mac_Layer_SetVal[slot]
+   elsif bank == 1 then result = Mac_Layer_SetVal_B[slot]
+   elsif bank == 2 then result = Mac_Layer_SetVal_C[slot]
+   else result = Mac_Layer_SetVal_D[slot] end
+End
+
+Function SetMacSetVal(macroIdx : Integer, bindIdx : Integer, val : Double)
+   var bank, slot : Integer
+   bank = bindIdx / 2; slot = macroIdx * 2 + (bindIdx - bank * 2)
+   if bank == 0 then Mac_Layer_SetVal[slot] = val
+   elsif bank == 1 then Mac_Layer_SetVal_B[slot] = val
+   elsif bank == 2 then Mac_Layer_SetVal_C[slot] = val
+   else Mac_Layer_SetVal_D[slot] = val end
+End
+
 // Default-bank setters (used in ParseMacroLine when isDefault=true)
 Function SetDefMacAll(macroIdx : Integer, bindIdx : Integer)
    // Copies current Mac_Layer_* values to Def_Mac_Layer_* at same (macroIdx, bindIdx)
@@ -3722,6 +3832,8 @@ Function SetDefMacAll(macroIdx : Integer, bindIdx : Integer)
       Def_Mac_Layer_IsOTZ[slot]      = Mac_Layer_IsOTZ[slot]
       Def_Mac_Layer_Mode[slot]       = Mac_Layer_Mode[slot]
       Def_Mac_Layer_HasReset[slot]   = Mac_Layer_HasReset[slot]
+      Def_Mac_Layer_HasSet[slot]     = Mac_Layer_HasSet[slot]
+      Def_Mac_Layer_SetVal[slot]     = Mac_Layer_SetVal[slot]
    elsif bank == 1 then
       Def_Mac_Layer_TargetType_B[slot] = Mac_Layer_TargetType_B[slot]
       Def_Mac_Layer_Target_B[slot]     = Mac_Layer_Target_B[slot]
@@ -3734,6 +3846,8 @@ Function SetDefMacAll(macroIdx : Integer, bindIdx : Integer)
       Def_Mac_Layer_IsOTZ_B[slot]      = Mac_Layer_IsOTZ_B[slot]
       Def_Mac_Layer_Mode_B[slot]       = Mac_Layer_Mode_B[slot]
       Def_Mac_Layer_HasReset_B[slot]   = Mac_Layer_HasReset_B[slot]
+      Def_Mac_Layer_HasSet_B[slot]     = Mac_Layer_HasSet_B[slot]
+      Def_Mac_Layer_SetVal_B[slot]     = Mac_Layer_SetVal_B[slot]
    elsif bank == 2 then
       Def_Mac_Layer_TargetType_C[slot] = Mac_Layer_TargetType_C[slot]
       Def_Mac_Layer_Target_C[slot]     = Mac_Layer_Target_C[slot]
@@ -3746,6 +3860,8 @@ Function SetDefMacAll(macroIdx : Integer, bindIdx : Integer)
       Def_Mac_Layer_IsOTZ_C[slot]      = Mac_Layer_IsOTZ_C[slot]
       Def_Mac_Layer_Mode_C[slot]       = Mac_Layer_Mode_C[slot]
       Def_Mac_Layer_HasReset_C[slot]   = Mac_Layer_HasReset_C[slot]
+      Def_Mac_Layer_HasSet_C[slot]     = Mac_Layer_HasSet_C[slot]
+      Def_Mac_Layer_SetVal_C[slot]     = Mac_Layer_SetVal_C[slot]
    else
       Def_Mac_Layer_TargetType_D[slot] = Mac_Layer_TargetType_D[slot]
       Def_Mac_Layer_Target_D[slot]     = Mac_Layer_Target_D[slot]
@@ -3758,6 +3874,8 @@ Function SetDefMacAll(macroIdx : Integer, bindIdx : Integer)
       Def_Mac_Layer_IsOTZ_D[slot]      = Mac_Layer_IsOTZ_D[slot]
       Def_Mac_Layer_Mode_D[slot]       = Mac_Layer_Mode_D[slot]
       Def_Mac_Layer_HasReset_D[slot]   = Mac_Layer_HasReset_D[slot]
+      Def_Mac_Layer_HasSet_D[slot]     = Mac_Layer_HasSet_D[slot]
+      Def_Mac_Layer_SetVal_D[slot]     = Mac_Layer_SetVal_D[slot]
    end
 End
 
@@ -3777,6 +3895,8 @@ Function CloneDefBindToActive(macroIdx : Integer, bindIdx : Integer)
       Mac_Layer_IsOTZ[slot]      = Def_Mac_Layer_IsOTZ[slot]
       Mac_Layer_Mode[slot]       = Def_Mac_Layer_Mode[slot]
       Mac_Layer_HasReset[slot]   = Def_Mac_Layer_HasReset[slot]
+      Mac_Layer_HasSet[slot]     = Def_Mac_Layer_HasSet[slot]
+      Mac_Layer_SetVal[slot]     = Def_Mac_Layer_SetVal[slot]
    elsif bank == 1 then
       Mac_Layer_TargetType_B[slot] = Def_Mac_Layer_TargetType_B[slot]
       Mac_Layer_Target_B[slot]     = Def_Mac_Layer_Target_B[slot]
@@ -3789,6 +3909,8 @@ Function CloneDefBindToActive(macroIdx : Integer, bindIdx : Integer)
       Mac_Layer_IsOTZ_B[slot]      = Def_Mac_Layer_IsOTZ_B[slot]
       Mac_Layer_Mode_B[slot]       = Def_Mac_Layer_Mode_B[slot]
       Mac_Layer_HasReset_B[slot]   = Def_Mac_Layer_HasReset_B[slot]
+      Mac_Layer_HasSet_B[slot]     = Def_Mac_Layer_HasSet_B[slot]
+      Mac_Layer_SetVal_B[slot]     = Def_Mac_Layer_SetVal_B[slot]
    elsif bank == 2 then
       Mac_Layer_TargetType_C[slot] = Def_Mac_Layer_TargetType_C[slot]
       Mac_Layer_Target_C[slot]     = Def_Mac_Layer_Target_C[slot]
@@ -3801,6 +3923,8 @@ Function CloneDefBindToActive(macroIdx : Integer, bindIdx : Integer)
       Mac_Layer_IsOTZ_C[slot]      = Def_Mac_Layer_IsOTZ_C[slot]
       Mac_Layer_Mode_C[slot]       = Def_Mac_Layer_Mode_C[slot]
       Mac_Layer_HasReset_C[slot]   = Def_Mac_Layer_HasReset_C[slot]
+      Mac_Layer_HasSet_C[slot]     = Def_Mac_Layer_HasSet_C[slot]
+      Mac_Layer_SetVal_C[slot]     = Def_Mac_Layer_SetVal_C[slot]
    else
       Mac_Layer_TargetType_D[slot] = Def_Mac_Layer_TargetType_D[slot]
       Mac_Layer_Target_D[slot]     = Def_Mac_Layer_Target_D[slot]
@@ -3813,6 +3937,8 @@ Function CloneDefBindToActive(macroIdx : Integer, bindIdx : Integer)
       Mac_Layer_IsOTZ_D[slot]      = Def_Mac_Layer_IsOTZ_D[slot]
       Mac_Layer_Mode_D[slot]       = Def_Mac_Layer_Mode_D[slot]
       Mac_Layer_HasReset_D[slot]   = Def_Mac_Layer_HasReset_D[slot]
+      Mac_Layer_HasSet_D[slot]     = Def_Mac_Layer_HasSet_D[slot]
+      Mac_Layer_SetVal_D[slot]     = Def_Mac_Layer_SetVal_D[slot]
    end
 End
 
@@ -3907,14 +4033,14 @@ End
 //   {OTZ,...}  mark binding as read-only overlay (must be first SPEC token)
 // Tokens are comma-separated. Combinations allowed: {DIR,RESET}, {OTZ,MAX}, {0.4,0.6,RESET}.
 Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx : Integer, bindIdx : Integer) Returns Integer
-   var trimmed, rest, targetType, label, vstPart, rangeStr, tokStr, remaining : String
+   var trimmed, rest, targetType, label, vstPart, rangeStr, tokStr, remaining, setStr : String
    var colonPos, colonPos2, bracePos, closeBrace, underPos, vstIdx, paramIdx : Integer
    var commaPos, mode, numCount : Integer
-   var isOTZ, hasReset : Boolean
-   var rangeMin, rangeMax, numVal : Double = 0.0
+   var isOTZ, hasReset, hasSet : Boolean
+   var rangeMin, rangeMax, numVal, setVal : Double = 0.0
    var firstSpecToken : Boolean
 
-   isOTZ = false; hasReset = false; mode = MODE_RANGE
+   isOTZ = false; hasReset = false; hasSet = false; mode = MODE_RANGE
    rangeMin = 0.0; rangeMax = 1.0; numCount = 0
    firstSpecToken = true
 
@@ -3951,6 +4077,16 @@ Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx :
             mode = MODE_DIR
          elsif tokStr == "RESET" then
             hasReset = true
+         elsif IndexOfSubstring(tokStr, "SET", false) == 0 then
+            setStr = CopySubstring(tokStr, 3, Length(tokStr) - 3)
+            if setStr == ":ON" then
+               setVal = 1.0; hasSet = true
+            elsif setStr == ":OFF" then
+               setVal = 0.0; hasSet = true
+            else
+               setVal = StringToDouble(setStr); hasSet = true
+            end
+            if DebugMode then Trace("PARSE: SET detected: raw='" + setStr + "' val=" + setVal) end
          elsif Length(tokStr) > 0 then
             // Numeric value
             numVal = StringToDouble(tokStr)
@@ -4038,6 +4174,8 @@ Function ParseSingleBinding(macroIdx : Integer, token : String, targetLayerIdx :
       SetMacIsOTZ(macroIdx, bindIdx, isOTZ)
       SetMacMode(macroIdx, bindIdx, mode)
       SetMacHasReset(macroIdx, bindIdx, hasReset)
+      SetMacHasSet(macroIdx, bindIdx, hasSet)
+      SetMacSetVal(macroIdx, bindIdx, setVal)
 
       result = 0
    end
@@ -4744,8 +4882,9 @@ End
 Function SyncArrangerToCurrentMap()
    var macIdx, fi, vstIdx, paramIdx, hwIdx : Integer
    var currentVal : Double = 0.0; var range : Double = 0.0; var faderVal : Double = 0.0
-   var rMin, rMax : Double = 0.0
-   var bc : Integer
+   var rMin, rMax, cachedVal : Double = 0.0
+   var bc, syncChPos, syncCcPos, syncLabelPos, syncCcCh, syncCcNum : Integer
+   var syncTarget, syncAfterCC : String
 
    if DebugMode then Trace("=== START HARD-TRACE: SYNC ARRANGER TO MAP (" + CurrentCtrlMapName + ") ===") end
 
@@ -4759,14 +4898,34 @@ Function SyncArrangerToCurrentMap()
            if DebugMode then Trace("  -> Analyzing Macro " + macIdx + " | Fader: " + hwIdx) end
 
            if Mac_Layer_TargetType[fi] == "CC" then
-               // 50% RULE FOR ONE-WAY CONTROLS (MIDI CC)
+               // CC Cache lookup: use last known value, fallback 0.5
                faderVal = 0.5
-               if DebugMode then Trace("     [IS CC] One-way control. Setting faderVal to 0.5") end
+               syncTarget = Mac_Layer_Target[fi]
+               syncChPos = IndexOfSubstring(syncTarget, "Ch", false)
+               syncCcPos = IndexOfSubstring(syncTarget, ":CC", false)
+               if syncChPos >= 0 and syncCcPos > 0 then
+                  syncCcCh = StringToInt(CopySubstring(syncTarget, syncChPos + 2, syncCcPos - syncChPos - 2)) - 1
+                  syncAfterCC = CopySubstring(syncTarget, syncCcPos + 3, Length(syncTarget) - syncCcPos - 3)
+                  syncLabelPos = IndexOfSubstring(syncAfterCC, ":", false)
+                  if syncLabelPos >= 0 then
+                     syncCcNum = StringToInt(CopySubstring(syncAfterCC, 0, syncLabelPos))
+                  else
+                     syncCcNum = StringToInt(syncAfterCC)
+                  end
+                  cachedVal = CC_CacheRead(syncCcCh * 128 + syncCcNum)
+                  if cachedVal >= 0.0 then
+                     faderVal = cachedVal
+                     if DebugMode then Trace("     [IS CC] CC_Cache hit: Ch" + (syncCcCh + 1) + ":CC" + syncCcNum + " = " + cachedVal) end
+                  else
+                     if DebugMode then Trace("     [IS CC] CC_Cache miss: Ch" + (syncCcCh + 1) + ":CC" + syncCcNum + " -> fallback 0.5") end
+                  end
+               end
            elsif Mac_Layer_TargetType[fi] == "VST" then
                vstIdx = Mac_Layer_VSTIdx[fi]
                paramIdx = Mac_Layer_ParamIdx[fi]
                if vstIdx >= 1 and vstIdx <= MAX_VSTS then
-                   currentVal = GetParameter(BLK_VST[vstIdx], paramIdx)
+                   // BLK_VST is 0-based; macro-stored vstIdx is 1-based
+                   currentVal = GetParameter(BLK_VST[vstIdx - 1], paramIdx)
                    if DebugMode then Trace("     [IS VST] Plugin " + vstIdx + " | Param " + paramIdx + ". Read value: " + currentVal) end
                end
 
@@ -8158,6 +8317,62 @@ Function RebuildReverseLookups()
    End
 End
 
+// Applies SET initial values after a ControllerMap load.
+// CC targets: sends raw MIDI value (0-127) to BLK_VSTControl + updates CC_Cache.
+// VST targets: sets parameter directly via SetParameter.
+// Overlay targets: fires ActivateOverlay with SET value.
+Function ApplyInitialValues()
+   var macIdx, b, bc, vstIdx, paramIdx : Integer
+   var chPos, ccPos, labelPos, ccCh, ccNum : Integer
+   var setVal : Double = 0.0
+   var target, targetType, ccTarget, afterCC : String
+
+   For macIdx = 1; macIdx < MAX_LAYER_MACROS; macIdx = macIdx + 1 Do
+      bc = Mac_Layer_BindCount[macIdx]
+      For b = 0; b < bc; b = b + 1 Do
+         if GetMacHasSet(macIdx, b) then
+            setVal = GetMacSetVal(macIdx, b)
+            targetType = GetMacTargetType(macIdx, b)
+            target = GetMacTarget(macIdx, b)
+
+            if targetType == "CC" then
+               // Parse Ch/CC from target string (e.g. "Ch1:CC78" or "Ch11:CC19:Label")
+               ccTarget = target
+               chPos = IndexOfSubstring(ccTarget, "Ch", false)
+               ccPos = IndexOfSubstring(ccTarget, ":CC", false)
+               if chPos >= 0 and ccPos > 0 then
+                  ccCh = StringToInt(CopySubstring(ccTarget, chPos + 2, ccPos - chPos - 2)) - 1
+                  afterCC = CopySubstring(ccTarget, ccPos + 3, Length(ccTarget) - ccPos - 3)
+                  labelPos = IndexOfSubstring(afterCC, ":", false)
+                  if labelPos >= 0 then
+                     ccNum = StringToInt(CopySubstring(afterCC, 0, labelPos))
+                  else
+                     ccNum = StringToInt(afterCC)
+                  end
+                  // setVal is raw MIDI 0-127 for CC targets
+                  SendNow(BLK_VSTControl, MakeControlChangeMessageEx(ccNum, Round(setVal), ccCh))
+                  CC_CacheWrite(ccCh * 128 + ccNum, setVal / 127.0)
+                  if DebugMode then Trace("SET-CC: Macro" + macIdx + " Ch" + (ccCh + 1) + ":CC" + ccNum + " = " + Round(setVal)) end
+               end
+
+            elsif targetType == "VST" then
+               vstIdx = GetMacVSTIdx(macIdx, b)
+               paramIdx = GetMacParamIdx(macIdx, b)
+               if vstIdx >= 1 and vstIdx <= MAX_VSTS then
+                  SetParameter(BLK_VST[vstIdx - 1], paramIdx, setVal)
+                  if DebugMode then Trace("SET-VST: Macro" + macIdx + " VST" + vstIdx + " param" + paramIdx + " = " + setVal) end
+               end
+
+            elsif targetType == "OVERLAY" then
+               // Overlay SET deferred — ActivateOverlay is defined after LoadControllerMap.
+               // Forward declaration constraint prevents calling it here.
+               if DebugMode then Trace("SET-OVERLAY: Macro" + macIdx + " target=" + target + " val=" + setVal + " (deferred, not applied)") end
+            end
+         end
+      End
+   End
+End
+
 // Main entry: loads Default on first call, song delta on subsequent calls
 Function LoadControllerMap(mapName : String)
    var content, line, trimmedLine, currentMap : String
@@ -8264,6 +8479,7 @@ Function LoadControllerMap(mapName : String)
 
    ValidateMapVSTs()
    RebuildReverseLookups()
+   ApplyInitialValues()
 
    // Only update map name if song map was actually found
    if isFirstLoad then
@@ -12358,6 +12574,7 @@ Function DispatchMacro(matchedMacro : Integer, val : Double, isNote : Boolean, i
                   rMax = GetMacRangeMax(matchedMacro, b)
                   scaledCC = rMin + (val * (rMax - rMin))
                   SendNowToMidiOutDevice(GetDeviceRoute(arrangerDevIdx, ROUTE_CONTROL), MakeControlChangeMessageEx(ccNum, Round(scaledCC * 127.0), ccCh))
+                  SendNow(BLK_VSTControl, MakeControlChangeMessageEx(ccNum, Round(scaledCC * 127.0), ccCh))
                end
 
             elsif targetType == "KEYWORD" then
@@ -14882,6 +15099,7 @@ Initialization
    
    // B. Load text databases
    InitMacroArrays() // pre-allocate all unified macro system arrays
+   CC_CacheReset()   // initialize sparse CC value cache
    LoadControllerMap("DEFAULT_INIT") // parse [Map:Default] once at startup
    LoadVstDatabase()
    BuildFilteredVstList()
@@ -16539,6 +16757,8 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_A
     var ccChan : Integer = GetChannel(m)
     var swC, guardC : Integer
 
+    CC_CacheWrite(ccChan * 128 + cc, IntToFloat(val) / 127.0)
+
     // 0. Layer Switch matching (Type=CC)
     For swC = 0; swC < LayerSwitch_Count; swC = swC + 1 Do
        if LayerSwitch_DevIdx[swC] == 0 and LayerSwitch_Type[swC] == "CC" then
@@ -16609,6 +16829,8 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1_A
     var dir : Integer = 0
     // TODO: Use FindControl/GetControlType from control registry
     var ctrlIdx : Integer = FindControl(1, cc)
+
+    CC_CacheWrite(ch * 128 + cc, IntToFloat(val) / 127.0)
 
     // ====================================================
     // ---> HARD GATE TRACE <---
@@ -16770,6 +16992,8 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_B
     var ccChan : Integer = GetChannel(m)
     var scaledVol : Double = 0.0
 
+    CC_CacheWrite(ccChan * 128 + cc, IntToFloat(val) / 127.0)
+
     // --- CC7 Volume feedback from Genos2 (replaces Genos2_Control scriptlet) ---
     // The Genos2 sends CC7 on channels 1-16 via DIN MIDI when its internal
     // volume faders move. We intercept, scale, and store — do NOT pass through.
@@ -16919,6 +17143,7 @@ End
 // DEVICE 2 CALLBACKS (future expansion)
 // ====================================================
 On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_2_A
+    CC_CacheWrite(GetChannel(m) * 128 + GetCCNumber(m), IntToFloat(GetCCValue(m)) / 127.0)
     ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_2_A, m)
 End
 
@@ -16930,6 +17155,7 @@ End
 // DEVICE 3 CALLBACKS (future expansion)
 // ====================================================
 On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_3_A
+    CC_CacheWrite(GetChannel(m) * 128 + GetCCNumber(m), IntToFloat(GetCCValue(m)) / 127.0)
     ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_3_A, m)
 End
 
