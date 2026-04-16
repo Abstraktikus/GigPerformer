@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-16.005"
+   SCRIPT_VERSION : String = "2026-04-16.006"
 
    DebugMode : Boolean = true
 
@@ -12509,10 +12509,32 @@ Function ExecuteKeywordBinding(keyword : String, val : Double)
          ExecuteRecSongpart()
       end
    elsif keyword == "SYSTEM_TOGGLE" then
+      // Toggle on press edge only (ignore release)
       if val > 0.5 then
-         SystemModeActive = true
-      else
-         SystemModeActive = false
+         if SystemModeActive then
+            // OFF: Save sticky state for next activation
+            StickySystemMode = GlobalSystemMode
+            if GlobalSystemMode == 4 then
+               StickyTimelineSubMode = TimelineSubMode
+               StickyTimelineRecState = TimelineRecState
+            end
+            SystemModeActive = false
+            OSC_SendStringSpecific("/UI/SetSysModeFeedback", "", Local_IP, Local_PORT)
+            SysModeFeedbackTimer = 0.0
+            Trace("SYS-MODE: OFF (sticky=" + StickySystemMode + ")")
+         else
+            // ON: Restore sticky state or enter fresh
+            SystemModeActive = true
+            if StickySystemMode >= 0 then
+               GlobalSystemMode = StickySystemMode
+               if StickySystemMode == 4 then
+                  TimelineSubMode = StickyTimelineSubMode
+                  TimelineRecState = StickyTimelineRecState
+               end
+               Trace("SYS-MODE: RESTORED -> " + SysModeNames[GlobalSystemMode])
+            end
+            OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeNames[GlobalSystemMode], Local_IP, Local_PORT)
+         end
       end
    end
 End
