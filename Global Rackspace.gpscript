@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-16.004"
+   SCRIPT_VERSION : String = "2026-04-16.005"
 
    DebugMode : Boolean = true
 
@@ -11014,6 +11014,7 @@ Function InjectNPToggle(paramType : Integer, paramName : String, uiVal : Double)
    End
    // UI update is intentionally deferred to avoid flickering
    UpdateMetaColors()
+   RefreshLayerFeedback()
 End
 
 Function InjectNPStep(paramType : Integer, paramName : String, direction : Integer)
@@ -12310,6 +12311,7 @@ Function CycleManual(direction : Integer)
 
        SetWidgetLabel(LBL_Manual, ManualNames[newVal])
        UpdateAnchorChannels()
+       RefreshLayerFeedback()
    end
 End
 
