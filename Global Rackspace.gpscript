@@ -881,8 +881,8 @@ Var
 
    // CC Cache: sparse array for last-received CC values (all channels)
    CC_CACHE_MAX  : Integer = 256
-   CC_CacheKey   : Integer Array     // ch*128+cc
-   CC_CacheVal   : Double Array      // 0.0-1.0 (normalized)
+   CC_CacheKey   : Integer Array = []  // ch*128+cc
+   CC_CacheVal   : Double Array  = [] // 0.0-1.0 (normalized)
    CC_CacheCount : Integer = 0
 
    // Source layer per macro (layer-in-source model)
