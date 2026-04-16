@@ -12965,6 +12965,9 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
    // Standard scaling (0-127) for ALL hardware controllers (pedals, knobs, etc.)
    val = IntToFloat(GetCCValue(m)) / 127.0
 
+   // Cache every incoming CC for SyncArrangerToCurrentMap fallback
+   CC_CacheWrite(ch * 128 + cc, val)
+
    if DebugMode then Trace("MACRO-IN: Ch" + IntToString(ch + 1) + ":CC" + IntToString(cc) + " -> " + IntToString(GetCCValue(m))) end
 
    // 1. LEARN MODE (hardware sources are now configured in ControllerMaps.txt)
@@ -16915,8 +16918,6 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_A
     var ccChan : Integer = GetChannel(m)
     var swC, guardC : Integer
 
-    CC_CacheWrite(ccChan * 128 + cc, IntToFloat(val) / 127.0)
-
     // 0. Layer Switch matching (Type=CC)
     For swC = 0; swC < LayerSwitch_Count; swC = swC + 1 Do
        if LayerSwitch_DevIdx[swC] == 0 and LayerSwitch_Type[swC] == "CC" then
@@ -16987,8 +16988,6 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1_A
     var dir : Integer = 0
     // TODO: Use FindControl/GetControlType from control registry
     var ctrlIdx : Integer = FindControl(1, cc)
-
-    CC_CacheWrite(ch * 128 + cc, IntToFloat(val) / 127.0)
 
     // ====================================================
     // ---> HARD GATE TRACE <---
@@ -17150,8 +17149,6 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_B
     var ccChan : Integer = GetChannel(m)
     var scaledVol : Double = 0.0
 
-    CC_CacheWrite(ccChan * 128 + cc, IntToFloat(val) / 127.0)
-
     // --- CC7 Volume feedback from Genos2 (replaces Genos2_Control scriptlet) ---
     // The Genos2 sends CC7 on channels 1-16 via DIN MIDI when its internal
     // volume faders move. We intercept, scale, and store — do NOT pass through.
@@ -17301,7 +17298,6 @@ End
 // DEVICE 2 CALLBACKS (future expansion)
 // ====================================================
 On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_2_A
-    CC_CacheWrite(GetChannel(m) * 128 + GetCCNumber(m), IntToFloat(GetCCValue(m)) / 127.0)
     ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_2_A, m)
 End
 
@@ -17313,7 +17309,6 @@ End
 // DEVICE 3 CALLBACKS (future expansion)
 // ====================================================
 On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_3_A
-    CC_CacheWrite(GetChannel(m) * 128 + GetCCNumber(m), IntToFloat(GetCCValue(m)) / 127.0)
     ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_3_A, m)
 End
 
