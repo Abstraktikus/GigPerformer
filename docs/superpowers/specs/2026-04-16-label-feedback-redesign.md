@@ -1,18 +1,18 @@
 # Label Feedback Redesign: LayerFeedback / MacroFeedback / SysModeFeedback
 
 **Date:** 2026-04-16
-**Status:** Approved
+**Status:** Approved (v2 — LFO + Looper + ControllerMap additions)
 **Scope:** OSC display labels, feedback routing
 
 ## Problem
 
-The three feedback labels (`LBL_LayerFeedback`, `LBL_MacroFeedback`, `LBL_SysModeFeedback`) have overlapping responsibilities. Overlay ON/OFF events go to LayerFeedback, but the permanent state is lost after the 2s timer. There is no persistent overview of which SYS-macros are active across channels.
+The three feedback labels (`LBL_LayerFeedback`, `LBL_MacroFeedback`, `LBL_SysModeFeedback`) have overlapping responsibilities. Overlay ON/OFF events go to LayerFeedback, but the permanent state is lost after the 2s timer. There is no persistent overview of which SYS-macros, LFOs, or Looper channels are active.
 
 ## Design: Three Labels, Three Lifetimes
 
 | Label | Content | Lifetime | Source |
 |-------|---------|----------|--------|
-| **LBL_LayerFeedback** | Permanent dashboard: Active layer + all SYS-macro states | **Persistent** (always visible, rebuilt on every change) | `RefreshLayerFeedback()` |
+| **LBL_LayerFeedback** | Permanent dashboard: Layer, ControllerMap, LFO, Looper, SYS-macro states | **Persistent** (rebuilt on every change) | `RefreshLayerFeedback()` |
 | **LBL_MacroFeedback** | Momentary value change of a base macro | **1.5s timer** (then clears) | Fader/knob movement, SYSMODE triggering a base macro |
 | **LBL_SysModeFeedback** | Joystick navigation + SYSMODE actions | **2s timer** (then clears or shows mode name) | Joystick, SYSMODE cycle/select, Timeline, Strip |
 
@@ -24,6 +24,9 @@ The three feedback labels (`LBL_LayerFeedback`, `LBL_MacroFeedback`, `LBL_SysMod
 | Overlay ON/OFF (SYS-macro toggle) | LBL_LayerFeedback (rebuild) |
 | Song load (all Mem_* change) | LBL_LayerFeedback (rebuild) |
 | Solo/Mute state dirty | LBL_LayerFeedback (rebuild) |
+| LFO start/stop | LBL_LayerFeedback (rebuild) |
+| Looper state change | LBL_LayerFeedback (rebuild via dirty flag) |
+| ControllerMap switch | LBL_LayerFeedback (rebuild) |
 | Fader/knob moves a base macro | LBL_MacroFeedback (1.5s) |
 | SYSMODE triggers a base macro | LBL_MacroFeedback (1.5s) |
 | SYSMODE triggers a SYS-macro (overlay) | LBL_LayerFeedback (rebuild) |
@@ -38,45 +41,57 @@ The three feedback labels (`LBL_LayerFeedback`, `LBL_MacroFeedback`, `LBL_SysMod
 
 ## LBL_LayerFeedback: Persistent Dashboard
 
-### Display Format (C1: Aligned Columns, Only Active Groups)
+### Display Layout (top to bottom)
 
-The dashboard shows the active layer plus a table of all SYS-macro groups that have at least one active channel anywhere (Upper/None or Lower). Groups with zero active channels globally are omitted entirely. Within a visible group, `-` indicates no active channel in that row.
-
-**Example — Smart Solo on Ch1,3 and Octaver on Ch2:**
+**Line 1: Header** (always visible)
 ```
-LAY0
-U: Sol 1,3 | Oct -
-L: Sol -   | Oct 2
+LAY<n> | <CurrentCtrlMapName>
 ```
 
-**Example — Many active:**
+**Line 2: LFO** (only if any LFO_Active[] == true)
 ```
-LAY1
-U: Sol 1,3 | Oct 1,3 | Hum 1 | Qnt 3
-L: Sol 2   | Oct 2   | Hum 2 | Qnt -
+LFO: M<macro>=<Name> M<macro>=<Name>
+```
+Macros listed ascending. Data: `LFO_Active[slot]` + `LFO_ByMacro[slot]` -> `LFO_Names[idx]`.
+
+**Line 3: Looper** (only if any Mem_Loop_State[ch] not 0 and not 4)
+```
+Loop: REC 2 | PLAY 1,4 | DUB 3 | ARM 5
+```
+Status groups: State 1=REC, 2=PLAY, 3=DUB, 5/6=ARM, 7=WAIT, 8=CIN.
+Only groups with active channels shown. Channel numbers ascending.
+
+**Lines 4-5: SYS-Macros** (only if any group active)
+Format C1: aligned columns, only active groups as columns, `-` where inactive in row.
+```
+U: Sol 1,3 | Oct 1,3 | Hum 1
+L: Sol 2   | Oct 2   | Hum -
 ```
 
-**Example — Nothing active:**
+### Full Example
 ```
-LAY0
+LAY0 | Diva Lead
+LFO: M3=TriSlow M7=SinFast
+Loop: REC 2 | PLAY 1,4 | ARM 3
+U: Sol 1,3 | Oct 1,3 | Hum 1
+L: Sol 2   | Oct 2   | Hum -
 ```
 
-### Row Assignment
+### Minimal Example (nothing active)
+```
+LAY0 | Standard
+```
+
+### Row Assignment (SYS-Macros)
 
 - **U (Upper):** Channels where `Mem_Manual[ch] == 0` (None) or `Mem_Manual[ch] == 1` (Upper)
 - **L (Lower):** Channels where `Mem_Manual[ch] == 2` (Lower)
 - If no Lower channels exist, the L row is omitted entirely.
 
-### Channel Sorting
+### Group Abbreviations and Order (SYS-Macros)
 
-Within each row, channel numbers are listed ascending: `Sol 1,3,7`
-
-### Group Abbreviations and Order
-
-Groups are displayed in MacroGroup_Names order (indices 3-11), using these 3-letter abbreviations:
-
-| MacroGroup_Names Index | Name | Abbreviation | Mem_Array |
-|----------------------|------|--------------|-----------|
+| Index | Name | Abbrev | Mem_Array |
+|-------|------|--------|-----------|
 | 3 | Smart Solo | Sol | `Mem_SoloSmart[ch]` |
 | 4 | Strict Solo | Str | `Mem_SoloStrict[ch]` |
 | 5 | User Mute | Mut | `Mem_UserMute[ch]` |
@@ -87,100 +102,64 @@ Groups are displayed in MacroGroup_Names order (indices 3-11), using these 3-let
 | 10 | Scale Quantizer | Qnt | `Mem_NP_QuantizeActive[ch]` |
 | 11 | Auto Sustain | Sus | `Mem_NP_AutoSustain[ch]` |
 
+### Refresh Strategy
+
+**Direct call** for low-frequency events:
+- `ActivateOverlay()` / `DeactivateOverlay()`
+- `UpdateActiveLayer()`
+- `LoadControllerMap()` (end)
+- `StartLFO()` / `StopLFO()` / `HardStopAllLFOs()`
+- End of `LoadSongSnapshot()`
+- `UpdateSoloMuteState()`
+
+**Dirty flag + TimerTick** for high-frequency Looper state changes:
+- `LayerFeedbackDirty : Boolean` — set true wherever `Mem_Loop_State[ch]` is written
+- Checked in `On TimerTick`: if dirty and past FaderSafetyTimer, call `RefreshLayerFeedback()` and clear flag
+- This avoids calling refresh 50x per tick during Looper math
+
 ### Core Function: `RefreshLayerFeedback()`
 
-Single function that reads all `Mem_*` arrays and builds the complete dashboard string.
-
-**Algorithm:**
 ```
-1. Start with "LAY" + ActiveLayer
-2. For each SYS-macro group (index 3..11):
-   - Scan all 16 channels: any Mem_*[ch] > 0?
-   - If yes globally: mark this group as visible
-3. If no groups visible: send "LAY<n>" only, return
-4. For visible groups, build two channel lists:
-   - upperChannels: channels where Mem_Manual[ch] != 2 AND Mem_*[ch] > 0
-   - lowerChannels: channels where Mem_Manual[ch] == 2 AND Mem_*[ch] > 0
-5. Build Upper row: "U: " + for each visible group: Abbrev + " " + channel list (or "-") + " | "
-6. Build Lower row (only if any Lower channels exist in the song):
-   "L: " + for each visible group: Abbrev + " " + channel list (or "-") + " | "
-7. Assemble: line1 + newline + line2 (+ optional newline + line3)
-8. Send via OSC_SendStringSpecific("/UI/SetLayerFeedback", result, Local_IP, Local_PORT)
+Function RefreshLayerFeedback()
+   1. Build header: "LAY" + ActiveLayer + " | " + CurrentCtrlMapName
+   2. Build LFO line: scan LFO_Active[0..255], collect "M<slot+1>=<name>"
+   3. Build Looper line: scan Mem_Loop_State[0..15], group by state
+   4. Build SYS-macro lines:
+      a. For each group (9 groups): scan 16 channels, check Mem_*[ch] > 0
+      b. Mark visible groups (any channel active globally)
+      c. Build U row: for each visible group, list upper/none channels or "-"
+      d. Build L row: for each visible group, list lower channels or "-"
+   5. Assemble with NEW_LINE between non-empty sections
+   6. OSC_SendStringSpecific("/UI/SetLayerFeedback", result, Local_IP, Local_PORT)
+End
 ```
-
-**No timer.** This is a persistent display. `LayerFeedbackTimer` is no longer used for timeout-based clearing. The label always shows the current state.
-
-### Callers of `RefreshLayerFeedback()`
-
-| Location | Current Code | Change |
-|----------|-------------|--------|
-| `ActivateOverlay()` | `OSC_SendStringSpecific("/UI/SetLayerFeedback", ...)` + timer | Replace with `RefreshLayerFeedback()` |
-| `DeactivateOverlay()` | `OSC_SendStringSpecific("/UI/SetLayerFeedback", ...)` + timer | Replace with `RefreshLayerFeedback()` |
-| `UpdateActiveLayer()` | Sets `LayerFeedbackStatus` + OSC send | Replace with `RefreshLayerFeedback()` |
-| `LoadSongSnapshot()` end | (implicit via SoloMuteState) | Add explicit `RefreshLayerFeedback()` |
-| `UpdateSoloMuteState()` end | (no feedback today) | Add `RefreshLayerFeedback()` |
-| `TimerTick` LayerFeedbackTimer block | Resets to `LayerFeedbackStatus` | Remove timer block — display is persistent |
 
 ## LBL_MacroFeedback: Momentary Values (1.5s)
 
-No structural change. Continues to show base-macro value changes from:
-
-- `TriggerMacroFeedback()` — fader/knob movement
-- `ShowBaseFeedback()` — DispatchMacro base binding path
-- `ShowOTZFeedback()` — OTZ overlay path (fires to LBL_MacroFeedback as today)
-
-Timer clears after 1.5s (existing behavior).
-
-**Already correctly routed today:**
-- ControllerMap switch messages (">>> SELECT: MapName <<<")
-- Smart Adapt messages (">>> AUTO-MAP: PluginName <<<")
-- Timeline map changes (">>> TL-MAP: MapName <<<")
-- Anchor jumps (">>> ANCHOR: SectionName <<<")
+No structural change. Timer clears after 1.5s (existing behavior).
 
 ## LBL_SysModeFeedback: Navigation (2s)
 
-No structural change. Continues to show:
+No structural change. Timer resets to mode name or clears (existing behavior).
 
-- SYSMODE cycle/select (">>> SYS-MODE: VOICE SELECTOR <<<")
-- Strip theme/channel navigation (">>> STRIP: Octaver <<<")
-- Timeline record/play/part (">>> TIMELINE: REC <<<")
-- Scope changes (">>> SCOPE: CHANNEL 3 <<<")
-- Looper channel navigation
-- ControllerMap restore (">>> MAP: Standard <<<")
+## Changes Summary
 
-Timer resets to `SysModeNames[GlobalSystemMode]` if SystemModeActive, else clears (existing behavior).
+### New
+- `RefreshLayerFeedback()` function
+- `LayerFeedbackDirty : Boolean` global
+- `SysMacro_Abbrev : String Array` constant
 
-## Changes Required
-
-### New Code
-
-1. **`RefreshLayerFeedback()` function** — builds the dashboard string from Mem_* arrays
-   - Must be placed after `ActivateOverlay`/`DeactivateOverlay` definitions (forward decl order)
-   - OR placed before them and called via a deferred timer pattern
-   - Recommended: place it right before `ActivateOverlay` since it only reads Mem_* arrays (no forward dependency)
-
-2. **Group abbreviation array** (constant):
-   ```
-   SysMacro_Abbrev : String Array = ["Sol","Str","Mut","Rng","Roo","Oct","Hum","Qnt","Sus"]
-   ```
-
-### Modified Code
-
-3. **`ActivateOverlay()`** — remove direct OSC send + timer, add `RefreshLayerFeedback()` call
-4. **`DeactivateOverlay()`** — same
-5. **`UpdateActiveLayer()`** — replace OSC send with `RefreshLayerFeedback()`
-6. **End of `LoadSongSnapshot()`** — add `RefreshLayerFeedback()`
-7. **`UpdateSoloMuteState()`** — add `RefreshLayerFeedback()` at end
-8. **`TimerTick` LayerFeedbackTimer block** — remove (no more timer-based reset)
+### Modified
+- `ActivateOverlay()` — replace OSC + timer with `RefreshLayerFeedback()`
+- `DeactivateOverlay()` — same
+- `UpdateActiveLayer()` — replace OSC send with `RefreshLayerFeedback()`
+- `LoadControllerMap()` end — add `RefreshLayerFeedback()`
+- `LoadSongSnapshot()` end — add `RefreshLayerFeedback()`
+- `UpdateSoloMuteState()` end — add `RefreshLayerFeedback()`
+- `StartLFO()` / `StopLFO()` / `HardStopAllLFOs()` — add `RefreshLayerFeedback()`
+- All `Mem_Loop_State[ch] = ...` sites — add `LayerFeedbackDirty = true`
+- `On TimerTick` — add dirty-flag check, remove LayerFeedbackTimer block
 
 ### Removed
-
-9. **`LayerFeedbackTimer`** — no longer needed (persistent display)
-10. **`LayerFeedbackStatus`** — replaced by `RefreshLayerFeedback()` which reads `ActiveLayer` directly
-
-## Not Changed
-
-- `LBL_MacroFeedback` routing and timer (1.5s) — stays as-is
-- `LBL_SysModeFeedback` routing and timer (2s) — stays as-is
-- `MacroFeedbackLockTimer` — stays as-is
-- OTZ feedback paths (ShowOTZFeedback / ShowBaseFeedback) — already go to MacroFeedback correctly
+- `LayerFeedbackTimer` (no longer needed)
+- `LayerFeedbackStatus` (replaced by reading ActiveLayer directly)
