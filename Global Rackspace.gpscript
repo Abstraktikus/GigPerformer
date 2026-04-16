@@ -1989,6 +1989,157 @@ Function DeactivateOverlayAction(action : String)
    end
 End
 
+// Returns 1 if the SYS-macro at groupIdx (0..8 = Sol..Sus) is active on channel ch
+Function GetSysMacroActive(groupIdx : Integer, ch : Integer) Returns Integer
+   result = 0
+   if groupIdx == 0 then result = Mem_SoloSmart[ch]
+   elsif groupIdx == 1 then result = Mem_SoloStrict[ch]
+   elsif groupIdx == 2 then result = Mem_UserMute[ch]
+   elsif groupIdx == 3 then result = Mem_NP_VelRangeActive[ch]
+   elsif groupIdx == 4 then result = Mem_NP_ChordMode[ch]
+   elsif groupIdx == 5 then result = Mem_NP_Octaver[ch]
+   elsif groupIdx == 6 then result = Mem_NP_HumanizeActive[ch]
+   elsif groupIdx == 7 then result = Mem_NP_QuantizeActive[ch]
+   elsif groupIdx == 8 then result = Mem_NP_AutoSustain[ch]
+   end
+End
+
+// Persistent dashboard: Layer + ControllerMap + LFO + Looper + SYS-Macros
+Function RefreshLayerFeedback()
+   var g, ch, slot, lfoIdx, loopSt : Integer
+   var line1, lfoLine, loopLine, uRow, lRow, chList, grpStr : String
+   var groupVisible : Boolean Array = [false, false, false, false, false, false, false, false, false]
+   var hasLower, hasAnySys : Boolean = false
+   var loopRec, loopPlay, loopDub, loopArm, loopWait, loopCin : String
+
+   // --- LINE 1: Header ---
+   line1 = "LAY" + IntToString(ActiveLayer) + " | " + CurrentCtrlMapName
+
+   // --- LINE 2: LFO ---
+   lfoLine = ""
+   For slot = 0; slot < MAX_MACROS; slot = slot + 1 Do
+      if LFO_Active[slot] and LFO_ByMacro[slot] >= 0 then
+         if Length(lfoLine) > 0 then lfoLine = lfoLine + " " end
+         lfoLine = lfoLine + "M" + IntToString(slot + 1) + "=" + LFO_Names[LFO_ByMacro[slot]]
+      end
+   End
+   if Length(lfoLine) > 0 then lfoLine = "LFO: " + lfoLine end
+
+   // --- LINE 3: Looper ---
+   loopRec = ""; loopPlay = ""; loopDub = ""; loopArm = ""; loopWait = ""; loopCin = ""
+   For ch = 0; ch < 16; ch = ch + 1 Do
+      loopSt = Mem_Loop_State[ch]
+      if loopSt == 1 then
+         if Length(loopRec) > 0 then loopRec = loopRec + "," end
+         loopRec = loopRec + IntToString(ch + 1)
+      elsif loopSt == 2 then
+         if Length(loopPlay) > 0 then loopPlay = loopPlay + "," end
+         loopPlay = loopPlay + IntToString(ch + 1)
+      elsif loopSt == 3 then
+         if Length(loopDub) > 0 then loopDub = loopDub + "," end
+         loopDub = loopDub + IntToString(ch + 1)
+      elsif loopSt == 5 or loopSt == 6 then
+         if Length(loopArm) > 0 then loopArm = loopArm + "," end
+         loopArm = loopArm + IntToString(ch + 1)
+      elsif loopSt == 7 then
+         if Length(loopWait) > 0 then loopWait = loopWait + "," end
+         loopWait = loopWait + IntToString(ch + 1)
+      elsif loopSt == 8 then
+         if Length(loopCin) > 0 then loopCin = loopCin + "," end
+         loopCin = loopCin + IntToString(ch + 1)
+      end
+   End
+   loopLine = ""
+   if Length(loopRec) > 0 then loopLine = "REC " + loopRec end
+   if Length(loopPlay) > 0 then
+      if Length(loopLine) > 0 then loopLine = loopLine + " | " end
+      loopLine = loopLine + "PLAY " + loopPlay
+   end
+   if Length(loopDub) > 0 then
+      if Length(loopLine) > 0 then loopLine = loopLine + " | " end
+      loopLine = loopLine + "DUB " + loopDub
+   end
+   if Length(loopArm) > 0 then
+      if Length(loopLine) > 0 then loopLine = loopLine + " | " end
+      loopLine = loopLine + "ARM " + loopArm
+   end
+   if Length(loopWait) > 0 then
+      if Length(loopLine) > 0 then loopLine = loopLine + " | " end
+      loopLine = loopLine + "WAIT " + loopWait
+   end
+   if Length(loopCin) > 0 then
+      if Length(loopLine) > 0 then loopLine = loopLine + " | " end
+      loopLine = loopLine + "CIN " + loopCin
+   end
+   if Length(loopLine) > 0 then loopLine = "Loop: " + loopLine end
+
+   // --- LINES 4-5: SYS-Macros ---
+   // Pass 1: determine which groups are visible (any channel active globally)
+   hasAnySys = false
+   For g = 0; g < 9; g = g + 1 Do
+      groupVisible[g] = false
+      For ch = 0; ch < 16; ch = ch + 1 Do
+         if GetSysMacroActive(g, ch) > 0 then groupVisible[g] = true end
+      End
+      if groupVisible[g] then hasAnySys = true end
+   End
+
+   // Check if any Lower channels exist in the song
+   hasLower = false
+   For ch = 0; ch < 16; ch = ch + 1 Do
+      if Mem_Manual[ch] == 2 then hasLower = true end
+   End
+
+   // Pass 2: build U and L rows
+   uRow = ""; lRow = ""
+   if hasAnySys then
+      For g = 0; g < 9; g = g + 1 Do
+         if groupVisible[g] then
+            // Upper channels (Manual != 2)
+            chList = ""
+            For ch = 0; ch < 16; ch = ch + 1 Do
+               if Mem_Manual[ch] != 2 and GetSysMacroActive(g, ch) > 0 then
+                  if Length(chList) > 0 then chList = chList + "," end
+                  chList = chList + IntToString(ch + 1)
+               end
+            End
+            if Length(chList) == 0 then chList = "-" end
+            grpStr = SysMacro_Abbrev[g] + " " + chList
+            if Length(uRow) > 0 then uRow = uRow + " | " end
+            uRow = uRow + grpStr
+
+            // Lower channels (Manual == 2)
+            if hasLower then
+               chList = ""
+               For ch = 0; ch < 16; ch = ch + 1 Do
+                  if Mem_Manual[ch] == 2 and GetSysMacroActive(g, ch) > 0 then
+                     if Length(chList) > 0 then chList = chList + "," end
+                     chList = chList + IntToString(ch + 1)
+                  end
+               End
+               if Length(chList) == 0 then chList = "-" end
+               grpStr = SysMacro_Abbrev[g] + " " + chList
+               if Length(lRow) > 0 then lRow = lRow + " | " end
+               lRow = lRow + grpStr
+            end
+         end
+      End
+      uRow = "U: " + uRow
+      if hasLower then lRow = "L: " + lRow end
+   end
+
+   // --- ASSEMBLE ---
+   // line1 is always present
+   if Length(lfoLine) > 0 then line1 = line1 + NEW_LINE + lfoLine end
+   if Length(loopLine) > 0 then line1 = line1 + NEW_LINE + loopLine end
+   if hasAnySys then
+      line1 = line1 + NEW_LINE + uRow
+      if hasLower then line1 = line1 + NEW_LINE + lRow end
+   end
+
+   OSC_SendStringSpecific("/UI/SetLayerFeedback", line1, Local_IP, Local_PORT)
+End
+
 // Computes active layer from switch states via LAYERMAP bitmask
 Function UpdateActiveLayer()
    var oldLayer, bits, sw, ov : Integer
@@ -11530,157 +11681,6 @@ Function RecordTimelineOverlay(funcName : String, channel : Integer, state : Int
       encodedVal = channel * 2 + state
       RecordTimelineEvent("OVL_" + funcName, encodedVal)
    end
-End
-
-// Returns 1 if the SYS-macro at groupIdx (0..8 = Sol..Sus) is active on channel ch
-Function GetSysMacroActive(groupIdx : Integer, ch : Integer) Returns Integer
-   result = 0
-   if groupIdx == 0 then result = Mem_SoloSmart[ch]
-   elsif groupIdx == 1 then result = Mem_SoloStrict[ch]
-   elsif groupIdx == 2 then result = Mem_UserMute[ch]
-   elsif groupIdx == 3 then result = Mem_NP_VelRangeActive[ch]
-   elsif groupIdx == 4 then result = Mem_NP_ChordMode[ch]
-   elsif groupIdx == 5 then result = Mem_NP_Octaver[ch]
-   elsif groupIdx == 6 then result = Mem_NP_HumanizeActive[ch]
-   elsif groupIdx == 7 then result = Mem_NP_QuantizeActive[ch]
-   elsif groupIdx == 8 then result = Mem_NP_AutoSustain[ch]
-   end
-End
-
-// Persistent dashboard: Layer + ControllerMap + LFO + Looper + SYS-Macros
-Function RefreshLayerFeedback()
-   var g, ch, slot, lfoIdx, loopSt : Integer
-   var line1, lfoLine, loopLine, uRow, lRow, chList, grpStr : String
-   var groupVisible : Boolean Array = [false, false, false, false, false, false, false, false, false]
-   var hasLower, hasAnySys : Boolean = false
-   var loopRec, loopPlay, loopDub, loopArm, loopWait, loopCin : String
-
-   // --- LINE 1: Header ---
-   line1 = "LAY" + IntToString(ActiveLayer) + " | " + CurrentCtrlMapName
-
-   // --- LINE 2: LFO ---
-   lfoLine = ""
-   For slot = 0; slot < MAX_MACROS; slot = slot + 1 Do
-      if LFO_Active[slot] and LFO_ByMacro[slot] >= 0 then
-         if Length(lfoLine) > 0 then lfoLine = lfoLine + " " end
-         lfoLine = lfoLine + "M" + IntToString(slot + 1) + "=" + LFO_Names[LFO_ByMacro[slot]]
-      end
-   End
-   if Length(lfoLine) > 0 then lfoLine = "LFO: " + lfoLine end
-
-   // --- LINE 3: Looper ---
-   loopRec = ""; loopPlay = ""; loopDub = ""; loopArm = ""; loopWait = ""; loopCin = ""
-   For ch = 0; ch < 16; ch = ch + 1 Do
-      loopSt = Mem_Loop_State[ch]
-      if loopSt == 1 then
-         if Length(loopRec) > 0 then loopRec = loopRec + "," end
-         loopRec = loopRec + IntToString(ch + 1)
-      elsif loopSt == 2 then
-         if Length(loopPlay) > 0 then loopPlay = loopPlay + "," end
-         loopPlay = loopPlay + IntToString(ch + 1)
-      elsif loopSt == 3 then
-         if Length(loopDub) > 0 then loopDub = loopDub + "," end
-         loopDub = loopDub + IntToString(ch + 1)
-      elsif loopSt == 5 or loopSt == 6 then
-         if Length(loopArm) > 0 then loopArm = loopArm + "," end
-         loopArm = loopArm + IntToString(ch + 1)
-      elsif loopSt == 7 then
-         if Length(loopWait) > 0 then loopWait = loopWait + "," end
-         loopWait = loopWait + IntToString(ch + 1)
-      elsif loopSt == 8 then
-         if Length(loopCin) > 0 then loopCin = loopCin + "," end
-         loopCin = loopCin + IntToString(ch + 1)
-      end
-   End
-   loopLine = ""
-   if Length(loopRec) > 0 then loopLine = "REC " + loopRec end
-   if Length(loopPlay) > 0 then
-      if Length(loopLine) > 0 then loopLine = loopLine + " | " end
-      loopLine = loopLine + "PLAY " + loopPlay
-   end
-   if Length(loopDub) > 0 then
-      if Length(loopLine) > 0 then loopLine = loopLine + " | " end
-      loopLine = loopLine + "DUB " + loopDub
-   end
-   if Length(loopArm) > 0 then
-      if Length(loopLine) > 0 then loopLine = loopLine + " | " end
-      loopLine = loopLine + "ARM " + loopArm
-   end
-   if Length(loopWait) > 0 then
-      if Length(loopLine) > 0 then loopLine = loopLine + " | " end
-      loopLine = loopLine + "WAIT " + loopWait
-   end
-   if Length(loopCin) > 0 then
-      if Length(loopLine) > 0 then loopLine = loopLine + " | " end
-      loopLine = loopLine + "CIN " + loopCin
-   end
-   if Length(loopLine) > 0 then loopLine = "Loop: " + loopLine end
-
-   // --- LINES 4-5: SYS-Macros ---
-   // Pass 1: determine which groups are visible (any channel active globally)
-   hasAnySys = false
-   For g = 0; g < 9; g = g + 1 Do
-      groupVisible[g] = false
-      For ch = 0; ch < 16; ch = ch + 1 Do
-         if GetSysMacroActive(g, ch) > 0 then groupVisible[g] = true end
-      End
-      if groupVisible[g] then hasAnySys = true end
-   End
-
-   // Check if any Lower channels exist in the song
-   hasLower = false
-   For ch = 0; ch < 16; ch = ch + 1 Do
-      if Mem_Manual[ch] == 2 then hasLower = true end
-   End
-
-   // Pass 2: build U and L rows
-   uRow = ""; lRow = ""
-   if hasAnySys then
-      For g = 0; g < 9; g = g + 1 Do
-         if groupVisible[g] then
-            // Upper channels (Manual != 2)
-            chList = ""
-            For ch = 0; ch < 16; ch = ch + 1 Do
-               if Mem_Manual[ch] != 2 and GetSysMacroActive(g, ch) > 0 then
-                  if Length(chList) > 0 then chList = chList + "," end
-                  chList = chList + IntToString(ch + 1)
-               end
-            End
-            if Length(chList) == 0 then chList = "-" end
-            grpStr = SysMacro_Abbrev[g] + " " + chList
-            if Length(uRow) > 0 then uRow = uRow + " | " end
-            uRow = uRow + grpStr
-
-            // Lower channels (Manual == 2)
-            if hasLower then
-               chList = ""
-               For ch = 0; ch < 16; ch = ch + 1 Do
-                  if Mem_Manual[ch] == 2 and GetSysMacroActive(g, ch) > 0 then
-                     if Length(chList) > 0 then chList = chList + "," end
-                     chList = chList + IntToString(ch + 1)
-                  end
-               End
-               if Length(chList) == 0 then chList = "-" end
-               grpStr = SysMacro_Abbrev[g] + " " + chList
-               if Length(lRow) > 0 then lRow = lRow + " | " end
-               lRow = lRow + grpStr
-            end
-         end
-      End
-      uRow = "U: " + uRow
-      if hasLower then lRow = "L: " + lRow end
-   end
-
-   // --- ASSEMBLE ---
-   // line1 is always present
-   if Length(lfoLine) > 0 then line1 = line1 + NEW_LINE + lfoLine end
-   if Length(loopLine) > 0 then line1 = line1 + NEW_LINE + loopLine end
-   if hasAnySys then
-      line1 = line1 + NEW_LINE + uRow
-      if hasLower then line1 = line1 + NEW_LINE + lRow end
-   end
-
-   OSC_SendStringSpecific("/UI/SetLayerFeedback", line1, Local_IP, Local_PORT)
 End
 
 // Unified overlay function dispatcher — same actions as Strip Control UI
