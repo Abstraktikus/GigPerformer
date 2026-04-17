@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-17.005"
+   SCRIPT_VERSION : String = "2026-04-17.006"
 
    DebugMode : Boolean = true
 
@@ -13498,14 +13498,18 @@ Function DispatchJoystick(deviceIdx : Integer, ctrlIdx : Integer, value : Intege
    var threshLow : Integer = CTRL_ThreshLow[ctrlIdx]
 
    if axis == "X" then
-      if direction == 1 and value > threshHigh and Joy_XFired[deviceIdx] != 1 then
-         Joy_XFired[deviceIdx] = 1; ProcessSystemNavigation(deviceIdx, "X_AXIS", 1)
-      elsif direction == -1 and value < threshLow and Joy_XFired[deviceIdx] != -1 then
-         Joy_XFired[deviceIdx] = -1; ProcessSystemNavigation(deviceIdx, "X_AXIS", -1)
-      elsif direction == 1 and value <= threshHigh then
-         Joy_XFired[deviceIdx] = 0
-      elsif direction == -1 and value >= threshLow then
-         Joy_XFired[deviceIdx] = 0
+      if direction == 1 then
+         if value > threshHigh and Joy_XFired[deviceIdx] != 1 then
+            Joy_XFired[deviceIdx] = 1; ProcessSystemNavigation(deviceIdx, "X_AXIS", 1)
+         elsif value <= threshHigh and Joy_XFired[deviceIdx] == 1 then
+            Joy_XFired[deviceIdx] = 0
+         end
+      elsif direction == -1 then
+         if value < threshLow and Joy_XFired[deviceIdx] != -1 then
+            Joy_XFired[deviceIdx] = -1; ProcessSystemNavigation(deviceIdx, "X_AXIS", -1)
+         elsif value >= threshLow and Joy_XFired[deviceIdx] == -1 then
+            Joy_XFired[deviceIdx] = 0
+         end
       end
    elsif axis == "Y" then
       if direction == 1 then
