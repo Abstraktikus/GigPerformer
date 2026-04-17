@@ -18187,7 +18187,6 @@ On TimerTick(ms : Double)
      countdownText : String = ""
      dbIdx : Integer
      i_hal, jtDev : Integer
-     jtDev : Integer
 
    // ========================================================================
    // --- INITIALIZATION FOR THIS TICK ---
