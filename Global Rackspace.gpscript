@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-17.006"
+   SCRIPT_VERSION : String = "2026-04-17.007"
 
    DebugMode : Boolean = true
 
@@ -166,7 +166,7 @@ Var
    // ========================================================================
    // SECTION 3: HARDWARE ABSTRACTION LAYER — DEVICE & CONTROL REGISTRY
    // ========================================================================
-   SysModeNames : String Array = ["VOICE SELECTOR", "LOOPER CONTROL", "CONTROLLER MAP", "STRIP-CONTROL", "TIMELINE"]
+   SysModeNames : String Array = ["VOICE-SELECTOR", "LOOPER-CONTROL", "CONTROLLER-MAP", "STRIP-CONTROL", "TIMELINE"]
 
    // --- Capability Flags (bitfield, combinable) ---
    CAP_NONE              : Integer = 0
@@ -10357,21 +10357,99 @@ End
 // SECTION 21: ORCHESTRATION
 // ============================================================================
 
-// Returns the enriched SYS-MODE title for the current mode.
-// VOICE SELECTOR appends the active VST name so the player always knows
-// which instrument is in scope.
-Function SysModeFeedbackTitle() Returns String
-   var pName : String
-   if GlobalSystemMode == 0 and Active_VST_Scope >= 0 and Active_VST_Scope < MAX_VSTS then
-      pName = GetPluginInfo(BLK_VST[Active_VST_Scope], 0)
-      if pName != "" and pName != "Element" and pName != "-" then
-         result = "VOICE SELECTOR: " + pName
-      else
-         result = SysModeNames[0]
-      end
-   else
-      result = SysModeNames[GlobalSystemMode]
+// Returns the default scope channel using a prioritized fallback:
+// 1. First channel in OutputScope with Upper (Mem_Manual==1)
+// 2. First channel in OutputScope (any)
+// 3. First channel with Upper globally
+// 4. Channel 0 (Kanal 1)
+Function GetDefaultScopeChannel() Returns Integer
+   var i, found : Integer = -1
+   // Prio 1: First scope channel with Upper
+   For i = 0; i < 16; i = i + 1 Do
+      if found == -1 and OutputScope[i] and Mem_Manual[i] == 1 then found = i end
+   End
+   // Prio 2: First scope channel (any)
+   if found == -1 then
+      For i = 0; i < 16; i = i + 1 Do
+         if found == -1 and OutputScope[i] then found = i end
+      End
    end
+   // Prio 3: First channel with Upper globally
+   if found == -1 then
+      For i = 0; i < 16; i = i + 1 Do
+         if found == -1 and Mem_Manual[i] == 1 then found = i end
+      End
+   end
+   // Prio 4: Channel 0
+   if found == -1 then found = 0 end
+   result = found
+End
+
+// Returns the default looper channel with ARM-aware priority:
+// 1. First Upper channel in scope with Mem_Loop_State==1 (ARM) and matching LoopTarget
+// 2. First channel with a LoopTarget set
+// 3. Falls back to GetDefaultScopeChannel()
+Function GetDefaultLooperChannel() Returns Integer
+   var i, found : Integer = -1
+   // Prio 1: First Upper+ARM in scope where LoopTarget is the first armed event
+   For i = 0; i < 16; i = i + 1 Do
+      if found == -1 and OutputScope[i] and Mem_Manual[i] == 1 and Mem_Loop_State[i] == 1 then found = i end
+   End
+   // Prio 2: First channel with LoopTarget set (any armed/targeted channel)
+   if found == -1 then
+      For i = 0; i < 16; i = i + 1 Do
+         if found == -1 and Mem_Loop_Target[i] >= 0 then found = i end
+      End
+   end
+   // Prio 3: Standard fallback
+   if found == -1 then found = GetDefaultScopeChannel() end
+   result = found
+End
+
+// Returns the enriched SYS-MODE title for the current mode.
+// Each mode appends contextual info: VST name, map name, channel, or timeline state.
+Function SysModeFeedbackTitle() Returns String
+   var ch : Integer
+   var pName, chLabel, tlState : String
+
+   Select
+      GlobalSystemMode == 0 Do // VOICE-SELECTOR
+         ch = GetDefaultScopeChannel()
+         if ch >= 0 and ch < MAX_VSTS then
+            pName = GetPluginInfo(BLK_VST[ch], 0)
+            if pName != "" and pName != "Element" and pName != "-" then
+               result = SysModeNames[0] + ": " + pName
+            else
+               result = SysModeNames[0] + ": " + ChannelUsage[ch] + " (" + IntToString(ch + 1) + ")"
+            end
+         else
+            result = SysModeNames[0]
+         end
+
+      GlobalSystemMode == 1 Do // LOOPER-CONTROL
+         ch = GetDefaultLooperChannel()
+         result = SysModeNames[1] + ": " + ChannelUsage[ch] + " (" + IntToString(ch + 1) + ")"
+
+      GlobalSystemMode == 2 Do // CONTROLLER-MAP
+         result = SysModeNames[2] + ": " + GetWidgetLabel(LBL_CtrlConfig)
+
+      GlobalSystemMode == 3 Do // STRIP-CONTROL
+         ch = GetDefaultScopeChannel()
+         result = SysModeNames[3] + ": " + ChannelUsage[ch] + " (" + IntToString(ch + 1) + ")"
+
+      GlobalSystemMode == 4 Do // TIMELINE
+         if TimelineCountInTimer > 0.0 and TimeSinceStartup() < TimelineCountInTimer then
+            tlState = "ARM"
+         elsif TimelineRecActive then
+            if TimelineRecState == 1 then tlState = "REC-OVERDUB"
+            else tlState = "REC" end
+         elsif TimelinePlaybackActive then
+            tlState = "PLAY"
+         else
+            tlState = "IDLE"
+         end
+         result = SysModeNames[4] + ": " + tlState
+   End
 End
 
 Function CycleGlobalSystemMode()
