@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-17.004"
+   SCRIPT_VERSION : String = "2026-04-17.005"
 
    DebugMode : Boolean = true
 
@@ -18186,7 +18186,7 @@ On TimerTick(ms : Double)
      countdownBars : Double = 0.0; nowDb : Double = 0.0
      countdownText : String = ""
      dbIdx : Integer
-     i_hal : Integer
+     i_hal, jtDev : Integer
      jtDev : Integer
 
    // ========================================================================
