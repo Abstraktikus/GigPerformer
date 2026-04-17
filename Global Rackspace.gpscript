@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-17.002"
+   SCRIPT_VERSION : String = "2026-04-17.003"
 
    DebugMode : Boolean = true
 
@@ -2285,11 +2285,25 @@ End
 // ----------------------------------------------------------------------------
 
 Function FindControl(devIdx : Integer, cc : Integer) Returns Integer
-   var i : Integer
-   result = -1
+   var i, found : Integer = -1
    For i = 0; i < CTRL_Count; i = i + 1 Do
-      if CTRL_DevIdx[i] == devIdx and CTRL_CC[i] == cc then result = i end
+      if found == -1 and CTRL_DevIdx[i] == devIdx and CTRL_CC[i] == cc then
+         found = i
+      end
    End
+   result = found
+End
+
+Function FindControlWithChannel(devIdx : Integer, cc : Integer, channel : Integer) Returns Integer
+   var i, found : Integer = -1
+   For i = 0; i < CTRL_Count; i = i + 1 Do
+      if found == -1 and CTRL_DevIdx[i] == devIdx and CTRL_CC[i] == cc then
+         if CTRL_Channel[i] == -1 or CTRL_Channel[i] == channel then
+            found = i
+         end
+      end
+   End
+   result = found
 End
 
 Function GetControlType(ctrlIdx : Integer) Returns Integer
@@ -13454,6 +13468,173 @@ Function ProcessHardwareNote(m : NoteMessage)
            end
         end
     end
+End
+
+
+// ============================================================================
+// SECTION 22b: MIDI ROUTER FUNCTIONS
+// ============================================================================
+
+Function SetLayerSwitchState(switchIdx : Integer, newState : Integer)
+   var j : Integer
+   if switchIdx < 0 or switchIdx >= MAX_SWITCHES then
+      // Invalid switch index
+   elsif newState == 0 and TimeSinceStartup() < IgnoreSwitchOffUntil[switchIdx] then
+      if DebugMode then Trace("LAYERSWITCH " + IntToString(switchIdx) + ": OFF suppressed (cross-talk)") end
+   elsif LayerSwitch_State[switchIdx] != newState then
+      LayerSwitch_State[switchIdx] = newState
+      if newState == 1 then
+         For j = 0; j < MAX_SWITCHES; j = j + 1 Do
+            if j != switchIdx then IgnoreSwitchOffUntil[j] = TimeSinceStartup() + 200.0 end
+         End
+      end
+      UpdateActiveLayer()
+      if DebugMode then
+         if newState == 1 then Trace("LAYERSWITCH " + IntToString(switchIdx) + ": ON")
+         else Trace("LAYERSWITCH " + IntToString(switchIdx) + ": OFF") end
+      end
+   end
+End
+
+Function DispatchJoystick(deviceIdx : Integer, ctrlIdx : Integer, value : Integer)
+   var axis : String = CTRL_Axis[ctrlIdx]
+   var direction : Integer = CTRL_Direction[ctrlIdx]
+   var threshHigh : Integer = CTRL_ThreshHigh[ctrlIdx]
+   var threshLow : Integer = CTRL_ThreshLow[ctrlIdx]
+
+   if axis == "X" then
+      if direction == 1 and value > threshHigh and Joy_XFired[deviceIdx] != 1 then
+         Joy_XFired[deviceIdx] = 1; ProcessSystemNavigation(deviceIdx, "X_AXIS", 1)
+      elsif direction == -1 and value < threshLow and Joy_XFired[deviceIdx] != -1 then
+         Joy_XFired[deviceIdx] = -1; ProcessSystemNavigation(deviceIdx, "X_AXIS", -1)
+      elsif direction == 1 and value <= threshHigh then
+         Joy_XFired[deviceIdx] = 0
+      elsif direction == -1 and value >= threshLow then
+         Joy_XFired[deviceIdx] = 0
+      end
+   elsif axis == "Y" then
+      if direction == 1 then
+         if value > threshHigh and not Joy_YUpFired[deviceIdx] then
+            Joy_YUpFired[deviceIdx] = true; ProcessSystemNavigation(deviceIdx, "Y_AXIS", 1)
+         elsif value < threshLow then Joy_YUpFired[deviceIdx] = false end
+      elsif direction == -1 then
+         if value > threshHigh and Joy_YDownArmTime[deviceIdx] == 0.0 then
+            Joy_YDownArmTime[deviceIdx] = TimeSinceStartup()
+         end
+         if value < threshLow then
+            Joy_YDownArmTime[deviceIdx] = 0.0
+            Joy_YDownFired[deviceIdx] = false
+         end
+      end
+   end
+End
+
+Function DispatchStyleTrigger(ctrlIdx : Integer)
+   if TimeSinceStartup() >= StyleEchoBlockTimer then
+      LastHardwarePulseTime = TimeSinceStartup()
+      if DebugMode then Trace(">>> STYLE-IN: Hardware CC" + IntToString(CTRL_CC[ctrlIdx]) + " detected (via router)") end
+      if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
+         IsCorrectingPlayhead = false
+         EnablePlayhead(not PendingPlayheadState)
+      end
+   end
+End
+
+Function RouteCCEvent(deviceIdx : Integer, cc : Integer, value : Integer, channel : Integer, msg : ControlChangeMessage, deviceBlock : MidiInBlock)
+   var ctrlIdx : Integer = FindControlWithChannel(deviceIdx, cc, channel)
+   var ctrlType : Integer
+
+   if ctrlIdx > -1 then
+      ctrlType = CTRL_Type[ctrlIdx]
+      Select
+         ctrlType == CTYPE_JOYSTICK Do
+            if SystemModeActive then DispatchJoystick(deviceIdx, ctrlIdx, value)
+            else ProcessHardwareCC(msg); FeedLooper_CC(msg); SendNow(deviceBlock, msg) end
+         ctrlType == CTYPE_LAYER_SWITCH Do
+            if CTRL_TriggerType[ctrlIdx] == TRIGGER_CC then
+               if value > 63 then SetLayerSwitchState(CTRL_SwitchIndex[ctrlIdx], 1)
+               else SetLayerSwitchState(CTRL_SwitchIndex[ctrlIdx], 0) end
+            end
+         ctrlType == CTYPE_STYLE_TRIGGER Do DispatchStyleTrigger(ctrlIdx)
+      End
+      // FADER, ENCODER, BUTTON, PAD — passthrough
+      if ctrlType == CTYPE_FADER or ctrlType == CTYPE_ENCODER or ctrlType == CTYPE_BUTTON or ctrlType == CTYPE_PAD then
+         ProcessHardwareCC(msg); FeedLooper_CC(msg); SendNow(deviceBlock, msg)
+      end
+   else
+      ProcessHardwareCC(msg); FeedLooper_CC(msg); SendNow(deviceBlock, msg)
+   end
+End
+
+Function RoutePBEvent(deviceIdx : Integer, pbValue : Integer, msg : PitchBendMessage, deviceBlock : MidiInBlock)
+   var i : Integer
+   var foundJoystick : Boolean = false
+
+   if SystemModeActive then
+      For i = 0; i < CTRL_Count; i = i + 1 Do
+         if CTRL_DevIdx[i] == deviceIdx and CTRL_CC[i] == -1 and CTRL_Type[i] == CTYPE_JOYSTICK then
+            DispatchJoystick(deviceIdx, i, pbValue)
+            foundJoystick = true
+         end
+      End
+   end
+
+   if not foundJoystick then
+      SendNow(deviceBlock, msg)
+   end
+End
+
+Function RouteNoteEvent(deviceIdx : Integer, noteNum : Integer, velocity : Integer, channel : Integer, msg : NoteMessage, deviceBlock : MidiInBlock)
+   var i : Integer
+
+   // Check for LAYER_SWITCH with TriggerType=NOTE
+   For i = 0; i < CTRL_Count; i = i + 1 Do
+      if CTRL_DevIdx[i] == deviceIdx and CTRL_Type[i] == CTYPE_LAYER_SWITCH and CTRL_TriggerType[i] == TRIGGER_NOTE then
+         if CTRL_CC[i] == noteNum and (CTRL_Channel[i] == -1 or CTRL_Channel[i] == channel) then
+            if velocity > 0 then SetLayerSwitchState(CTRL_SwitchIndex[i], 1)
+            else SetLayerSwitchState(CTRL_SwitchIndex[i], 0) end
+         end
+      end
+   End
+
+   // Note events always continue through the pipeline
+   ProcessHardwareNote(msg)
+   FeedLooper_Note(msg)
+   SendNow(deviceBlock, msg)
+End
+
+Function RouteSysExEvent(deviceIdx : Integer, m : SysexMessage)
+   var i, byteIdx : Integer
+   var matched : Boolean = false
+   var incomingHex, hexByte : String
+
+   // Build hex string from incoming SysEx
+   incomingHex = ""
+   For byteIdx = 0; byteIdx < SM_Length(m); byteIdx = byteIdx + 1 Do
+      if byteIdx > 0 then incomingHex = incomingHex + " " end
+      hexByte = IntToHexString(SM_GetValue(m, byteIdx))
+      if Length(hexByte) == 1 then hexByte = "0" + hexByte end
+      incomingHex = incomingHex + hexByte
+   End
+   incomingHex = MyToUpper(incomingHex)
+
+   // Match against LAYER_SWITCH controls with TriggerType=SYSEX
+   For i = 0; i < CTRL_Count; i = i + 1 Do
+      if not matched and CTRL_DevIdx[i] == deviceIdx and CTRL_Type[i] == CTYPE_LAYER_SWITCH and CTRL_TriggerType[i] == TRIGGER_SYSEX then
+         if incomingHex == MyToUpper(CTRL_OnData[i]) then
+            matched = true
+            SetLayerSwitchState(CTRL_SwitchIndex[i], 1)
+         elsif incomingHex == MyToUpper(CTRL_OffData[i]) then
+            matched = true
+            SetLayerSwitchState(CTRL_SwitchIndex[i], 0)
+         end
+      end
+   End
+
+   // SysEx heartbeat detection (Yamaha: byte1 == 0x43)
+   if SM_Length(m) >= 6 and SM_GetValue(m, 1) == 0x43 then
+      LastHardwarePulseTime = TimeSinceStartup()
+   end
 End
 
 
