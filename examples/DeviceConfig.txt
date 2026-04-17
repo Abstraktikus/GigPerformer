@@ -92,6 +92,10 @@ Caps=SYSEX_PROFILES,SYSEX_COMMANDS
 ; =============================================================================
 
 ; --- Genos2 Joystick (4 virtual controls from 2 physical axes) ---
+; CC values: 0-127 = standard CC number, -1 = PitchBend, -2 = SysEx
+; Y-axis: CC1 (up) + CC16 (down) — two separate CCs, one per direction
+; X-axis: PitchBend (CC=-1), split by Range into Left (0-8191) and Right (8192-16383)
+; Thresholds: High = trigger point, Low = reset point
 
 [CONTROL:0]
 Device=0
@@ -110,9 +114,9 @@ Feedback=NONE
 Device=0
 Label=JoyDown
 Type=JOYSTICK
-CC=1
+CC=16
 RangeMin=0
-RangeMax=63
+RangeMax=127
 ThresholdHigh=100
 ThresholdLow=20
 Axis=Y
