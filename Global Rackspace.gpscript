@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-16.006"
+   SCRIPT_VERSION : String = "2026-04-17.001"
 
    DebugMode : Boolean = true
 
@@ -185,6 +185,14 @@ Var
    CTYPE_BUTTON   : Integer = 2
    CTYPE_JOYSTICK : Integer = 3
    CTYPE_PAD      : Integer = 4
+   CTYPE_LAYER_SWITCH  : Integer = 5
+   CTYPE_STYLE_TRIGGER : Integer = 6
+
+   TRIGGER_CC    : Integer = 0
+   TRIGGER_SYSEX : Integer = 1
+   TRIGGER_NOTE  : Integer = 2
+
+   JOYSTICK_CROSSTALK_MS : Double = 120.0
 
    // --- Feedback Method Constants ---
    FB_NONE  : Integer = 0
@@ -222,6 +230,14 @@ Var
    CTRL_RangeMax : Integer Array
    CTRL_Feedback : Integer Array
    CTRL_Label    : String Array
+   CTRL_ThreshHigh : Integer Array
+   CTRL_ThreshLow  : Integer Array
+   CTRL_Axis       : String Array
+   CTRL_Direction  : Integer Array
+   CTRL_TriggerType : Integer Array
+   CTRL_OnData     : String Array
+   CTRL_OffData    : String Array
+   CTRL_SwitchIndex : Integer Array
 
    // --- SysEx Command Registry (dynamic, filled from config) ---
    SYSEX_Count   : Integer = 0
@@ -457,6 +473,7 @@ Var
    DeferredBootRecovery, DeferredManualReboot, IgnoreMorphEcho : Boolean = false
    EmergencyKillSwitch : Boolean = false
    SystemModeActive : Boolean = false
+   SystemToggleDebounce : Double = 0.0     // prevents double-fire from A+B inputs
 
     // --- TIMELINE SUB-MODE STATE ---
     TimelineSubMode : Integer = 0        // 0 = PLAY, 1 = REC
@@ -631,6 +648,7 @@ Var
    Mem_Manual             : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_ManualVSTBypass    : Boolean Array = [false, false, false, false, false, false, false, false, false, false]
    Mem_ScopeBypassConfigured : Boolean Array = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
+   Solo_NP_Overridden : Boolean Array = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
 
    Mem_NP_ChordMode       : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
    Mem_NP_LatchMode       : Integer Array = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -697,9 +715,10 @@ Var
    IsAutoSoloMapActive : Boolean = false
    
    // --- Input Devices ---
-   Joy_PB_Fired : Integer = 0
-   Joy_CC1_Fired, Joy_CC16_Fired : Boolean = false
-   Joy_CC16_ArmTime : Double = 0.0  // Cross-talk guard: armed timestamp for CC16 decision window
+   Joy_XFired     : Integer Array = [0, 0, 0, 0]       // 0/+1/-1 per device
+   Joy_YUpFired   : Boolean Array = [false, false, false, false]
+   Joy_YDownFired  : Boolean Array = [false, false, false, false]
+   Joy_YDownArmTime : Double Array = [0.0, 0.0, 0.0, 0.0]
    Last_VST_Browse_Val, Last_Macro_Scope_Val, Last_Macro_Browse_Val : Double = 0.5
    Last_RecPart_Val : Double = -1.0
    EncoderResetTimer_Scope, EncoderResetTimer_Browse, IgnoreInputTimer_Scope, IgnoreInputTimer_Browse : Double = 0.0
@@ -9857,14 +9876,14 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
                     
                     // 4. Release again
                     SetParameter(BLK_VST[Active_VST_Scope], pUp, 0.0)
-                    feedbackMsg = ">> " + loadedName + " : Next Patch <<"
-                    
+                    feedbackMsg = ">> Next Patch <<"
+
                 elsif direction == -1 and pDown > 0 then
                     SetParameter(BLK_VST[Active_VST_Scope], pDown, 0.0)
                     SetParameter(BLK_VST[Active_VST_Scope], pDown, 1.0)
                     Wait(150.0)
                     SetParameter(BLK_VST[Active_VST_Scope], pDown, 0.0)
-                    feedbackMsg = ">> " + loadedName + " : Prev Patch <<"
+                    feedbackMsg = ">> Prev Patch <<"
                 end
                 
             // --- B: CONTROL VIA GIG PERFORMER HOST LIST ---
@@ -9872,7 +9891,7 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
                 CyclePluginPreset(Active_VST_Scope, direction)
                 
                 // After Cycle(), the actual name is in our array
-                feedbackMsg = ">> " + loadedName + " : " + LoadedPresets[Active_VST_Scope] + " <<"
+                feedbackMsg = ">> " + LoadedPresets[Active_VST_Scope] + " <<"
                 
             // --- C: CONTROL VIA PROGRAM CHANGE (Korg etc.) ---
             elsif cType == "PC" then
@@ -9882,7 +9901,7 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
                 absVal = Current_PC_Absolute[Active_VST_Scope]
                 bankLSB = absVal / 128
                 pcVal = absVal % 128
-                feedbackMsg = ">> " + loadedName + " : Bank " + bankLSB + " / PC " + PadInt(pcVal, 3) + " <<"
+                feedbackMsg = ">> Bank " + bankLSB + " / PC " + PadInt(pcVal, 3) + " <<"
                 
             else
                 if DebugMode then Trace("VST BROWSE: Ignored. Type is NONE or unsupported.") end
@@ -10313,6 +10332,23 @@ End
 // SECTION 21: ORCHESTRATION
 // ============================================================================
 
+// Returns the enriched SYS-MODE title for the current mode.
+// VOICE SELECTOR appends the active VST name so the player always knows
+// which instrument is in scope.
+Function SysModeFeedbackTitle() Returns String
+   var pName : String
+   if GlobalSystemMode == 0 and Active_VST_Scope >= 0 and Active_VST_Scope < MAX_VSTS then
+      pName = GetPluginInfo(BLK_VST[Active_VST_Scope], 0)
+      if pName != "" and pName != "Element" and pName != "-" then
+         result = "VOICE SELECTOR: " + pName
+      else
+         result = SysModeNames[0]
+      end
+   else
+      result = SysModeNames[GlobalSystemMode]
+   end
+End
+
 Function CycleGlobalSystemMode()
    var modeName : String
 
@@ -10322,7 +10358,7 @@ Function CycleGlobalSystemMode()
    GlobalSystemMode = GlobalSystemMode + 1
    if GlobalSystemMode > 4 then GlobalSystemMode = 0 end
 
-   modeName = SysModeNames[GlobalSystemMode]
+   modeName = SysModeFeedbackTitle()
 
    Trace("SYS-MODE: Switched to " + modeName)
    OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
@@ -10339,7 +10375,7 @@ Function SelectGlobalSystemMode(targetMode : Integer)
         GlobalSystemMode = targetMode
         SystemModeActive = true
 
-        modeName = SysModeNames[GlobalSystemMode]
+        modeName = SysModeFeedbackTitle()
         Trace("SYS-MODE: Selected " + modeName)
         OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
         SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
@@ -11635,9 +11671,9 @@ Function EvaluateAutoSysMode()
    var i, newMode : Integer
    var looperArmed : Boolean = false
 
-   // STRIP-CONTROL (3) and TIMELINE (4) are user-initiated modes — never auto-override
-   if GlobalSystemMode == 3 or GlobalSystemMode == 4 then
-       if DebugMode then Trace(">>> SYSMODE-DIAG: AUTO-SWITCH skipped (user mode " + SysModeNames[GlobalSystemMode] + ")") end
+   // Skip auto-switch when user is actively navigating (sustain held) or in user-initiated modes
+   if GlobalSystemMode == 3 or GlobalSystemMode == 4 or SystemModeActive then
+       if DebugMode then Trace(">>> SYSMODE-DIAG: AUTO-SWITCH skipped (" + SysModeNames[GlobalSystemMode] + " active=" + SystemModeActive + ")") end
    else
 
    // Prio 1: Check if looper is waiting or recording (State 1, 3, 5, 6, 8)
@@ -11670,7 +11706,7 @@ Function EvaluateAutoSysMode()
             else SendDeviceSysEx(controllerDevIdx, "PROFILE_1") end
         end
         
-        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SYS-MODE: " + SysModeNames[GlobalSystemMode] + " <<<", Local_IP, Local_PORT)
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SYS-MODE: " + SysModeFeedbackTitle() + " <<<", Local_IP, Local_PORT)
         SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
     end
    end // outer guard: skip for STRIP-CONTROL/TIMELINE
@@ -11809,6 +11845,137 @@ Function FireOverlayTrigger(funcName : String, channel : Integer, value : Double
 End
 
 // ---------------------------------------------------------
+// SOLO NP OVERRIDE: RESTORE (clean slate before any new override)
+// ---------------------------------------------------------
+Function RestoreSoloOverrides()
+   var ch, idx : Integer
+   For ch = 0; ch < 16; ch = ch + 1 Do
+      if Solo_NP_Overridden[ch] then
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_SplitMin")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, Mem_MinNote[ch]) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_SplitMax")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, Mem_MaxNote[ch]) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_FadeIn")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(Mem_FadeIn[ch]) / 127.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_FadeOut")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(Mem_FadeOut[ch]) / 127.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_VelRangeActive")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(Mem_NP_VelRangeActive[ch])) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_MinVel")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(Mem_NP_MinVel[ch]) / 127.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_MaxVel")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(Mem_NP_MaxVel[ch]) / 127.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_VelRangeFade")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(Mem_NP_VelRangeFade[ch])) end
+         Solo_NP_Overridden[ch] = false
+         if DebugMode then Trace("SOLO-NP: Restored ch " + (ch + 1)) end
+      end
+   End
+End
+
+// ---------------------------------------------------------
+// SOLO NP OVERRIDE: APPLY (Strict = full freedom, Smart = intelligent)
+// ---------------------------------------------------------
+Function ApplySoloOverrides()
+   var ch, k, idx : Integer
+   var lowerGrenze : Double = 0.0
+   var foundLower : Boolean = false
+   var currentSplitMin : Double = 0.0
+
+   For ch = 0; ch < 16; ch = ch + 1 Do
+
+      // === STRICT SOLO: full keyboard, no velocity filter ===
+      if Mem_SoloStrict[ch] == 1 then
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_SplitMin")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_SplitMax")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 1.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_FadeIn")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_FadeOut")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_VelRangeActive")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_MinVel")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_MaxVel")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 1.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_VelRangeFade")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+         Solo_NP_Overridden[ch] = true
+         if DebugMode then Trace("SOLO-NP: Strict override ch " + (ch + 1) + " -> full keyboard") end
+
+      // === SMART SOLO: velocity always removed, split only with Mem_Manual ===
+      elsif Mem_SoloSmart[ch] == 1 then
+         // Step 1: Remove velocity restrictions (always)
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_VelRangeActive")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_MinVel")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_MaxVel")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 1.0) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_VelRangeFade")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+
+         // Step 2: Split adjustment (only if Mem_Manual is set)
+         if Mem_Manual[ch] == 1 then
+            // UPPER: find highest SplitMax of active (non-muted) Lower channels
+            lowerGrenze = 0.0
+            foundLower = false
+            For k = 0; k < 16; k = k + 1 Do
+               if Mem_Manual[k] == 2 and not LooperSoloMute[k] then
+                  if Mem_MaxNote[k] > lowerGrenze then
+                     lowerGrenze = Mem_MaxNote[k]
+                  end
+                  foundLower = true
+               end
+            End
+
+            currentSplitMin = Mem_MinNote[ch]
+
+            if not foundLower then
+               // No active Lower: full keyboard free
+               idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_SplitMin")
+               if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+               idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_FadeIn")
+               if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+            elsif currentSplitMin >= lowerGrenze then
+               // No overlap: set SplitMin to Lower boundary
+               idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_SplitMin")
+               if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, lowerGrenze) end
+               idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_FadeIn")
+               if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+            else
+               // Intentional overlap: keep SplitMin + FadeIn unchanged
+               if DebugMode then Trace("SOLO-NP: Smart ch " + (ch + 1) + " overlap detected (splitMin=" + currentSplitMin + " < lowerGrenze=" + lowerGrenze + ") -> FadeIn preserved") end
+            end
+
+            // SplitMax always opens to full range, FadeOut always removed
+            idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_SplitMax")
+            if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 1.0) end
+            idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_FadeOut")
+            if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+
+            if DebugMode then Trace("SOLO-NP: Smart Upper ch " + (ch + 1) + " lowerGrenze=" + lowerGrenze + " foundLower=" + foundLower) end
+
+         elsif Mem_Manual[ch] == 2 then
+            // LOWER: keep split, remove fades only
+            idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_FadeIn")
+            if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+            idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_FadeOut")
+            if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+            if DebugMode then Trace("SOLO-NP: Smart Lower ch " + (ch + 1) + " -> split kept, fades removed") end
+         else
+            // NONE: no split intervention, only velocity was removed above
+            if DebugMode then Trace("SOLO-NP: Smart ch " + (ch + 1) + " Manual=None -> velocity only") end
+         end
+
+         Solo_NP_Overridden[ch] = true
+      end
+   End
+End
+
+// ---------------------------------------------------------
 // UNIFIED SOLO & FOCUS LOGIC (BASED ON CHANNEL MEMORY)
 // ---------------------------------------------------------
 Function UpdateSoloMuteState()
@@ -11919,6 +12086,12 @@ Function UpdateSoloMuteState()
        end
    End
    
+   // 6. SOLO NP OVERRIDES (Phase 4: clean slate, then apply if needed)
+   RestoreSoloOverrides()
+   if anyStrict or anySmart then
+      ApplySoloOverrides()
+   end
+
    // A) First, SmartBypass activates everything that has routings
    ExecuteSmartBypass()
    
@@ -12157,7 +12330,7 @@ Function ChangeVstScope(direction : Integer, directIdx : Integer)
    SyncChannelScopeToVst(Active_VST_Scope)
    UpdateSoloMuteState()
    
-   OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SCOPE: " + pName + " <<<", Local_IP, Local_PORT)
+   OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
    SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
    ShowVSTOverlay(">>> SCOPE: " + pName + " <<<", 1500.0)
    
@@ -12510,7 +12683,10 @@ Function ExecuteKeywordBinding(keyword : String, val : Double)
       end
    elsif keyword == "SYSTEM_TOGGLE" then
       // Toggle on press edge only (ignore release)
-      if val > 0.5 then
+      // Debounce: A+B inputs of the same device both call ProcessHardwareCC
+      // for the same physical CC64 event — only honour the first within 100ms.
+      if val > 0.5 and TimeSinceStartup() > SystemToggleDebounce then
+         SystemToggleDebounce = TimeSinceStartup() + 100.0
          if SystemModeActive then
             // OFF: Save sticky state for next activation
             StickySystemMode = GlobalSystemMode
@@ -12533,7 +12709,7 @@ Function ExecuteKeywordBinding(keyword : String, val : Double)
                end
                Trace("SYS-MODE: RESTORED -> " + SysModeNames[GlobalSystemMode])
             end
-            OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeNames[GlobalSystemMode], Local_IP, Local_PORT)
+            OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
          end
       end
    end
@@ -12960,8 +13136,8 @@ Function FireSystemAction(actionIdx : Integer)
          SysAction_Names[actionIdx] == "VST_PRESET_DOWN"    Do TriggerVstPresetChange(-1)
          SysAction_Names[actionIdx] == "LOOPER_CH_UP"       Do CycleChannelScope(1)
          SysAction_Names[actionIdx] == "LOOPER_CH_DOWN"     Do CycleChannelScope(-1)
-         SysAction_Names[actionIdx] == "LOOPER_REC"         Do ClickWidget(BTN_Loop_Rec)
-         SysAction_Names[actionIdx] == "LOOPER_CLEAR"       Do ClickWidget(BTN_Loop_Clear)
+         SysAction_Names[actionIdx] == "LOOPER_REC"         Do ClickWidget(BTN_Loop_Rec); OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> LOOPER: REC <<<", Local_IP, Local_PORT); SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
+         SysAction_Names[actionIdx] == "LOOPER_CLEAR"       Do ClickWidget(BTN_Loop_Clear); OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> LOOPER: CLEAR <<<", Local_IP, Local_PORT); SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
          SysAction_Names[actionIdx] == "CTRLMAP_PREV"       Do PreviewActiveControllerMaps(-1)
          SysAction_Names[actionIdx] == "CTRLMAP_NEXT"       Do PreviewActiveControllerMaps(1)
          SysAction_Names[actionIdx] == "CTRLMAP_RESTORE"    Do RestoreInitialControllerMap()
@@ -14586,7 +14762,10 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                    Mem_SoloSmart[i]  = 0 //targetSoloSmart[i]
                    Mem_UserMute[i]   = 0 //targetUserMute[i]
                    Mem_Manual[i] = targetManual[i]
-                   
+
+                   // Safety-net: clear any solo NP overrides from previous song
+                   Solo_NP_Overridden[i] = false
+
                    // Pass mute status to the plugin
                    idx = GetParamIdxByName(BLK_NoteProcessor[i], "p_UserMute"); if idx > -1 then SetParameter(BLK_NoteProcessor[i], idx, IntToFloat(targetUserMute[i])) end
                 else
@@ -15116,6 +15295,7 @@ Initialization
    // reset or parameter write below, so every subsequent action in
    // Init is covered by the guard from time t=0.
    FaderSafetyTimer = TimeSinceStartup() + 5000.0
+   LooperButtonSafetyTimer = FaderSafetyTimer  // prevent BTN_Loop_Rec callback from firing during boot
 
    // Tell Geisterhand to truncate the trace log file. Each GP boot then
    // produces a fresh log instead of appending across many sessions,
@@ -18149,13 +18329,13 @@ On TimerTick(ms : Double)
    // 0. JOYSTICK CROSS-TALK GUARD (CC16 vs PitchBend: dominant axis wins after 120ms)
    if Joy_CC16_ArmTime > 0.0 and not Joy_CC16_Fired then
        if TimeSinceStartup() - Joy_CC16_ArmTime >= 120.0 then
-           if Joy_PB_Fired == 0 then
-               // CC16 dominant (PB quiet after 120ms) → intentional down press
-               if DebugMode then Trace(">>> SYSMODE-DIAG [D] CYCLE via CC16 timer (120ms, PB quiet) in TimerTick") end
+           if Joy_PB_Fired == 0 and not Joy_CC1_Fired then
+               // CC16 dominant (PB quiet, CC1 quiet after 120ms) → intentional down press
+               if DebugMode then Trace(">>> SYSMODE-DIAG [D] CYCLE via CC16 timer (120ms, PB+CC1 quiet) in TimerTick") end
                Joy_CC16_Fired = true
                CycleGlobalSystemMode()
            else
-               if DebugMode then Trace(">>> SYSMODE-DIAG [D-BLOCKED] CC16 suppressed (PB_Fired=" + Joy_PB_Fired + ") cross-talk") end
+               if DebugMode then Trace(">>> SYSMODE-DIAG [D-BLOCKED] CC16 suppressed (PB_Fired=" + Joy_PB_Fired + " CC1_Fired=" + Joy_CC1_Fired + ") cross-talk") end
            end
            Joy_CC16_ArmTime = 0.0  // Decision made, clear window
        end
@@ -18503,7 +18683,7 @@ On TimerTick(ms : Double)
         if SysModeFeedbackTimer > 0.0 and TimeSinceStartup() > SysModeFeedbackTimer then
             SysModeFeedbackTimer = 0.0
             if SystemModeActive then
-                OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeNames[GlobalSystemMode], Local_IP, Local_PORT)
+                OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
             else
                 OSC_SendStringSpecific("/UI/SetSysModeFeedback", "", Local_IP, Local_PORT)
             end
