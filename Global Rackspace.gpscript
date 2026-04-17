@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-17.001"
+   SCRIPT_VERSION : String = "2026-04-17.002"
 
    DebugMode : Boolean = true
 
@@ -1748,11 +1748,22 @@ End
 Function ParseControlType(typeStr : String) Returns Integer
    result = CTYPE_FADER
    Select
-      typeStr == "FADER"    Do result = CTYPE_FADER
-      typeStr == "ENCODER"  Do result = CTYPE_ENCODER
-      typeStr == "BUTTON"   Do result = CTYPE_BUTTON
-      typeStr == "JOYSTICK" Do result = CTYPE_JOYSTICK
-      typeStr == "PAD"      Do result = CTYPE_PAD
+      typeStr == "FADER"          Do result = CTYPE_FADER
+      typeStr == "ENCODER"        Do result = CTYPE_ENCODER
+      typeStr == "BUTTON"         Do result = CTYPE_BUTTON
+      typeStr == "JOYSTICK"       Do result = CTYPE_JOYSTICK
+      typeStr == "PAD"            Do result = CTYPE_PAD
+      typeStr == "LAYER_SWITCH"   Do result = CTYPE_LAYER_SWITCH
+      typeStr == "STYLE_TRIGGER"  Do result = CTYPE_STYLE_TRIGGER
+   End
+End
+
+Function ParseTriggerType(trigStr : String) Returns Integer
+   result = TRIGGER_CC
+   Select
+      trigStr == "CC"    Do result = TRIGGER_CC
+      trigStr == "SYSEX" Do result = TRIGGER_SYSEX
+      trigStr == "NOTE"  Do result = TRIGGER_NOTE
    End
 End
 
@@ -1794,6 +1805,8 @@ Function ParseDeviceConfig()
 
       CTRL_DevIdx = []; CTRL_Type = []; CTRL_CC = []; CTRL_Channel = []
       CTRL_RangeMin = []; CTRL_RangeMax = []; CTRL_Feedback = []; CTRL_Label = []
+      CTRL_ThreshHigh = []; CTRL_ThreshLow = []; CTRL_Axis = []; CTRL_Direction = []
+      CTRL_TriggerType = []; CTRL_OnData = []; CTRL_OffData = []; CTRL_SwitchIndex = []
       SYSEX_DevIdx = []; SYSEX_Purpose = []; SYSEX_Data = []
       CTRL_Count = 0; SYSEX_Count = 0
 
@@ -1832,6 +1845,10 @@ Function ParseDeviceConfig()
             CTRL_DevIdx <-- 0; CTRL_Type <-- CTYPE_FADER; CTRL_CC <-- -1
             CTRL_Channel <-- -1; CTRL_RangeMin <-- 0; CTRL_RangeMax <-- 127
             CTRL_Feedback <-- FB_NONE; CTRL_Label <-- ""
+            CTRL_ThreshHigh <-- 0; CTRL_ThreshLow <-- 0
+            CTRL_Axis <-- ""; CTRL_Direction <-- 0
+            CTRL_TriggerType <-- TRIGGER_CC; CTRL_OnData <-- ""; CTRL_OffData <-- ""
+            CTRL_SwitchIndex <-- -1
             CTRL_Count = CTRL_Count + 1
 
          elsif IndexOfSubstring(line, "[SYSEX:", false) == 0 then
@@ -1839,15 +1856,6 @@ Function ParseDeviceConfig()
             currentSysExIdx = SYSEX_Count
             SYSEX_DevIdx <-- 0; SYSEX_Purpose <-- ""; SYSEX_Data <-- ""
             SYSEX_Count = SYSEX_Count + 1
-
-         elsif IndexOfSubstring(line, "[LAYERSWITCH:", false) == 0 then
-            section = "LAYERSWITCH"
-            currentSwitchIdx = StringToInt(CopySubstring(line, 13, 1))
-            if currentSwitchIdx >= 0 and currentSwitchIdx < MAX_SWITCHES then
-               if currentSwitchIdx >= LayerSwitch_Count then
-                  LayerSwitch_Count = currentSwitchIdx + 1
-               end
-            end
 
          elsif IndexOfSubstring(line, "[LAYERMAP:", false) == 0 then
             section = "LAYERMAP"
@@ -1905,14 +1913,22 @@ Function ParseDeviceConfig()
 
                elsif section == "CONTROL" and currentCtrlIdx >= 0 then
                   Select
-                     key == "Device"   Do CTRL_DevIdx[currentCtrlIdx] = StringToInt(val)
-                     key == "Label"    Do CTRL_Label[currentCtrlIdx] = val
-                     key == "Type"     Do CTRL_Type[currentCtrlIdx] = ParseControlType(val)
-                     key == "CC"       Do CTRL_CC[currentCtrlIdx] = StringToInt(val)
-                     key == "Channel"  Do CTRL_Channel[currentCtrlIdx] = StringToInt(val)
-                     key == "RangeMin" Do CTRL_RangeMin[currentCtrlIdx] = StringToInt(val)
-                     key == "RangeMax" Do CTRL_RangeMax[currentCtrlIdx] = StringToInt(val)
-                     key == "Feedback" Do CTRL_Feedback[currentCtrlIdx] = ParseFeedbackType(val)
+                     key == "Device"       Do CTRL_DevIdx[currentCtrlIdx] = StringToInt(val)
+                     key == "Label"        Do CTRL_Label[currentCtrlIdx] = val
+                     key == "Type"         Do CTRL_Type[currentCtrlIdx] = ParseControlType(val)
+                     key == "CC"           Do CTRL_CC[currentCtrlIdx] = StringToInt(val)
+                     key == "Channel"      Do CTRL_Channel[currentCtrlIdx] = StringToInt(val)
+                     key == "RangeMin"     Do CTRL_RangeMin[currentCtrlIdx] = StringToInt(val)
+                     key == "RangeMax"     Do CTRL_RangeMax[currentCtrlIdx] = StringToInt(val)
+                     key == "Feedback"     Do CTRL_Feedback[currentCtrlIdx] = ParseFeedbackType(val)
+                     key == "ThresholdHigh" Do CTRL_ThreshHigh[currentCtrlIdx] = StringToInt(val)
+                     key == "ThresholdLow"  Do CTRL_ThreshLow[currentCtrlIdx] = StringToInt(val)
+                     key == "Axis"         Do CTRL_Axis[currentCtrlIdx] = val
+                     key == "Direction"    Do CTRL_Direction[currentCtrlIdx] = StringToInt(val)
+                     key == "TriggerType"  Do CTRL_TriggerType[currentCtrlIdx] = ParseTriggerType(val)
+                     key == "OnData"       Do CTRL_OnData[currentCtrlIdx] = val
+                     key == "OffData"      Do CTRL_OffData[currentCtrlIdx] = val
+                     key == "SwitchIndex"  Do CTRL_SwitchIndex[currentCtrlIdx] = StringToInt(val)
                   End
 
                elsif section == "SYSEX" and currentSysExIdx >= 0 then
@@ -1920,16 +1936,6 @@ Function ParseDeviceConfig()
                      key == "Device"   Do SYSEX_DevIdx[currentSysExIdx] = StringToInt(val)
                      key == "Purpose"  Do SYSEX_Purpose[currentSysExIdx] = val
                      key == "Data"     Do SYSEX_Data[currentSysExIdx] = val
-                  End
-
-               elsif section == "LAYERSWITCH" and currentSwitchIdx >= 0 and currentSwitchIdx < MAX_SWITCHES then
-                  Select
-                     key == "Device"   Do LayerSwitch_DevIdx[currentSwitchIdx] = StringToInt(val)
-                     key == "Label"    Do LayerSwitch_Label[currentSwitchIdx] = val
-                     key == "Type"     Do LayerSwitch_Type[currentSwitchIdx] = val
-                     key == "OnData"   Do LayerSwitch_OnData[currentSwitchIdx] = val
-                     key == "OffData"  Do LayerSwitch_OffData[currentSwitchIdx] = val
-                     key == "Channel"  Do LayerSwitch_Channel[currentSwitchIdx] = StringToInt(val)
                   End
 
                elsif section == "LAYERMAP" and currentMapIdx >= 0 then
@@ -1966,13 +1972,23 @@ Function ParseDeviceConfig()
          end
       End
 
+      // Populate LayerSwitch_Count from CONTROL registry
+      LayerSwitch_Count = 0
+      For i = 0; i < CTRL_Count; i = i + 1 Do
+         if CTRL_Type[i] == CTYPE_LAYER_SWITCH and CTRL_SwitchIndex[i] >= 0 then
+            if CTRL_SwitchIndex[i] + 1 > LayerSwitch_Count then
+               LayerSwitch_Count = CTRL_SwitchIndex[i] + 1
+            end
+         end
+      End
+
       Trace("HAL: Loaded " + IntToString(CTRL_Count) + " controls, " + IntToString(SYSEX_Count) + " SysEx commands.")
-      if LayerSwitch_Count > 0 then
-         Trace("HAL: " + IntToString(LayerSwitch_Count) + " layer switches, " + IntToString(Permanent_Count) + " permanent bindings, " + IntToString(Overlay_Count) + " overlay actions")
-         For sw = 0; sw < LayerSwitch_Count; sw = sw + 1 Do
-            Trace("  Switch " + IntToString(sw) + ": " + LayerSwitch_Label[sw] + " [" + LayerSwitch_Type[sw] + "] OnData=" + LayerSwitch_OnData[sw] + " Ch=" + LayerSwitch_Channel[sw])
-         End
-      end
+      Trace("HAL: " + IntToString(LayerSwitch_Count) + " layer switches, " + IntToString(Permanent_Count) + " permanent bindings, " + IntToString(Overlay_Count) + " overlay actions")
+      For i = 0; i < CTRL_Count; i = i + 1 Do
+         if CTRL_Type[i] == CTYPE_LAYER_SWITCH then
+            Trace("  Switch[" + IntToString(CTRL_SwitchIndex[i]) + "]: " + CTRL_Label[i] + " [TriggerType=" + CTRL_TriggerType[i] + "] OnData=" + CTRL_OnData[i])
+         end
+      End
 
       // Fallback: any unset route defaults to the device's MidiOut
       For d = 0; d < MAX_DEVICES; d = d + 1 Do
