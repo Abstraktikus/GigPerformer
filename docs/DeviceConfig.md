@@ -71,6 +71,8 @@ Controls have **labels** -- free-form strings, unique per device. The Controller
 | `BUTTON` | Press / release | 0 / 127 |
 | `JOYSTICK` | Directional axis | Range-dependent |
 | `PAD` | Velocity-sensitive surface | 0--127 |
+| `LAYER_SWITCH` | Binary toggle trigger | On/Off |
+| `STYLE_TRIGGER` | Style feedback pulse | CC value |
 
 ### Genos2 layout (19 controls)
 
@@ -87,28 +89,45 @@ When the ControllerMap parser encounters `DEV0:LAY0:Enc1`:
 3. Resolve to the physical CC number from `CTRL_CC[match]`.
 4. Register in the appropriate per-layer reverse lookup array.
 
+### Joystick fields
+
+JOYSTICK controls support additional fields for data-driven navigation:
+
+| Field | Type | Description |
+|---|---|---|
+| `ThresholdHigh` | Integer | Value at which the axis fires (trigger point) |
+| `ThresholdLow` | Integer | Value at which the axis resets (return to rest) |
+| `Axis` | String | `X` (horizontal) or `Y` (vertical) |
+| `Direction` | Integer | `+1` or `-1` on the axis |
+
+The cross-talk guard (120ms timeout) is universal and not configurable per device.
+
 ---
 
 ## 3. Layer System
 
 ### Layer switches
 
-Layer switches are defined in DeviceConfig via `[LAYERSWITCH:<n>]` sections. Each switch is a binary toggle triggered by incoming SysEx, Note, or CC messages.
+Layer switches are defined as `[CONTROL:n]` entries with `Type=LAYER_SWITCH`. The former `[LAYERSWITCH:n]` section format is superseded — see **Layer switch controls** below for full field reference.
 
 ```ini
-[LAYERSWITCH:0]
+[CONTROL:10]
 Device=0
 Label=Harmony
-Type=SYSEX
+Type=LAYER_SWITCH
+TriggerType=SYSEX
 OnData=F0 43 10 4C 04 00 0C 40 F7
 OffData=F0 43 10 4C 04 00 0C 7F F7
+SwitchIndex=0
 
-[LAYERSWITCH:1]
+[CONTROL:11]
 Device=0
 Label=Talk
-Type=SYSEX
+Type=LAYER_SWITCH
+TriggerType=SYSEX
 OnData=F0 43 10 4C 04 00 16 7F F7
 OffData=F0 43 10 4C 04 00 16 00 F7
+SwitchIndex=1
 ```
 
 Supported trigger types:
@@ -118,6 +137,31 @@ Supported trigger types:
 | `SYSEX` | Incoming matches `OnData` | Incoming matches `OffData` |
 | `NOTE` | Velocity > 0 | Velocity = 0 |
 | `CC` | Value > 63 | Value <= 63 |
+
+### Layer switch controls
+
+Layer switches are defined as `[CONTROL:n]` entries with `Type=LAYER_SWITCH`. They replace the former `[LAYERSWITCH:n]` section format.
+
+| Field | Type | Description |
+|---|---|---|
+| `TriggerType` | String | `CC`, `SYSEX`, or `NOTE` |
+| `OnData` | String | SysEx hex pattern for ON (SYSEX only) |
+| `OffData` | String | SysEx hex pattern for OFF (SYSEX only) |
+| `SwitchIndex` | Integer | Bit position in LAYERMAP bitmask |
+| `CC` | Integer | CC number (TriggerType=CC) or note number (TriggerType=NOTE) |
+| `Channel` | Integer | MIDI channel (-1 = any) |
+
+The `[LAYERMAP:n]` section remains unchanged — it consumes `SwitchIndex` states to select the active layer.
+
+### Style trigger controls
+
+Style triggers detect incoming hardware pulses (e.g., arranger start/stop feedback).
+
+| Field | Type | Description |
+|---|---|---|
+| `TriggerType` | String | `CC` (currently the only option) |
+| `CC` | Integer | CC number to match |
+| `Channel` | Integer | MIDI channel to match |
 
 ### Bitmask to layer number
 
@@ -304,7 +348,7 @@ The file lives in the Snapshots folder (same directory as `.ini` song files). It
 
 ### "Layer switch doesn't work."
 
-1. Check `DeviceConfig.txt` for the `[LAYERSWITCH:<n>]` section -- verify the `OnData` and `OffData` SysEx signatures match what your hardware actually sends.
+1. Check `DeviceConfig.txt` for the `[CONTROL:<n>]` section with `Type=LAYER_SWITCH` -- verify the `OnData` and `OffData` SysEx signatures match what your hardware actually sends.
 2. For NOTE/CC type switches: confirm the correct channel and number.
 3. Verify the `[LAYERMAP:<n>]` section maps all bitmask states to layer numbers.
 4. Enable `DebugMode` -- layer changes produce Trace output on every switch event.

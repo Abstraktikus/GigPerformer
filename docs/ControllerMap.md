@@ -52,7 +52,7 @@ Contains a `[Map:Default]` base section and optional `[Map:<SongName>]` override
 
 ### `DeviceConfig.txt` -- "What hardware exists and how is it wired?"
 
-Defines physical devices, their controls with labels, layer switch triggers, layer-to-bitmask mappings, permanent bindings, output routing, style triggers, and SysEx song sync configuration. Parsed once at startup. See `docs/DeviceConfig.md` for full syntax reference.
+Defines physical devices, their controls with labels, layer switch triggers (as `[CONTROL:n]` entries with `Type=LAYER_SWITCH`), layer-to-bitmask mappings, permanent bindings, output routing, style triggers, and SysEx song sync configuration. Parsed once at startup. See `docs/DeviceConfig.md` for full syntax reference.
 
 ### How they interact
 
@@ -350,6 +350,8 @@ Timeline meta-controls (PLAY/REC toggle, recording policy cycle, discard) are de
 ### Dispatch
 
 Joystick events land in `On PitchBendEvent` / `On ControllerEvent`, which calls `ProcessSystemNavigation(deviceID, actionType, direction)`. Every virtualizable branch routes through `FireSystemAction(SysActIdx("<NAME>"))` -- the same entry point as hardware-button-bound SYSACT roles.
+
+Joystick axis thresholds (`ThresholdHigh`, `ThresholdLow`) and direction (`+1`/`-1`) are data-driven from the `[CONTROL:n]` entries in DeviceConfig with `Type=JOYSTICK`. They are not hardcoded in the script. See `docs/DeviceConfig.md` -- **Joystick fields** for field reference.
 
 ---
 
