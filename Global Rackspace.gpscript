@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-17.003"
+   SCRIPT_VERSION : String = "2026-04-17.004"
 
    DebugMode : Boolean = true
 
@@ -248,12 +248,7 @@ Var
    // --- Layer Switch Registry (dynamic, filled from DeviceConfig v2) ---
    MAX_SWITCHES : Integer = 8
    LayerSwitch_Count : Integer = 0
-   LayerSwitch_DevIdx : Integer Array = [-1, -1, -1, -1, -1, -1, -1, -1]
-   LayerSwitch_Label : String Array = ["", "", "", "", "", "", "", ""]
-   LayerSwitch_Type : String Array = ["", "", "", "", "", "", "", ""]
-   LayerSwitch_OnData : String Array = ["", "", "", "", "", "", "", ""]
-   LayerSwitch_OffData : String Array = ["", "", "", "", "", "", "", ""]
-   LayerSwitch_Channel : Integer Array = [-1, -1, -1, -1, -1, -1, -1, -1]  // -1 = any channel
+   // LayerSwitch_DevIdx/Label/Type/OnData/OffData/Channel removed — now driven by CTRL_*[] registry
    LayerSwitch_State : Integer Array = [0, 0, 0, 0, 0, 0, 0, 0]
    // Per-switch cross-talk guard: when switch X goes ON, all OTHER switches
    // get a 200ms OFF-suppression window to absorb phantom OFF bursts.
@@ -17271,122 +17266,30 @@ End
 // ----------------------------------------------------
 
 On PitchBendEvent(m : PitchBendMessage) from DeviceIn_0_A
-    var pbVal : Integer = GetPitchBendValue(m)
-    if SystemModeActive then
-        // TODO: Read joystick thresholds from control registry
-        if pbVal > 12000 and Joy_PB_Fired != 1 then
-            Joy_PB_Fired = 1; ProcessSystemNavigation(0, "X_AXIS", 1)
-        elsif pbVal < 4000 and Joy_PB_Fired != -1 then
-            Joy_PB_Fired = -1; ProcessSystemNavigation(0, "X_AXIS", -1)
-        elsif pbVal >= 4000 and pbVal <= 12000 then
-            Joy_PB_Fired = 0
-        end
-    else
-        SendNow(DeviceIn_0_A, m)
-    end
+    RoutePBEvent(0, GetPitchBendValue(m), m, DeviceIn_0_A)
 End
 
 On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_A
-    var cc : Integer = GetCCNumber(m)
-    var val : Integer = GetCCValue(m)
-    var ccChan : Integer = GetChannel(m)
-    var swC, guardC : Integer
-
-    // 0. Layer Switch matching (Type=CC)
-    For swC = 0; swC < LayerSwitch_Count; swC = swC + 1 Do
-       if LayerSwitch_DevIdx[swC] == 0 and LayerSwitch_Type[swC] == "CC" then
-          if StringToInt(LayerSwitch_OnData[swC]) == cc and (LayerSwitch_Channel[swC] == -1 or LayerSwitch_Channel[swC] == ccChan) then
-             if val > 63 then
-                if LayerSwitch_State[swC] == 0 then
-                   LayerSwitch_State[swC] = 1
-                   UpdateActiveLayer()
-                   For guardC = 0; guardC < LayerSwitch_Count; guardC = guardC + 1 Do
-                      if guardC != swC then IgnoreSwitchOffUntil[guardC] = TimeSinceStartup() + 200.0 end
-                   End
-                   if DebugMode then Trace("LAYERSWITCH " + IntToString(swC) + " (" + LayerSwitch_Label[swC] + "): ON [CC" + cc + "=" + val + "]") end
-                end
-             else
-                if LayerSwitch_State[swC] == 1 then
-                   if TimeSinceStartup() < IgnoreSwitchOffUntil[swC] then
-                      if DebugMode then Trace("LAYERSWITCH " + IntToString(swC) + " (" + LayerSwitch_Label[swC] + "): OFF suppressed (cross-talk) [CC]") end
-                   else
-                      LayerSwitch_State[swC] = 0
-                      UpdateActiveLayer()
-                      if DebugMode then Trace("LAYERSWITCH " + IntToString(swC) + " (" + LayerSwitch_Label[swC] + "): OFF [CC" + cc + "=" + val + "]") end
-                   end
-                end
-             end
-          end
-       end
-    End
-
-    // --- Style feedback: CC5 on TriggerChannel = hardware start/stop ---
-    if ccChan + 1 == DEV_TriggerChannel and cc == 5 then
-       if TimeSinceStartup() >= StyleEchoBlockTimer then
-          LastHardwarePulseTime = TimeSinceStartup()
-          if DebugMode then Trace(">>> STYLE-IN: Hardware CC5 detected") end
-          if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
-             IsCorrectingPlayhead = false
-             EnablePlayhead(not PendingPlayheadState)
-          end
-       end
-    end
-
-    // Device 0 joystick (only active while sustain pedal is held = SystemModeActive):
-    //   CC1 (up)   = Y_AXIS +1 (navigate within current SYS-MODE)
-    //   CC16 (down) = cycle SYS-MODE (120ms decision window: dominant axis wins over cross-talk)
-    if SystemModeActive and (cc == 1 or cc == 16) then
-        if cc == 1 then
-            if val > 100 and not Joy_CC1_Fired then
-                Joy_CC1_Fired = true; ProcessSystemNavigation(0, "Y_AXIS", 1)
-            elsif val < 20 then Joy_CC1_Fired = false end
-        end
-        if cc == 16 then
-            if val > 100 and Joy_CC16_ArmTime == 0.0 then
-                Joy_CC16_ArmTime = TimeSinceStartup()  // Arm: start 120ms decision window
-            end
-            if val < 20 then
-                Joy_CC16_ArmTime = 0.0  // Oscillation: CC16 returned to center → cancel
-                Joy_CC16_Fired = false
-            end
-        end
-    else
-        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_0_A, m)
-    end
+    RouteCCEvent(0, GetCCNumber(m), GetCCValue(m), GetChannel(m), m, DeviceIn_0_A)
 End
 
 On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_1_A
     var cc : Integer = GetCCNumber(m)
     var val : Integer = GetCCValue(m)
     var ch : Integer = GetChannel(m)
+    var ctrlIdx : Integer = FindControlWithChannel(1, cc, ch)
     var dir : Integer = 0
-    // TODO: Use FindControl/GetControlType from control registry
-    var ctrlIdx : Integer = FindControl(1, cc)
 
-    // ====================================================
-    // ---> HARD GATE TRACE <---
-    // ====================================================
-    if DebugMode then
-        Trace("MINILAB IN: CC " + cc + " | Val: " + val + " | Ch: " + ch)
-    end
+    if DebugMode then Trace("MINILAB IN: CC " + cc + " | Val: " + val + " | Ch: " + ch) end
 
-    // 1. MINILAB BUTTON (Press)
-    // We listen for both constants to be safe!
+    // Device 1 specific: buttons and encoders are system navigation controls
     if ctrlIdx >= 0 and GetControlType(ctrlIdx) == CTYPE_BUTTON and val > 0 then
-        Trace("MINILAB: Button erkannt! Sende an Router...")
         ProcessSystemNavigation(1, "BUTTON", 1)
-
-    // 2. MINILAB ENCODER DREHUNG
     elsif ctrlIdx >= 0 and GetControlType(ctrlIdx) == CTYPE_ENCODER then
         if val >= 65 then dir = 1 elsif val <= 63 then dir = -1 end
-        if dir != 0 then 
-            Trace("MINILAB: Encoder detected! Direction: " + dir)
-            ProcessSystemNavigation(1, "ENCODER", dir) 
-        end
-    
-    // 3. NORMALE VERARBEITUNG (Pads, Fader, etc.)
+        if dir != 0 then ProcessSystemNavigation(1, "ENCODER", dir) end
     else
-        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_1_A, m) 
+        RouteCCEvent(1, cc, val, ch, m, DeviceIn_1_A)
     end
 End
 
@@ -17396,37 +17299,11 @@ End
 On NoteEvent(m : NoteMessage) from DeviceIn_0_A
     var chan : Integer = GetChannel(m)
     var inTrigIdx : Integer
-    var swN, guardN, noteNum : Integer
 
-    // 0. Layer Switch matching (Type=NOTE)
-    noteNum = GetNoteNumber(m)
-    For swN = 0; swN < LayerSwitch_Count; swN = swN + 1 Do
-       if LayerSwitch_DevIdx[swN] == 0 and LayerSwitch_Type[swN] == "NOTE" then
-          if StringToInt(LayerSwitch_OnData[swN]) == noteNum and (LayerSwitch_Channel[swN] == -1 or LayerSwitch_Channel[swN] == chan) then
-             if IsNoteOn(m) and GetVelocity(m) > 0 then
-                LayerSwitch_State[swN] = 1
-                UpdateActiveLayer()
-                For guardN = 0; guardN < LayerSwitch_Count; guardN = guardN + 1 Do
-                   if guardN != swN then IgnoreSwitchOffUntil[guardN] = TimeSinceStartup() + 200.0 end
-                End
-                if DebugMode then Trace("LAYERSWITCH " + IntToString(swN) + " (" + LayerSwitch_Label[swN] + "): ON [NOTE " + noteNum + "]") end
-             else
-                if TimeSinceStartup() < IgnoreSwitchOffUntil[swN] then
-                   if DebugMode then Trace("LAYERSWITCH " + IntToString(swN) + " (" + LayerSwitch_Label[swN] + "): OFF suppressed (cross-talk) [NOTE]") end
-                else
-                   LayerSwitch_State[swN] = 0
-                   UpdateActiveLayer()
-                   if DebugMode then Trace("LAYERSWITCH " + IntToString(swN) + " (" + LayerSwitch_Label[swN] + "): OFF [NOTE " + noteNum + "]") end
-                end
-             end
-          end
-       end
-    End
+    // 0. Generic MIDI router (layer switches + ProcessHardwareNote + FeedLooper + SendNow)
+    RouteNoteEvent(0, GetNoteNumber(m), GetVelocity(m), chan, m, DeviceIn_0_A)
 
-    // 1. Call central HAL logic for macros
-    ProcessHardwareNote(m)
-    
-    // Transport sync: only if this device has the capability
+    // 1. Transport sync (Device 0 specific)
     if DeviceHasCap(0, CAP_TRANSPORT_SYNC) and IsNoteOn(m) and chan >= 9 and chan <= 16 then
         if CurrentSyncMode == 0 and IsPlayheadEnabled() then
              Trace(">>> ON NOTE: [ISOLATED] ArrangerStyle started (Ch " + chan + ") Stoppe GP")
@@ -17434,19 +17311,19 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_A
         elsif CurrentSyncMode == 1 or CurrentSyncMode == 2 or CurrentSyncMode == 3 then
              if StartWatchdogTimer > 0.0 then
                  Trace(">>> ON NOTE: Arranger already running (Ch " + chan + "). Aborting command.")
-                 StartWatchdogTimer = 0.0 
+                 StartWatchdogTimer = 0.0
              end
              if StopWatchdogTimer > 0.0 and not IsPlayheadEnabled() then
                  Trace(">>> ON NOTE: Arranger still playing (Ch " + chan + ")! Sending stop.")
                  FireDirectArrangerTransport()
-                 StopWatchdogTimer = 0.0 
+                 StopWatchdogTimer = 0.0
              else
                  LastHardwarePulseTime = TimeSinceStartup()
              end
         end
     end
-    
-    // Timeline NoteOn-detection playback start
+
+    // 2. Timeline NoteOn-detection playback start
     if IsNoteOn(m) then
         if not TimelinePlaybackActive and not TimelineRecActive and Size(Snap_TL_TimeMS) > 0 then
             if GetWidgetValue(BTN_TL_HostSync) > 0.5 and not IsPlayheadEnabled() then
@@ -17455,28 +17332,21 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_A
         end
     end
 
-    // --- Style trigger feedback from arranger ---
-    // Incoming notes on DEV_TriggerChannel are hardware start/stop and style part changes.
+    // 3. Style trigger feedback from arranger
     if chan == DEV_TriggerChannel and IsNoteOn(m) then
        if TimeSinceStartup() >= StyleEchoBlockTimer then
           inTrigIdx = FindTriggerIdxByNote(GetNoteNumber(m))
-
           if inTrigIdx == TRIG_START_STOP then
              LastHardwarePulseTime = TimeSinceStartup()
              if DebugMode then Trace(">>> STYLE-IN: Hardware Start/Stop (Note " + IntToString(GetNoteNumber(m)) + ")") end
-
-             // Transport sync logic for SyncModes 2,3
              if CurrentSyncMode == 2 and not IsPlayheadEnabled() then
                 Trace("   [X] STYLE-IN: Arranger started in isolation! Abort echo...")
                 TriggerStyleAction(TRIG_START_STOP)
              elsif CurrentSyncMode == 2 or CurrentSyncMode == 3 then
-                // Hardware start/stop button
                 IsCorrectingPlayhead = false
                 EnablePlayhead(not PendingPlayheadState)
              end
           end
-
-          // Timeline recording for style part changes
           if inTrigIdx >= 0 and inTrigIdx != TRIG_START_STOP then
              if RecordMode > 0 or TimelineRecActive then
                 RecordTimelineEvent("Style", inTrigIdx)
@@ -17485,14 +17355,8 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_A
        end
     end
 
-    // 3. Keyboard split learning (if active)
+    // 4. Keyboard split learning
     ProcessMidiLearn(m)
-
-    // 4. Looper
-    FeedLooper_Note(m)
-
-    // 5. Pass note to the block
-    SendNow(DeviceIn_0_A, m)
 End
 
 // ====================================================
@@ -17503,18 +17367,7 @@ End
 // feedback, and possibly notes on this port.
 
 On PitchBendEvent(m : PitchBendMessage) from DeviceIn_0_B
-    var pbVal : Integer = GetPitchBendValue(m)
-    if SystemModeActive then
-        if pbVal > 12000 and Joy_PB_Fired != 1 then
-            Joy_PB_Fired = 1; ProcessSystemNavigation(0, "X_AXIS", 1)
-        elsif pbVal < 4000 and Joy_PB_Fired != -1 then
-            Joy_PB_Fired = -1; ProcessSystemNavigation(0, "X_AXIS", -1)
-        elsif pbVal >= 4000 and pbVal <= 12000 then
-            Joy_PB_Fired = 0
-        end
-    else
-        SendNow(DeviceIn_0_B, m)
-    end
+    RoutePBEvent(0, GetPitchBendValue(m), m, DeviceIn_0_B)
 End
 
 On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_B
@@ -17535,38 +17388,10 @@ On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_0_B
        Arr_EchoBlockTimer[ccChan + 1] = TimeSinceStartup() + 200.0
        Arr_LastSentVol[ccChan + 1] = val
        if DebugMode then Trace("VOL-IN: Ch" + IntToString(ccChan + 1) + " <- " + IntToString(val) + " (scaled=" + scaledVol + ")") end
-       // CC7 also drives the macro system (encoder/fader → VST parameter)
+       // CC7 also drives the macro system (encoder/fader -> VST parameter)
        ProcessHardwareCC(m)
-
-    // --- Style feedback: CC5 on TriggerChannel = hardware start/stop ---
-    elsif ccChan + 1 == DEV_TriggerChannel and cc == 5 then
-       if TimeSinceStartup() >= StyleEchoBlockTimer then
-          LastHardwarePulseTime = TimeSinceStartup()
-          if DebugMode then Trace(">>> STYLE-IN: Hardware CC5 detected") end
-          if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
-             IsCorrectingPlayhead = false
-             EnablePlayhead(not PendingPlayheadState)
-          end
-       end
-
-    // Device 0 joystick (only active while sustain pedal is held = SystemModeActive):
-    elsif SystemModeActive and (cc == 1 or cc == 16) then
-        if cc == 1 then
-            if val > 100 and not Joy_CC1_Fired then
-                Joy_CC1_Fired = true; ProcessSystemNavigation(0, "Y_AXIS", 1)
-            elsif val < 20 then Joy_CC1_Fired = false end
-        end
-        if cc == 16 then
-            if val > 100 and Joy_CC16_ArmTime == 0.0 then
-                Joy_CC16_ArmTime = TimeSinceStartup()
-            end
-            if val < 20 then
-                Joy_CC16_ArmTime = 0.0
-                Joy_CC16_Fired = false
-            end
-        end
     else
-        ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_0_B, m)
+       RouteCCEvent(0, cc, val, ccChan, m, DeviceIn_0_B)
     end
 End
 
@@ -17574,10 +17399,10 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_B
     var chan : Integer = GetChannel(m)
     var inTrigIdx : Integer
 
-    // 1. Call central HAL logic for macros
-    ProcessHardwareNote(m)
+    // 0. Generic MIDI router (layer switches + ProcessHardwareNote + FeedLooper + SendNow)
+    RouteNoteEvent(0, GetNoteNumber(m), GetVelocity(m), chan, m, DeviceIn_0_B)
 
-    // Transport sync: only if this device has the capability
+    // 1. Transport sync (Device 0 specific)
     if DeviceHasCap(0, CAP_TRANSPORT_SYNC) and IsNoteOn(m) and chan >= 9 and chan <= 16 then
         if CurrentSyncMode == 0 and IsPlayheadEnabled() then
              Trace(">>> ON NOTE: [ISOLATED] ArrangerStyle started (Ch " + chan + ") Stoppe GP")
@@ -17597,7 +17422,7 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_B
         end
     end
 
-    // Timeline NoteOn-detection playback start
+    // 2. Timeline NoteOn-detection playback start
     if IsNoteOn(m) then
         if not TimelinePlaybackActive and not TimelineRecActive and Size(Snap_TL_TimeMS) > 0 then
             if GetWidgetValue(BTN_TL_HostSync) > 0.5 and not IsPlayheadEnabled() then
@@ -17606,15 +17431,13 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_B
         end
     end
 
-    // --- Style trigger feedback from arranger ---
+    // 3. Style trigger feedback from arranger
     if chan == DEV_TriggerChannel and IsNoteOn(m) then
        if TimeSinceStartup() >= StyleEchoBlockTimer then
           inTrigIdx = FindTriggerIdxByNote(GetNoteNumber(m))
-
           if inTrigIdx == TRIG_START_STOP then
              LastHardwarePulseTime = TimeSinceStartup()
              if DebugMode then Trace(">>> STYLE-IN: Hardware Start/Stop (Note " + IntToString(GetNoteNumber(m)) + ")") end
-
              if CurrentSyncMode == 2 and not IsPlayheadEnabled() then
                 Trace("   [X] STYLE-IN: Arranger started in isolation! Abort echo...")
                 TriggerStyleAction(TRIG_START_STOP)
@@ -17623,7 +17446,6 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_B
                 EnablePlayhead(not PendingPlayheadState)
              end
           end
-
           if inTrigIdx >= 0 and inTrigIdx != TRIG_START_STOP then
              if RecordMode > 0 or TimelineRecActive then
                 RecordTimelineEvent("Style", inTrigIdx)
@@ -17632,23 +17454,12 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_B
        end
     end
 
-    // 3. Keyboard split learning (if active)
+    // 4. Keyboard split learning
     ProcessMidiLearn(m)
-
-    // 4. Looper
-    FeedLooper_Note(m)
-
-    // 5. Pass note to the block
-    SendNow(DeviceIn_0_B, m)
 End
 
 On SysexEvent(m : SysexMessage) From DeviceIn_0_B
-   // DIN MIDI SysEx from Genos2 — heartbeat only.
-   // LayerSwitch matching is handled exclusively on Port A to avoid
-   // duplicate processing (both ports receive the same SysEx bursts).
-   if SM_Length(m) >= 6 and SM_GetValue(m, 1) == 0x43 then
-       LastHardwarePulseTime = TimeSinceStartup()
-   end
+   RouteSysExEvent(0, m)
 End
 
 // ====================================================
@@ -17672,7 +17483,7 @@ End
 // DEVICE 2 CALLBACKS (future expansion)
 // ====================================================
 On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_2_A
-    ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_2_A, m)
+    RouteCCEvent(2, GetCCNumber(m), GetCCValue(m), GetChannel(m), m, DeviceIn_2_A)
 End
 
 On NoteEvent(m : NoteMessage) from DeviceIn_2_A
@@ -17683,7 +17494,7 @@ End
 // DEVICE 3 CALLBACKS (future expansion)
 // ====================================================
 On ControlChangeEvent(m : ControlChangeMessage) from DeviceIn_3_A
-    ProcessHardwareCC(m); FeedLooper_CC(m); SendNow(DeviceIn_3_A, m)
+    RouteCCEvent(3, GetCCNumber(m), GetCCValue(m), GetChannel(m), m, DeviceIn_3_A)
 End
 
 On NoteEvent(m : NoteMessage) from DeviceIn_3_A
@@ -18102,62 +17913,14 @@ On SysexEvent(m : SysexMessage) From DeviceIn_0_A
    var newBPM : Double = 0.0; var incomingHex : String; var switchOk : Boolean
    var regNameDecoded, regNameSlug, gpSongSlug, gpArtistSlug : String
    var foundMatch : Boolean = false; var currentSongName : String
-   var regNumber, byteIdx, swIdx, guardIdx : Integer
-   var incomingHexFull : String = ""; var hexByte : String
+   var regNumber : Integer
+
+   // Generic MIDI router handles heartbeat + layer switches
+   RouteSysExEvent(0, m)
 
    msgSize = SM_Length(m)
    If msgSize >= 6 Then
       byte1 = SM_GetValue(m, 1); byte2 = SM_GetValue(m, 2); byte3 = SM_GetValue(m, 3)
-      
-      // ---> NEW: THE SYSEX HEARTBEAT <---
-      // 0x43 is the manufacturer ID of Yamaha. Every message from the arranger carries this stamp!
-      if byte1 == 0x43 then
-          LastHardwarePulseTime = TimeSinceStartup()
-      end
-
-      // ---> LAYER SWITCH MATCHING <---
-      // Build full hex string from incoming SysEx for comparison
-      incomingHexFull = ""
-      For byteIdx = 0; byteIdx < msgSize; byteIdx = byteIdx + 1 Do
-         if byteIdx > 0 then
-            incomingHexFull = incomingHexFull + " "
-         end
-         hexByte = IntToHexString(SM_GetValue(m, byteIdx))
-         if Length(hexByte) == 1 then hexByte = "0" + hexByte end
-         incomingHexFull = incomingHexFull + hexByte
-      End
-      incomingHexFull = MyToUpper(incomingHexFull)
-
-      For swIdx = 0; swIdx < LayerSwitch_Count; swIdx = swIdx + 1 Do
-         if LayerSwitch_DevIdx[swIdx] == 0 and LayerSwitch_Type[swIdx] == "SYSEX" then
-            if incomingHexFull == MyToUpper(LayerSwitch_OnData[swIdx]) then
-               LayerSwitch_State[swIdx] = 1
-               UpdateActiveLayer()
-               // Cross-talk guard: protect all OTHER switches from phantom OFF
-               For guardIdx = 0; guardIdx < LayerSwitch_Count; guardIdx = guardIdx + 1 Do
-                  if guardIdx != swIdx then
-                     IgnoreSwitchOffUntil[guardIdx] = TimeSinceStartup() + 200.0
-                  end
-               End
-               if DebugMode then
-                  Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): ON")
-               end
-            elsif incomingHexFull == MyToUpper(LayerSwitch_OffData[swIdx]) then
-               // Cross-talk guard: suppress OFF if this switch is protected
-               if TimeSinceStartup() < IgnoreSwitchOffUntil[swIdx] then
-                  if DebugMode then
-                     Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): OFF suppressed (cross-talk)")
-                  end
-               else
-                  LayerSwitch_State[swIdx] = 0
-                  UpdateActiveLayer()
-                  if DebugMode then
-                     Trace("LAYERSWITCH " + IntToString(swIdx) + " (" + LayerSwitch_Label[swIdx] + "): OFF")
-                  end
-               end
-            end
-         end
-      End
 
       // 1. BPM SYNC
       if byte1 == 0x43 and byte2 == 0x7E and byte3 == 0x01 Then
@@ -18424,6 +18187,7 @@ On TimerTick(ms : Double)
      countdownText : String = ""
      dbIdx : Integer
      i_hal : Integer
+     jtDev : Integer
 
    // ========================================================================
    // --- INITIALIZATION FOR THIS TICK ---
@@ -18523,20 +18287,21 @@ On TimerTick(ms : Double)
        RefreshLFOInspector()
    end
 
-   // 0. JOYSTICK CROSS-TALK GUARD (CC16 vs PitchBend: dominant axis wins after 120ms)
-   if Joy_CC16_ArmTime > 0.0 and not Joy_CC16_Fired then
-       if TimeSinceStartup() - Joy_CC16_ArmTime >= 120.0 then
-           if Joy_PB_Fired == 0 and not Joy_CC1_Fired then
-               // CC16 dominant (PB quiet, CC1 quiet after 120ms) → intentional down press
-               if DebugMode then Trace(">>> SYSMODE-DIAG [D] CYCLE via CC16 timer (120ms, PB+CC1 quiet) in TimerTick") end
-               Joy_CC16_Fired = true
-               CycleGlobalSystemMode()
-           else
-               if DebugMode then Trace(">>> SYSMODE-DIAG [D-BLOCKED] CC16 suppressed (PB_Fired=" + Joy_PB_Fired + " CC1_Fired=" + Joy_CC1_Fired + ") cross-talk") end
-           end
-           Joy_CC16_ArmTime = 0.0  // Decision made, clear window
-       end
-   end
+   // 0. JOYSTICK CROSS-TALK GUARD (per-device, dominant axis wins after JOYSTICK_CROSSTALK_MS)
+   For jtDev = 0; jtDev < MAX_DEVICES; jtDev = jtDev + 1 Do
+      if Joy_YDownArmTime[jtDev] > 0.0 and not Joy_YDownFired[jtDev] then
+          if TimeSinceStartup() - Joy_YDownArmTime[jtDev] >= JOYSTICK_CROSSTALK_MS then
+              if Joy_XFired[jtDev] == 0 and not Joy_YUpFired[jtDev] then
+                  if DebugMode then Trace(">>> SYSMODE-DIAG [D] CYCLE via Y-Down timer (" + JOYSTICK_CROSSTALK_MS + "ms, X+Y quiet) Dev" + jtDev) end
+                  Joy_YDownFired[jtDev] = true
+                  CycleGlobalSystemMode()
+              else
+                  if DebugMode then Trace(">>> SYSMODE-DIAG [D-BLOCKED] Y-Down suppressed (XFired=" + Joy_XFired[jtDev] + " YUp=" + Joy_YUpFired[jtDev] + ") cross-talk Dev" + jtDev) end
+              end
+              Joy_YDownArmTime[jtDev] = 0.0
+          end
+      end
+   End
 
    // 1. STABILIZATION TIMER (Replaces the 3s wait after view switch)
    if PostViewSwitchDelayTimer > 0.0 then
