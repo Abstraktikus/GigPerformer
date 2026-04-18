@@ -28,11 +28,17 @@ Automatic conflict resolution tied to the active SYS-MODE:
 
 Does not use `Mem_SoloStrict`/`Mem_SoloSmart`. Overrides both.
 
-**UserMute Override (since v2026-04-18.001):**
+**UserMute Override (since v2026-04-18.001, refined v2026-04-18.003):**
 Survivors — channels where `LooperSoloMute[ch] == false` under an armed Focus — get
 `p_UserMute → 0` for the duration of Focus Mode. `Mem_UserMute` is preserved and
 restored on Focus off. No NP parameters (split, velocity, fades) are touched —
 Focus does not claim "full keyboard freedom", only live-safe audibility.
+
+**Guard (since v2026-04-18.003):** the override only runs when Focus actually
+muted at least one channel (`anyLooperMute == true`). A passive Focus that mutes
+nobody (e.g. Focus armed at Song-Load with no scope conflicts) does not flip
+every channel into survivor status — it would otherwise cancel all persisted
+UserMutes indiscriminately.
 
 ### Strict Solo (`Mem_SoloStrict[ch]`)
 

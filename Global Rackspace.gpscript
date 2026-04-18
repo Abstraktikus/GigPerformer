@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-18.002"
+   SCRIPT_VERSION : String = "2026-04-18.003"
 
    DebugMode : Boolean = true
 
@@ -12152,7 +12152,7 @@ End
 Function UpdateSoloMuteState()
    var outCol, inRow, scopeIdx, pIdx_SoloMute : Integer
    var fedBySameInput, fedBySameInputAndZone, sameInput, sameZone : Boolean
-   var anyStrict, anySmart, isFocusArmed, anyRecInScope : Boolean = false
+   var anyStrict, anySmart, isFocusArmed, anyRecInScope, anyLooperMute : Boolean = false
    var focusModeVal : Double = GetWidgetValue(BTN_Focus_Mode)
 
    DumpSoloState("UpdateSoloMute ENTRY")
@@ -12257,13 +12257,16 @@ Function UpdateSoloMuteState()
            if LooperSoloMute[outCol] then SetParameter(BLK_NoteProcessor[outCol], pIdx_SoloMute, 1.0)
            else SetParameter(BLK_NoteProcessor[outCol], pIdx_SoloMute, 0.0) end
        end
+       if LooperSoloMute[outCol] then anyLooperMute = true end
    End
-   
+
    // 6. SOLO NP OVERRIDES (Phase 4: clean slate, then apply if needed)
-   // Live-safety: also runs under Focus Mode to override UserMute on survivors
+   // Focus-UserMute-Override only if Focus actually muted someone — otherwise
+   // a passive Focus would flip every channel into "survivor" status and
+   // indiscriminately cancel all UserMutes (Song-Load side-effect).
    RestoreSoloOverrides()
-   if isFocusArmed or anyStrict or anySmart then
-      ApplySoloOverrides(isFocusArmed)
+   if (isFocusArmed and anyLooperMute) or anyStrict or anySmart then
+      ApplySoloOverrides(isFocusArmed and anyLooperMute)
    end
 
    // A) First, SmartBypass activates everything that has routings
