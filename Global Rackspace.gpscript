@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-18.001"
+   SCRIPT_VERSION : String = "2026-04-18.002"
 
    DebugMode : Boolean = true
 
@@ -11948,6 +11948,59 @@ Function FireOverlayTrigger(funcName : String, channel : Integer, value : Double
 End
 
 // ---------------------------------------------------------
+// DIAGNOSTIC: Dump full solo/mute state (Mem_* + NP p_* + computed)
+// Reads only — safe from TimerTick / snapshot-load contexts.
+// ---------------------------------------------------------
+Function DumpSoloState(label : String)
+   var i, pIdx : Integer
+   var memStrict, memSmart, memUserMute : String
+   var npSoloMute, npUserMute : String
+   var looperMute, npOverridden : String
+   memStrict = ""
+   memSmart = ""
+   memUserMute = ""
+   npSoloMute = ""
+   npUserMute = ""
+   looperMute = ""
+   npOverridden = ""
+
+   For i = 0; i < 16; i = i + 1 Do
+      memStrict = memStrict + IntToString(Mem_SoloStrict[i])
+      memSmart = memSmart + IntToString(Mem_SoloSmart[i])
+      memUserMute = memUserMute + IntToString(Mem_UserMute[i])
+
+      if LooperSoloMute[i] then looperMute = looperMute + "1" else looperMute = looperMute + "0" end
+      if Solo_NP_Overridden[i] then npOverridden = npOverridden + "1" else npOverridden = npOverridden + "0" end
+
+      pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_SoloMute")
+      if pIdx > -1 then
+         if GetParameter(BLK_NoteProcessor[i], pIdx) > 0.5 then npSoloMute = npSoloMute + "1" else npSoloMute = npSoloMute + "0" end
+      else
+         npSoloMute = npSoloMute + "?"
+      end
+
+      pIdx = GetParamIdxByName(BLK_NoteProcessor[i], "p_UserMute")
+      if pIdx > -1 then
+         if GetParameter(BLK_NoteProcessor[i], pIdx) > 0.5 then npUserMute = npUserMute + "1" else npUserMute = npUserMute + "0" end
+      else
+         npUserMute = npUserMute + "?"
+      end
+   End
+
+   if DebugMode then
+      Trace("===== DUMP SOLO [" + label + "] =====")
+      Trace("  Channel:       1234567890123456")
+      Trace("  Mem_Strict:    " + memStrict)
+      Trace("  Mem_Smart:     " + memSmart)
+      Trace("  Mem_UserMute:  " + memUserMute)
+      Trace("  LooperSoloMute:" + looperMute)
+      Trace("  Solo_NP_Over:  " + npOverridden)
+      Trace("  NP p_SoloMute: " + npSoloMute)
+      Trace("  NP p_UserMute: " + npUserMute)
+   end
+End
+
+// ---------------------------------------------------------
 // SOLO NP OVERRIDE: RESTORE (clean slate before any new override)
 // ---------------------------------------------------------
 Function RestoreSoloOverrides()
@@ -12102,6 +12155,8 @@ Function UpdateSoloMuteState()
    var anyStrict, anySmart, isFocusArmed, anyRecInScope : Boolean = false
    var focusModeVal : Double = GetWidgetValue(BTN_Focus_Mode)
 
+   DumpSoloState("UpdateSoloMute ENTRY")
+
    EvaluateAutoSysMode()
    
    // 1. GATHER STATUS & LOOPER REC-CHECK
@@ -12213,13 +12268,15 @@ Function UpdateSoloMuteState()
 
    // A) First, SmartBypass activates everything that has routings
    ExecuteSmartBypass()
-   
+
    // B) THEN focus logic bypasses interfering VSTs
    ApplyVstFocusBypass()
-   
+
    // C) FINALLY SmartAdapt checks the resulting reality and loads the map if needed
    EvaluateSmartAdapt()
    RefreshLayerFeedback()
+
+   DumpSoloState("UpdateSoloMute EXIT")
 End
 
 
@@ -13158,6 +13215,7 @@ Function ToggleStripMacro()
          Mem_SoloSmart[ch] = newVal
          if newVal == 1 then Mem_SoloStrict[ch] = 0 end // Mutual exclusion
          paramName = "Smart Solo"
+         if DebugMode then Trace("STRIP-TOGGLE SMART-SOLO: Strip_ChannelIdx=" + IntToString(ch) + " -> display CH" + IntToString(ch + 1) + " | Mem_SoloSmart[" + IntToString(ch) + "]=" + IntToString(newVal)) end
 
       Strip_ThemeIdx == 4  Do // Strict Solo
          currentVal = Mem_SoloStrict[ch]
@@ -13165,6 +13223,7 @@ Function ToggleStripMacro()
          Mem_SoloStrict[ch] = newVal
          if newVal == 1 then Mem_SoloSmart[ch] = 0 end // Mutual exclusion
          paramName = "Strict Solo"
+         if DebugMode then Trace("STRIP-TOGGLE STRICT-SOLO: Strip_ChannelIdx=" + IntToString(ch) + " -> display CH" + IntToString(ch + 1) + " | Mem_SoloStrict[" + IntToString(ch) + "]=" + IntToString(newVal)) end
 
       Strip_ThemeIdx == 5  Do // User Mute
          currentVal = Mem_UserMute[ch]
@@ -15066,6 +15125,8 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
                 ChannelUsage[i] = targetUsage[i]
              End
             UpdateAnchorChannels()
+
+            DumpSoloState("Song-Load complete")
 
             // --- RESTORE LOOPER STATE ---
             SetWidgetValue(BTN_Loop_HostSync, targetHostSync)
