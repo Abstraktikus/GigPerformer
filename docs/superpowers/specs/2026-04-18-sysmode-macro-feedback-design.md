@@ -1,7 +1,7 @@
 # SYS-MODE Feedback Labels — Clean, Persistent, No Chevrons
 
 **Date:** 2026-04-18
-**Status:** Implemented (v2026-04-18.004)
+**Status:** Implemented (v2026-04-18.007)
 **Scope:** `Global Rackspace.gpscript` — feedback routing across all SYS-MODE navigation paths.
 
 ## Problem
@@ -66,10 +66,27 @@ On expiry:
 ### Global chevron removal
 Replaced `">>> "` / `" <<<"` / `">> "` / `" <<"` → `""` across the file. Touches all `OSC_SendStringSpecific`, `ShowVSTOverlay`, `SetHeader`, and a handful of debug-trace strings. No functional change — purely cosmetic.
 
+## Follow-up additions (v2026-04-18.005 → .007)
+
+### v2026-04-18.005 — alignment across all modes
+- **VOICE-SELECTOR base-title** now tracks `Active_VST_Scope` (the actual cursor, not `GetDefaultScopeChannel`). Always renders `"VOICE-SELECTOR: [Name] (ChN)"` — never drops the channel.
+- **LOOPER-CONTROL** gets its own sticky macro label via new `GetLooperStateLabel(ch)` helper. Mode entry fills `LBL_MacroFeedback` with `"Loop [Empty|REC|PLAY|DUB|STOP|ARM REC|ARM PLAY|WAIT STOP|COUNT IN]"`. `LOOPER_REC` / `LOOPER_CLEAR` actions now route to `LBL_MacroFeedback` (`"Loop [REC]"` / `"Loop [Clear]"`) instead of overwriting the base-title.
+- **CONTROLLER-MAP base-title** now reads `CurrentCtrlMapName` directly instead of `GetWidgetLabel(LBL_CtrlConfig)` (which could be stale). Default to bare mode name if unset.
+- **Shared helper** `GetSystemModeStickyMacroLabel()` is now the single source of truth for the mode's sticky macro line. Used on mode entry and on "Nothing to cycle" revert — guarantees consistency.
+
+### v2026-04-18.006 — forward-declaration fix
+- `LoadControllerMap` (line ~8579) cannot call `SysModeFeedbackTitle` (line ~10488) directly — GPScript forward-declaration rule. Introduced `SysModeFeedbackDirty : Boolean` flag: `LoadControllerMap` raises it, `TimerTick` consumes it and refreshes the title. Same pattern reserved for any other early-declared caller that needs a title refresh.
+
+### v2026-04-18.007 — CONTROLLER-MAP joystick cycle actually loads
+- `PreviewActiveControllerMaps` used to set `PendingMapName` but never call `LoadControllerMap` — the map was "selected" in text only. No real load, no `CurrentCtrlMapName` update, no `LBL_LayerFeedback` refresh.
+- New `PendingMapLoadDirty : Boolean` flag: `PreviewActiveControllerMaps` sets pending name + raises flag. `TimerTick` consumes it and calls `LoadControllerMap(PendingMapName)`, which in turn raises `SysModeFeedbackDirty` and the title refreshes — full cascade in one tick. Guard: only loads if `PendingMapName != CurrentCtrlMapName` to avoid redundant reloads.
+- Macro format changed from `"SELECT: X"` (3s flash) to `"Map [X]"` (persistent) to match the rest of the UI.
+
 ## Out of Scope
 
 - **LBL_VSTConfiguration / LBL_ControllerInfo chevrons:** still contain internal `>>> text` prefixes (e.g. `"    >>> PRESS REPLACE"`). These are in separate overlay systems that Martin did not explicitly scope. Pending a follow-up if he wants those removed too.
-- **Per-mode sticky labels for TIMELINE / LOOPER / CONTROLLER-MAP / VOICE-SELECTOR:** `InitializeSystemModeMacroFeedback` currently blanks non-STRIP modes. Each mode will get its own sticky semantics in subsequent passes.
+- **TIMELINE macro sticky + part-navigation feedback:** parked at Martin's request — will be picked up in a follow-up.
+- **Genos2 channels / external hardware scope for SoloMute:** separate concern, parked — Martin flagged this as a large upcoming change.
 - **"Nothing to cycle" for non-STRIP cycles:** the helper pattern is in place but only wired into `CycleStripChannel` for now. Timeline part-jump, looper target, controller-map cycle: follow-up.
 
 ## Test Plan (Live)
