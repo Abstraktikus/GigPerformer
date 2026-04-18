@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-18.008"
+   SCRIPT_VERSION : String = "2026-04-18.009"
 
    DebugMode : Boolean = true
 
@@ -15284,7 +15284,11 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
              End
             UpdateAnchorChannels()
 
-            DumpSoloState("Song-Load complete")
+            // (DumpSoloState diagnostic deliberately NOT called here — it reads
+            //  NoteProcessor parameters via GetParameter, and during snapshot
+            //  load the plugin state is transient. Reads could return stale or
+            //  crash-inducing values. Rely on the guarded ENTRY/EXIT dumps
+            //  inside UpdateSoloMuteState instead.)
 
             // --- RESTORE LOOPER STATE ---
             SetWidgetValue(BTN_Loop_HostSync, targetHostSync)
@@ -18542,13 +18546,8 @@ On TimerTick(ms : Double)
        Trace("EMERGENCY: Kill switch auto-recovered after 3s of calm")
    end
 
-   // Deferred UpdateSoloMuteState from Timeline overlay replay
-   if SoloMuteStateDirty then
-      SoloMuteStateDirty = false
-      UpdateSoloMuteState()
-   end
-
    // OTZ Redesign: Live-State indicator refresh in LBL_ControllerInfo
+   // UI-only (label text + OSC send), safe during snapshot load.
    if ControllerInfoDirty then
       ControllerInfoDirty = false
       UpdateControllerInfoDisplay()
@@ -18568,6 +18567,16 @@ On TimerTick(ms : Double)
    // FaderSafetyTimer covers the 5-second cold-boot window; IsLoadingSnapshot
    // covers every subsequent song switch.
    if not IsLoadingSnapshot and TimeSinceStartup() > FaderSafetyTimer then
+
+      // Deferred UpdateSoloMuteState — writes ~144 NP parameters per invocation
+      // (SoloMute/UserMute + NP overrides via ApplySoloOverrides). MUST live
+      // inside this guard: a dirty flag raised during snapshot load / cold-boot
+      // would otherwise crash GP when the first TimerTick fires. Guarded flag
+      // is safe — the flag stays true across ticks until the window opens.
+      if SoloMuteStateDirty then
+         SoloMuteStateDirty = false
+         UpdateSoloMuteState()
+      end
        TickLFOs()
        CheckLatchTimeout()
 
