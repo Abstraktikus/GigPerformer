@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-18.004"
+   SCRIPT_VERSION : String = "2026-04-18.005"
 
    DebugMode : Boolean = true
 
@@ -8711,6 +8711,12 @@ Function LoadControllerMap(mapName : String)
 
    UpdateControllerInfoDisplay()
    RefreshLayerFeedback()
+
+   // If CONTROLLER-MAP mode is active, the base-title must reflect the newly loaded map
+   if SystemModeActive and GlobalSystemMode == 2 then
+      OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
+      SysModeFeedbackTimer = 0.0
+   end
 End
 
 // ---------------------------------------------------------
@@ -10435,21 +10441,54 @@ Function GetStripCellLabel(themeIdx : Integer, ch : Integer) Returns String
    end
 End
 
+// Returns "Loop [state]" for a looper channel (Empty/REC/PLAY/DUB/STOP/ARM/...).
+Function GetLooperStateLabel(ch : Integer) Returns String
+   var s : Integer
+   if ch < 0 or ch >= 16 then
+      result = "Loop [--]"
+   else
+      s = Mem_Loop_State[ch]
+      if s == 0 then result = "Loop [Empty]"
+      elsif s == 1 then result = "Loop [REC]"
+      elsif s == 2 then result = "Loop [PLAY]"
+      elsif s == 3 then result = "Loop [DUB]"
+      elsif s == 4 then result = "Loop [STOP]"
+      elsif s == 5 then result = "Loop [ARM REC]"
+      elsif s == 6 then result = "Loop [ARM PLAY]"
+      elsif s == 7 then result = "Loop [WAIT STOP]"
+      elsif s == 8 then result = "Loop [COUNT IN]"
+      else result = "Loop [?]"
+      end
+   end
+End
+
+// Returns the sticky LBL_MacroFeedback label for the current SYS-MODE.
+// Used both on mode entry and when reverting from a transient message.
+Function GetSystemModeStickyMacroLabel() Returns String
+   if not SystemModeActive then
+      result = ""
+   elsif GlobalSystemMode == 3 then
+      result = GetStripCellLabel(Strip_ThemeIdx, Strip_ChannelIdx)
+   elsif GlobalSystemMode == 1 then
+      result = GetLooperStateLabel(GetDefaultLooperChannel())
+   else
+      // VOICE-SELECTOR / CONTROLLER-MAP / TIMELINE: macro line is action-driven only
+      result = ""
+   end
+End
+
 // Initializes LBL_MacroFeedback with the "first cell" info of the current SYS-MODE.
 // Called on mode switch. For STRIP-CONTROL, ensures Strip_ChannelIdx is valid first.
 Function InitializeSystemModeMacroFeedback()
    var ch : Integer
    if GlobalSystemMode == 3 then
-      // STRIP-CONTROL: if cursor is out of scope, snap to default scope channel
+      // STRIP-CONTROL: snap cursor into OutputScope if it's currently out of scope
       if Strip_ChannelIdx < 0 or Strip_ChannelIdx > 15 or not OutputScope[Strip_ChannelIdx] then
          ch = GetDefaultScopeChannel()
          if ch >= 0 and ch < 16 then Strip_ChannelIdx = ch end
       end
-      OSC_SendStringSpecific("/UI/SetMacroFeedback", GetStripCellLabel(Strip_ThemeIdx, Strip_ChannelIdx), Local_IP, Local_PORT)
-   else
-      // Other modes: blank for now (sticky labels to be added per mode)
-      OSC_SendStringSpecific("/UI/SetMacroFeedback", "", Local_IP, Local_PORT)
    end
+   OSC_SendStringSpecific("/UI/SetMacroFeedback", GetSystemModeStickyMacroLabel(), Local_IP, Local_PORT)
    MacroFeedbackTimer = 0.0
    MacroFeedbackRestoreSticky = false
 End
@@ -10459,12 +10498,12 @@ Function SysModeFeedbackTitle() Returns String
    var pName, chLabel, tlState : String
 
    Select
-      GlobalSystemMode == 0 Do // VOICE-SELECTOR
-         ch = GetDefaultScopeChannel()
+      GlobalSystemMode == 0 Do // VOICE-SELECTOR — cursor = Active_VST_Scope, always show name AND channel
+         ch = Active_VST_Scope
          if ch >= 0 and ch < MAX_VSTS then
             pName = GetPluginInfo(BLK_VST[ch], 0)
             if pName != "" and pName != "Element" and pName != "-" then
-               result = SysModeNames[0] + ": " + pName
+               result = SysModeNames[0] + ": " + pName + " (" + IntToString(ch + 1) + ")"
             else
                result = SysModeNames[0] + ": " + ChannelUsage[ch] + " (" + IntToString(ch + 1) + ")"
             end
@@ -10474,10 +10513,18 @@ Function SysModeFeedbackTitle() Returns String
 
       GlobalSystemMode == 1 Do // LOOPER-CONTROL
          ch = GetDefaultLooperChannel()
-         result = SysModeNames[1] + ": " + ChannelUsage[ch] + " (" + IntToString(ch + 1) + ")"
+         if ch >= 0 and ch < 16 then
+            result = SysModeNames[1] + ": " + ChannelUsage[ch] + " (" + IntToString(ch + 1) + ")"
+         else
+            result = SysModeNames[1]
+         end
 
-      GlobalSystemMode == 2 Do // CONTROLLER-MAP
-         result = SysModeNames[2] + ": " + GetWidgetLabel(LBL_CtrlConfig)
+      GlobalSystemMode == 2 Do // CONTROLLER-MAP — read current loaded map directly
+         if CurrentCtrlMapName != "" and CurrentCtrlMapName != "-" then
+            result = SysModeNames[2] + ": " + CurrentCtrlMapName
+         else
+            result = SysModeNames[2]
+         end
 
       GlobalSystemMode == 3 Do // STRIP-CONTROL
          ch = Strip_ChannelIdx
@@ -12563,8 +12610,8 @@ Function ChangeVstScope(direction : Integer, directIdx : Integer)
    UpdateSoloMuteState()
    
    OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
-   SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
-   ShowVSTOverlay("SCOPE: " + pName + "", 1500.0)
+   SysModeFeedbackTimer = 0.0
+   ShowVSTOverlay("SCOPE: " + pName, 1500.0)
    
    // --->  AUTO-SHOW GUI LOGIC <---
    if GetWidgetValue(BTN_AutoShow_GUI) > 0.5 then
@@ -13387,8 +13434,8 @@ Function FireSystemAction(actionIdx : Integer)
          SysAction_Names[actionIdx] == "VST_PRESET_DOWN"    Do TriggerVstPresetChange(-1)
          SysAction_Names[actionIdx] == "LOOPER_CH_UP"       Do CycleChannelScope(1)
          SysAction_Names[actionIdx] == "LOOPER_CH_DOWN"     Do CycleChannelScope(-1)
-         SysAction_Names[actionIdx] == "LOOPER_REC"         Do ClickWidget(BTN_Loop_Rec); OSC_SendStringSpecific("/UI/SetSysModeFeedback", "LOOPER: REC", Local_IP, Local_PORT); SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
-         SysAction_Names[actionIdx] == "LOOPER_CLEAR"       Do ClickWidget(BTN_Loop_Clear); OSC_SendStringSpecific("/UI/SetSysModeFeedback", "LOOPER: CLEAR", Local_IP, Local_PORT); SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
+         SysAction_Names[actionIdx] == "LOOPER_REC"         Do ClickWidget(BTN_Loop_Rec); OSC_SendStringSpecific("/UI/SetMacroFeedback", "Loop [REC]", Local_IP, Local_PORT); MacroFeedbackTimer = 0.0
+         SysAction_Names[actionIdx] == "LOOPER_CLEAR"       Do ClickWidget(BTN_Loop_Clear); OSC_SendStringSpecific("/UI/SetMacroFeedback", "Loop [Clear]", Local_IP, Local_PORT); MacroFeedbackTimer = 0.0
          SysAction_Names[actionIdx] == "CTRLMAP_PREV"       Do PreviewActiveControllerMaps(-1)
          SysAction_Names[actionIdx] == "CTRLMAP_NEXT"       Do PreviewActiveControllerMaps(1)
          SysAction_Names[actionIdx] == "CTRLMAP_RESTORE"    Do RestoreInitialControllerMap()
@@ -18873,12 +18920,7 @@ On TimerTick(ms : Double)
             MacroFeedbackTimer = 0.0
             if MacroFeedbackRestoreSticky then
                MacroFeedbackRestoreSticky = false
-               // STRIP-CONTROL sticky = current cell label. Other modes: blank (no sticky yet).
-               if SystemModeActive and GlobalSystemMode == 3 then
-                  OSC_SendStringSpecific("/UI/SetMacroFeedback", GetStripCellLabel(Strip_ThemeIdx, Strip_ChannelIdx), Local_IP, Local_PORT)
-               else
-                  OSC_SendStringSpecific("/UI/SetMacroFeedback", "", Local_IP, Local_PORT)
-               end
+               OSC_SendStringSpecific("/UI/SetMacroFeedback", GetSystemModeStickyMacroLabel(), Local_IP, Local_PORT)
             else
                OSC_SendStringSpecific("/UI/SetMacroFeedback", "", Local_IP, Local_PORT)
             end
