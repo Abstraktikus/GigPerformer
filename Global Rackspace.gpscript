@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-18.005"
+   SCRIPT_VERSION : String = "2026-04-18.006"
 
    DebugMode : Boolean = true
 
@@ -511,6 +511,7 @@ Var
    TRIG_START_STOP     : Integer = -1
    SysModeFeedbackTimer, LayerFeedbackTimer : Double = 0.0
    LayerFeedbackDirty : Boolean = false
+   SysModeFeedbackDirty : Boolean = false          // forward-decl-safe signal for early-declared Load*/Set* helpers
    MacroFeedbackRestoreSticky : Boolean = false   // transient "Nothing to cycle" reverts to mode sticky label on expiry
    ScrubberTaubTimer, TransportDeafTimer, StopWatchdogTimer : Double = 0.0
    StartWatchdogTimer, LooperButtonSafetyTimer, IgnoreUIFeedbackTimer : Double = 0.0
@@ -8712,10 +8713,11 @@ Function LoadControllerMap(mapName : String)
    UpdateControllerInfoDisplay()
    RefreshLayerFeedback()
 
-   // If CONTROLLER-MAP mode is active, the base-title must reflect the newly loaded map
+   // If CONTROLLER-MAP mode is active, the base-title must reflect the newly loaded map.
+   // SysModeFeedbackTitle is forward-declared later in the file — signal via dirty flag,
+   // TimerTick picks it up and refreshes.
    if SystemModeActive and GlobalSystemMode == 2 then
-      OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
-      SysModeFeedbackTimer = 0.0
+      SysModeFeedbackDirty = true
    end
 End
 
@@ -18931,6 +18933,13 @@ On TimerTick(ms : Double)
                 OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
             else
                 OSC_SendStringSpecific("/UI/SetSysModeFeedback", "", Local_IP, Local_PORT)
+            end
+        end
+        // Early-declared callers (e.g. LoadControllerMap) request a title refresh via this flag
+        if SysModeFeedbackDirty then
+            SysModeFeedbackDirty = false
+            if SystemModeActive then
+                OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
             end
         end
         if LayerFeedbackDirty then
