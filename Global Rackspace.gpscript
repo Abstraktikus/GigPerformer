@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-18.006"
+   SCRIPT_VERSION : String = "2026-04-18.007"
 
    DebugMode : Boolean = true
 
@@ -512,6 +512,7 @@ Var
    SysModeFeedbackTimer, LayerFeedbackTimer : Double = 0.0
    LayerFeedbackDirty : Boolean = false
    SysModeFeedbackDirty : Boolean = false          // forward-decl-safe signal for early-declared Load*/Set* helpers
+   PendingMapLoadDirty : Boolean = false           // forward-decl-safe: PreviewActiveControllerMaps raises it; TimerTick calls LoadControllerMap
    MacroFeedbackRestoreSticky : Boolean = false   // transient "Nothing to cycle" reverts to mode sticky label on expiry
    ScrubberTaubTimer, TransportDeafTimer, StopWatchdogTimer : Double = 0.0
    StartWatchdogTimer, LooperButtonSafetyTimer, IgnoreUIFeedbackTimer : Double = 0.0
@@ -5470,12 +5471,14 @@ Function PreviewActiveControllerMaps(direction : Integer)
     if currIdx >= Size(uniqueMaps) then currIdx = 0
     elsif currIdx < 0 then currIdx = Size(uniqueMaps) - 1 end
     
-    // 5. PREVIEW ONLY: Just store the name!
+    // 5. Set pending, then request actual load via TimerTick (LoadControllerMap is
+    //    forward-declared, so we cannot call it directly from here — dirty-flag pattern).
     PendingMapName = uniqueMaps[currIdx]
-    
-    // Immediate visual feedback
-    OSC_SendStringSpecific("/UI/SetMacroFeedback", "SELECT: " + PendingMapName + "", Local_IP, Local_PORT)
-    MacroFeedbackTimer = TimeSinceStartup() + 3000.0 // Show longer while cycling
+    PendingMapLoadDirty = true
+
+    // Immediate visual feedback — base title will refresh once LoadControllerMap runs.
+    OSC_SendStringSpecific("/UI/SetMacroFeedback", "Map [" + PendingMapName + "]", Local_IP, Local_PORT)
+    MacroFeedbackTimer = 0.0
 End
 
 
@@ -18933,6 +18936,14 @@ On TimerTick(ms : Double)
                 OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
             else
                 OSC_SendStringSpecific("/UI/SetSysModeFeedback", "", Local_IP, Local_PORT)
+            end
+        end
+        // Early-declared PreviewActiveControllerMaps requests a real map load here.
+        // LoadControllerMap internally raises SysModeFeedbackDirty, picked up right after.
+        if PendingMapLoadDirty then
+            PendingMapLoadDirty = false
+            if PendingMapName != "" and PendingMapName != CurrentCtrlMapName then
+                LoadControllerMap(PendingMapName)
             end
         end
         // Early-declared callers (e.g. LoadControllerMap) request a title refresh via this flag
