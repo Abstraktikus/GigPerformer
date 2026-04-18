@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-18.007"
+   SCRIPT_VERSION : String = "2026-04-18.008"
 
    DebugMode : Boolean = true
 
@@ -5424,6 +5424,16 @@ Function ExportSmartConfig()
    end
 End
 
+// Uniform "Nothing to cycle" signal — used by every cycle function (VST scope,
+// strip channel, looper channel, controller map, timeline parts). 1.5s transient
+// message in LBL_MacroFeedback, then reverts to the current mode's sticky label
+// via MacroFeedbackRestoreSticky (handled in TimerTick).
+Function ShowNothingToCycle()
+   OSC_SendStringSpecific("/UI/SetMacroFeedback", "Nothing to cycle", Local_IP, Local_PORT)
+   MacroFeedbackTimer = TimeSinceStartup() + 1500.0
+   MacroFeedbackRestoreSticky = true
+End
+
 // ---------------------------------------------------------
 // PREVIEW ACTIVE CONTROLLER MAPS (JOYSTICK SYS MODE)
 // Cycles through the base map and all active VST maps
@@ -5459,26 +5469,31 @@ Function PreviewActiveControllerMaps(direction : Integer)
    End
    
    // 4. Find index and cycle
-   currIdx = -1
-   i = 0
-   While i < Size(uniqueMaps) and currIdx == -1 Do
-       if uniqueMaps[i] == startMap then currIdx = i end
-       i = i + 1
-   End
-   if currIdx == -1 then currIdx = 0 end
-    
-    currIdx = currIdx + direction
-    if currIdx >= Size(uniqueMaps) then currIdx = 0
-    elsif currIdx < 0 then currIdx = Size(uniqueMaps) - 1 end
-    
-    // 5. Set pending, then request actual load via TimerTick (LoadControllerMap is
-    //    forward-declared, so we cannot call it directly from here — dirty-flag pattern).
-    PendingMapName = uniqueMaps[currIdx]
-    PendingMapLoadDirty = true
+   if Size(uniqueMaps) <= 1 then
+      // Only one (or zero) map available — nothing to cycle through.
+      ShowNothingToCycle()
+   else
+      currIdx = -1
+      i = 0
+      While i < Size(uniqueMaps) and currIdx == -1 Do
+          if uniqueMaps[i] == startMap then currIdx = i end
+          i = i + 1
+      End
+      if currIdx == -1 then currIdx = 0 end
 
-    // Immediate visual feedback — base title will refresh once LoadControllerMap runs.
-    OSC_SendStringSpecific("/UI/SetMacroFeedback", "Map [" + PendingMapName + "]", Local_IP, Local_PORT)
-    MacroFeedbackTimer = 0.0
+      currIdx = currIdx + direction
+      if currIdx >= Size(uniqueMaps) then currIdx = 0
+      elsif currIdx < 0 then currIdx = Size(uniqueMaps) - 1 end
+
+      // 5. Set pending, then request actual load via TimerTick (LoadControllerMap is
+      //    forward-declared, so we cannot call it directly from here — dirty-flag pattern).
+      PendingMapName = uniqueMaps[currIdx]
+      PendingMapLoadDirty = true
+
+      // Immediate visual feedback — base title will refresh once LoadControllerMap runs.
+      OSC_SendStringSpecific("/UI/SetMacroFeedback", "Map [" + PendingMapName + "]", Local_IP, Local_PORT)
+      MacroFeedbackTimer = 0.0
+   end
 End
 
 
@@ -10699,9 +10714,10 @@ End
 Function PartJumpPreview(dir : Integer)
     var partName : String
 
-    if Size(Arr_SectionNames) == 0 then
-        OSC_SendStringSpecific("/UI/SetSysModeFeedback", "NO PARTS LOADED", Local_IP, Local_PORT)
-        SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
+    if Size(Arr_SectionNames) <= 1 then
+        // 0 or 1 part → uniform "Nothing to cycle" (TIMELINE feedback routing
+        // stays as-is until we do the full TIMELINE macro-line pass later)
+        ShowNothingToCycle()
     else
         PreviewPartIdx = PreviewPartIdx + dir
         if PreviewPartIdx < 0 then PreviewPartIdx = 0 end
@@ -11338,33 +11354,45 @@ End
 // ============================================================================
 
 Function CycleChannelScope(direction : Integer)
-   var i, currentIdx : Integer
+   var i, currentIdx, activeCount : Integer
 
-   currentIdx = GetFirstActiveScope()
-   
-   // Fallback if (theoretically) no channel was in scope
-   if currentIdx == -1 then currentIdx = 0 end
-   
-   // Advance with wrap-around
-   currentIdx = currentIdx + direction
-   if currentIdx > 15 then currentIdx = 0
-   elsif currentIdx < 0 then currentIdx = 15 end
-   
-   // Scope anwenden
-   For i = 0; i < 16; i = i + 1 Do OutputScope[i] = false End
-   OutputScope[currentIdx] = true
-   
-   // Update UI completely
-   UpdateMetaColors()
-   SyncInputFeedback()
-   UpdateUsageLabelDisplay()
-   RefreshAllInjectionDisplays()
-   UpdateInjectionLooperDisplay()
-   ScrollToCurrentChannel()
-   
-   // HUD Feedback
-   OSC_SendStringSpecific("/UI/SetSysModeFeedback", "SCOPE: CHANNEL " + (currentIdx + 1) + "", Local_IP, Local_PORT)
-   SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
+   // Count channels that are viable scope targets (NoteProcessor not bypassed).
+   // If 0 or 1 exist, there's nowhere to cycle to — uniform "Nothing to cycle" UX.
+   activeCount = 0
+   For i = 0; i < 16; i = i + 1 Do
+      if IsChannelActiveForLooper(i) then activeCount = activeCount + 1 end
+   End
+
+   if activeCount <= 1 then
+      ShowNothingToCycle()
+   else
+      currentIdx = GetFirstActiveScope()
+      if currentIdx == -1 then currentIdx = 0 end
+
+      // Advance with wrap-around
+      currentIdx = currentIdx + direction
+      if currentIdx > 15 then currentIdx = 0
+      elsif currentIdx < 0 then currentIdx = 15 end
+
+      // Scope anwenden
+      For i = 0; i < 16; i = i + 1 Do OutputScope[i] = false End
+      OutputScope[currentIdx] = true
+
+      // Update UI completely
+      UpdateMetaColors()
+      SyncInputFeedback()
+      UpdateUsageLabelDisplay()
+      RefreshAllInjectionDisplays()
+      UpdateInjectionLooperDisplay()
+      ScrollToCurrentChannel()
+
+      // Refresh persistent base title (no chevrons, no auto-expiry)
+      OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
+      SysModeFeedbackTimer = 0.0
+      // Refresh sticky macro line for the new scope channel (LOOPER state)
+      OSC_SendStringSpecific("/UI/SetMacroFeedback", GetSystemModeStickyMacroLabel(), Local_IP, Local_PORT)
+      MacroFeedbackTimer = 0.0
+   end
 End
 
 // ---------------------------------------------------------
@@ -12553,8 +12581,10 @@ End
 Function ChangeVstScope(direction : Integer, directIdx : Integer)
    var newScope : Integer = Active_VST_Scope
    var loopGuard, c, r : Integer
-   var foundActive, isRoutActive : Boolean
+   var foundActive, isRoutActive, abortNav : Boolean
    var pName : String
+
+   abortNav = false
 
    if directIdx > -1 then
        newScope = directIdx // Direkte Auswahl
@@ -12562,75 +12592,83 @@ Function ChangeVstScope(direction : Integer, directIdx : Integer)
        // --- SMART ROTATION ---
        foundActive = false
        loopGuard = 0
-       
+
        While not foundActive and loopGuard < MAX_VSTS Do
            newScope = newScope + direction
-           
+
            if newScope < 0 then newScope = MAX_VSTS - 1
            elsif newScope >= MAX_VSTS then newScope = 0
            end
-           
+
            pName = GetPluginInfo(BLK_VST[newScope], 0)
-           
+
            if pName != "Element" and pName != "" and pName != "-" then
-               
+
                // Case 1: VST is normally active -> selectable
                if not IsPluginBypassed(BLK_VST[newScope]) then
                    foundActive = true
-                   
+
                // Case 2: Focus override: VST is bypassed (by focus logic),
                // but has an active cable in the RECH matrix -> selectable
                elsif GetWidgetValue(BTN_Focus_Mode) > 0.5 and GlobalSystemMode == 0 then
                    isRoutActive = false
-                   
+
                    // ---> DIE DOPPELTE SICHERE WHILE-SCHLEIFE <---
                    c = 0
                    While c < 16 and not isRoutActive Do
                        if RoutingMatrix[(newScope * 16) + c] then
-                           
+
                            r = 0
                            While r < 16 and not isRoutActive Do
-                               if GetParameter(RECH, (r * 16) + c) > 0.5 then 
+                               if GetParameter(RECH, (r * 16) + c) > 0.5 then
                                    isRoutActive = true // Immediately breaks BOTH loops!
                                end
                                r = r + 1
                            End
-                           
+
                        end
                        c = c + 1
                    End
-                   
+
                    if isRoutActive then foundActive = true end
                end
-               
+
            end
            loopGuard = loopGuard + 1
        End
-   end
-   
-   Active_VST_Scope = newScope
-   pName = GetPluginInfo(BLK_VST[Active_VST_Scope], 0)
-   
-   SyncChannelScopeToVst(Active_VST_Scope)
-   UpdateSoloMuteState()
-   
-   OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
-   SysModeFeedbackTimer = 0.0
-   ShowVSTOverlay("SCOPE: " + pName, 1500.0)
-   
-   // --->  AUTO-SHOW GUI LOGIC <---
-   if GetWidgetValue(BTN_AutoShow_GUI) > 0.5 then
-       if Active_VST_GUI > -1 and Active_VST_GUI != Active_VST_Scope then
-           IsUpdatingGUI = true // <--- SCHUTZSCHILD AN
-           ClosePlugin(BLK_VST[Active_VST_GUI])
-           SetWidgetValue(W_OpenCloseVST[Active_VST_GUI], 0.0)
-           SetWidgetValue(VST_Open, 0.0)
-           IsUpdatingGUI = false // <--- SCHUTZSCHILD AUS
-           Active_VST_GUI = -1
+
+       // No other active VST found — do not change scope, just inform the user.
+       if not foundActive then
+          ShowNothingToCycle()
+          abortNav = true
        end
-       
-       Pending_VST_GUI = Active_VST_Scope
-       AutoShowGUITimer = TimeSinceStartup() + 2000.0 
+   end
+
+   if not abortNav then
+      Active_VST_Scope = newScope
+      pName = GetPluginInfo(BLK_VST[Active_VST_Scope], 0)
+
+      SyncChannelScopeToVst(Active_VST_Scope)
+      UpdateSoloMuteState()
+
+      OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
+      SysModeFeedbackTimer = 0.0
+      ShowVSTOverlay("SCOPE: " + pName, 1500.0)
+
+      // --->  AUTO-SHOW GUI LOGIC <---
+      if GetWidgetValue(BTN_AutoShow_GUI) > 0.5 then
+          if Active_VST_GUI > -1 and Active_VST_GUI != Active_VST_Scope then
+              IsUpdatingGUI = true // <--- SCHUTZSCHILD AN
+              ClosePlugin(BLK_VST[Active_VST_GUI])
+              SetWidgetValue(W_OpenCloseVST[Active_VST_GUI], 0.0)
+              SetWidgetValue(VST_Open, 0.0)
+              IsUpdatingGUI = false // <--- SCHUTZSCHILD AUS
+              Active_VST_GUI = -1
+          end
+
+          Pending_VST_GUI = Active_VST_Scope
+          AutoShowGUITimer = TimeSinceStartup() + 2000.0
+      end
    end
 End
 
@@ -13312,10 +13350,7 @@ Function CycleStripChannel(dir : Integer)
       OSC_SendStringSpecific("/UI/SetMacroFeedback", GetStripCellLabel(Strip_ThemeIdx, Strip_ChannelIdx), Local_IP, Local_PORT)
       MacroFeedbackTimer = 0.0
    else
-      // No other scope-channel available → transient hint, revert to sticky cell label after 1.5s.
-      OSC_SendStringSpecific("/UI/SetMacroFeedback", "Nothing to cycle", Local_IP, Local_PORT)
-      MacroFeedbackTimer = TimeSinceStartup() + 1500.0
-      MacroFeedbackRestoreSticky = true
+      ShowNothingToCycle()
    end
    Trace("STRIP: Channel -> " + IntToString(Strip_ChannelIdx + 1))
 End
