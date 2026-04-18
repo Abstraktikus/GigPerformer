@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-18.011"
+   SCRIPT_VERSION : String = "2026-04-18.012"
 
    DebugMode : Boolean = true
 
@@ -46,7 +46,7 @@ Var
    // Trace() which already clipboards on TraceLoopCount > 250.
    // Requires DebugMode = true at the call site (outer `if DebugMode then`
    // guards keep the cost zero when tracing is off).
-   CrashDebugMode : Boolean = false
+   CrashDebugMode : Boolean = true
    CrashOSCIP     : String  = "127.0.0.1"
    CrashOSCPort   : Integer = 8000      // Geisterhand / SwitchGPToGlobal.py port
 
