@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-17.007"
+   SCRIPT_VERSION : String = "2026-04-18.001"
 
    DebugMode : Boolean = true
 
@@ -11970,6 +11970,8 @@ Function RestoreSoloOverrides()
          if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(Mem_NP_MaxVel[ch]) / 127.0) end
          idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_VelRangeFade")
          if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(Mem_NP_VelRangeFade[ch])) end
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_UserMute")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(Mem_UserMute[ch])) end
          Solo_NP_Overridden[ch] = false
          if DebugMode then Trace("SOLO-NP: Restored ch " + (ch + 1)) end
       end
@@ -11979,7 +11981,7 @@ End
 // ---------------------------------------------------------
 // SOLO NP OVERRIDE: APPLY (Strict = full freedom, Smart = intelligent)
 // ---------------------------------------------------------
-Function ApplySoloOverrides()
+Function ApplySoloOverrides(isFocusArmed : Boolean)
    var ch, k, idx : Integer
    var lowerGrenze : Double = 0.0
    var foundLower : Boolean = false
@@ -12004,6 +12006,9 @@ Function ApplySoloOverrides()
          idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_MaxVel")
          if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 1.0) end
          idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_VelRangeFade")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+         // Live-safety: Solo overrides UserMute (Mem_UserMute preserved for Restore)
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_UserMute")
          if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
          Solo_NP_Overridden[ch] = true
          if DebugMode then Trace("SOLO-NP: Strict override ch " + (ch + 1) + " -> full keyboard") end
@@ -12073,7 +12078,17 @@ Function ApplySoloOverrides()
             if DebugMode then Trace("SOLO-NP: Smart ch " + (ch + 1) + " Manual=None -> velocity only") end
          end
 
+         // Live-safety: Smart Solo also overrides UserMute
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_UserMute")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
          Solo_NP_Overridden[ch] = true
+
+      // === FOCUS SURVIVOR: only UserMute override, no NP changes ===
+      elsif isFocusArmed and not LooperSoloMute[ch] then
+         idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_UserMute")
+         if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, 0.0) end
+         Solo_NP_Overridden[ch] = true
+         if DebugMode then Trace("SOLO-NP: Focus survivor ch " + (ch + 1) + " -> UserMute overridden") end
       end
    End
 End
@@ -12190,9 +12205,10 @@ Function UpdateSoloMuteState()
    End
    
    // 6. SOLO NP OVERRIDES (Phase 4: clean slate, then apply if needed)
+   // Live-safety: also runs under Focus Mode to override UserMute on survivors
    RestoreSoloOverrides()
-   if anyStrict or anySmart then
-      ApplySoloOverrides()
+   if isFocusArmed or anyStrict or anySmart then
+      ApplySoloOverrides(isFocusArmed)
    end
 
    // A) First, SmartBypass activates everything that has routings
@@ -13156,6 +13172,8 @@ Function ToggleStripMacro()
          Mem_UserMute[ch] = newVal
          idx = GetParamIdxByName(BLK_NoteProcessor[ch], "p_UserMute")
          if idx > -1 then SetParameter(BLK_NoteProcessor[ch], idx, IntToFloat(newVal)) end
+         // Retrigger SoloMute pass so active policy can re-force p_UserMute=0 on survivors
+         SoloMuteStateDirty = true
          paramName = "User Mute"
 
       Strip_ThemeIdx == 6  Do // Velocity Range
