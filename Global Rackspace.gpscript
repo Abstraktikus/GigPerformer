@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-18.003"
+   SCRIPT_VERSION : String = "2026-04-18.004"
 
    DebugMode : Boolean = true
 
@@ -511,6 +511,7 @@ Var
    TRIG_START_STOP     : Integer = -1
    SysModeFeedbackTimer, LayerFeedbackTimer : Double = 0.0
    LayerFeedbackDirty : Boolean = false
+   MacroFeedbackRestoreSticky : Boolean = false   // transient "Nothing to cycle" reverts to mode sticky label on expiry
    ScrubberTaubTimer, TransportDeafTimer, StopWatchdogTimer : Double = 0.0
    StartWatchdogTimer, LooperButtonSafetyTimer, IgnoreUIFeedbackTimer : Double = 0.0
    StateResetTime : Double = 0.0 
@@ -2801,12 +2802,12 @@ Function RefreshVstInfoDisplay()
    // 1. HARD LOCK (action required!)
    if IsPresetLocked then
        // FIX: Use Filtered_VstNames instead of Fav_VstNames
-       finalText = NEW_LINE + NEW_LINE + "    >>> --- PRESS REPLACE --- <<<" + NEW_LINE + "    To load: " + Filtered_VstNames[CurrentFavIndex]
+       finalText = NEW_LINE + NEW_LINE + "    >>> --- PRESS REPLACE ---" + NEW_LINE + "    To load: " + Filtered_VstNames[CurrentFavIndex]
        SetWidgetLabel(LBL_VSTConfiguration, finalText)
        
    // 2. OVERLAY CHECK (holds display for X seconds, e.g. on success)
    elsif VST_OverlayTimer > 0.0 and TimeSinceStartup() < VST_OverlayTimer then
-       finalText = NEW_LINE + NEW_LINE + "    >>> " + VST_OverlayMsg + " <<<"
+       finalText = NEW_LINE + NEW_LINE + "    >>> " + VST_OverlayMsg + ""
        SetWidgetLabel(LBL_VSTConfiguration, finalText)
        
    // 3. NORMAL VIEW (all good)
@@ -4487,7 +4488,7 @@ Function RefreshCtrlInfoDisplay()
     if Ctrl_OverlayTimer > 0.0 and TimeSinceStartup() < Ctrl_OverlayTimer then
         finalText = "=== [ LOOPER WARNING ] ===" + NEW_LINE
         finalText = finalText + "---------------------------------" + NEW_LINE + NEW_LINE + NEW_LINE
-        finalText = finalText + "   >>> " + Ctrl_OverlayMsg + " <<<" + NEW_LINE + NEW_LINE
+        finalText = finalText + "   >>> " + Ctrl_OverlayMsg + "" + NEW_LINE + NEW_LINE
         finalText = finalText + "   Multi-Scope Configuration" + NEW_LINE
         finalText = finalText + "   blocked to prevent MIDI Chaos."
         SetWidgetLabel(LBL_ControllerInfo, finalText)
@@ -4841,16 +4842,16 @@ Function UpdateControllerInfoDisplay()
    // System Macro Groups
    CtrlInfo_Lines <-- ""
    CtrlInfo_Lines <-- "--- SYSTEM MACRO GROUPS ---"
-   CtrlInfo_Lines <-- ">> Macro 97-112: Looper (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 113-128: Smart Solo (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 129-144: Strict Solo (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 145-160: User Mute (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 161-176: Velocity Range (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 177-192: Root/Chord (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 193-208: Octaver (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 209-224: Humanizer (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 225-240: Scale Quantizer (Ch 1-16) <<"
-   CtrlInfo_Lines <-- ">> Macro 241-256: Auto Sustain (Ch 1-16) <<"
+   CtrlInfo_Lines <-- "Macro 97-112: Looper (Ch 1-16)"
+   CtrlInfo_Lines <-- "Macro 113-128: Smart Solo (Ch 1-16)"
+   CtrlInfo_Lines <-- "Macro 129-144: Strict Solo (Ch 1-16)"
+   CtrlInfo_Lines <-- "Macro 145-160: User Mute (Ch 1-16)"
+   CtrlInfo_Lines <-- "Macro 161-176: Velocity Range (Ch 1-16)"
+   CtrlInfo_Lines <-- "Macro 177-192: Root/Chord (Ch 1-16)"
+   CtrlInfo_Lines <-- "Macro 193-208: Octaver (Ch 1-16)"
+   CtrlInfo_Lines <-- "Macro 209-224: Humanizer (Ch 1-16)"
+   CtrlInfo_Lines <-- "Macro 225-240: Scale Quantizer (Ch 1-16)"
+   CtrlInfo_Lines <-- "Macro 241-256: Auto Sustain (Ch 1-16)"
 
    // Hardware Assignments
    CtrlInfo_Lines <-- ""
@@ -5472,7 +5473,7 @@ Function PreviewActiveControllerMaps(direction : Integer)
     PendingMapName = uniqueMaps[currIdx]
     
     // Immediate visual feedback
-    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">> SELECT: " + PendingMapName + " <<", Local_IP, Local_PORT)
+    OSC_SendStringSpecific("/UI/SetMacroFeedback", "SELECT: " + PendingMapName + "", Local_IP, Local_PORT)
     MacroFeedbackTimer = TimeSinceStartup() + 3000.0 // Show longer while cycling
 End
 
@@ -6815,7 +6816,7 @@ Function RefreshRecDisplay(scrollVal : Double)
     if Rec_OverlayTimer > 0.0 and TimeSinceStartup() < Rec_OverlayTimer then
         finalText = "=== [ SYSTEM MESSAGE ] ===" + NEW_LINE
         finalText = finalText + "---------------------------------" + NEW_LINE + NEW_LINE + NEW_LINE
-        finalText = finalText + "  >>> " + Rec_OverlayMsg + " <<<"
+        finalText = finalText + "  >>> " + Rec_OverlayMsg + ""
         SetWidgetLabel(LBL_CurrentState, finalText)
     else
         // 2. NORMAL MODE (list view)
@@ -7276,14 +7277,14 @@ Function TriggerNextSongPart()
             if CurrentBar + 15 > SongDurationBars then SongDurationBars = CurrentBar + 15 end
             
             Trace("PROMPTER: Marker Set! [" + Arr_SectionNames[NextRecPartIdx] + "] -> Bar " + CurrentBar)
-            OSC_SendStringSpecific("/UI/SetHeader", ">>> MARKER SET: " + Arr_SectionNames[NextRecPartIdx] + " <<<", Local_IP, Local_PORT)
+            OSC_SendStringSpecific("/UI/SetHeader", "MARKER SET: " + Arr_SectionNames[NextRecPartIdx] + "", Local_IP, Local_PORT)
             
             NextRecPartIdx = NextRecPartIdx + 1
             RecalculateTextDisplay()
             
         else
             Trace("PROMPTER: All parts marked!")
-            OSC_SendStringSpecific("/UI/SetHeader", ">>> ALL PARTS MARKED <<<", Local_IP, Local_PORT)
+            OSC_SendStringSpecific("/UI/SetHeader", "ALL PARTS MARKED", Local_IP, Local_PORT)
         end
     else
         // Indicates the button was ignored (because playhead is stopped)
@@ -8766,7 +8767,7 @@ Function EvaluateSmartAdapt()
                 // Slightly delay hardware sync (debounce 400ms)
                 HardwareSyncTimer = TimeSinceStartup() + 400.0 
                 
-                OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> AUTO-MAP: " + targetMap + " <<<", Local_IP, Local_PORT)
+                OSC_SendStringSpecific("/UI/SetMacroFeedback", "AUTO-MAP: " + targetMap + "", Local_IP, Local_PORT)
                 MacroFeedbackTimer = TimeSinceStartup() + 2000.0
             end
             
@@ -8778,7 +8779,7 @@ Function EvaluateSmartAdapt()
                     LoadControllerMap(PreSoloMapName)
                     
                     HardwareSyncTimer = TimeSinceStartup() + 400.0
-                    OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> MAP RESTORED <<<", Local_IP, Local_PORT)
+                    OSC_SendStringSpecific("/UI/SetMacroFeedback", "MAP RESTORED", Local_IP, Local_PORT)
                     MacroFeedbackTimer = TimeSinceStartup() + 2000.0
                 end
                 IsAutoSoloMapActive = false
@@ -9511,7 +9512,7 @@ Function ExecuteScrub(newValue : Double, fromOSC : Boolean)
            
            if newValue > 0.95 Then
                if IsPerformanceActive == true and CurrentBar >= 5 Then
-                   Trace("PROMPTER: >>> MANUAL EMERGENCY STOP TRIGGERED! (Bar " + CurrentBar + ") <<<")
+                   Trace("PROMPTER: >>> MANUAL EMERGENCY STOP TRIGGERED! (Bar " + CurrentBar + ")")
                    IsPerformanceActive = false 
                    EnablePlayhead(false) 
                    
@@ -9564,7 +9565,7 @@ Function FireDirectArrangerTransport()
         SendNowToMidiOutDevice(GetDeviceRoute(arrangerDevIdx, ROUTE_CONTROL), MakeMidiMessage3(143, 14, 0))
     end
     
-    Trace(">>> FireDIRECT-OUT: Start/Stop (Note 14) physically sent to arranger.")
+    Trace("FireDIRECT-OUT: Start/Stop (Note 14) physically sent to arranger.")
 End
 
 
@@ -9901,14 +9902,14 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
                     
                     // 4. Release again
                     SetParameter(BLK_VST[Active_VST_Scope], pUp, 0.0)
-                    feedbackMsg = ">> Next Patch <<"
+                    feedbackMsg = "Next Patch"
 
                 elsif direction == -1 and pDown > 0 then
                     SetParameter(BLK_VST[Active_VST_Scope], pDown, 0.0)
                     SetParameter(BLK_VST[Active_VST_Scope], pDown, 1.0)
                     Wait(150.0)
                     SetParameter(BLK_VST[Active_VST_Scope], pDown, 0.0)
-                    feedbackMsg = ">> Prev Patch <<"
+                    feedbackMsg = "Prev Patch"
                 end
                 
             // --- B: CONTROL VIA GIG PERFORMER HOST LIST ---
@@ -9916,7 +9917,7 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
                 CyclePluginPreset(Active_VST_Scope, direction)
                 
                 // After Cycle(), the actual name is in our array
-                feedbackMsg = ">> " + LoadedPresets[Active_VST_Scope] + " <<"
+                feedbackMsg = "" + LoadedPresets[Active_VST_Scope] + ""
                 
             // --- C: CONTROL VIA PROGRAM CHANGE (Korg etc.) ---
             elsif cType == "PC" then
@@ -9926,7 +9927,7 @@ Function TriggerVstPresetChange(direction : Integer) // -1 = Prev, 1 = Next
                 absVal = Current_PC_Absolute[Active_VST_Scope]
                 bankLSB = absVal / 128
                 pcVal = absVal % 128
-                feedbackMsg = ">> Bank " + bankLSB + " / PC " + PadInt(pcVal, 3) + " <<"
+                feedbackMsg = "Bank " + bankLSB + " / PC " + PadInt(pcVal, 3) + ""
                 
             else
                 if DebugMode then Trace("VST BROWSE: Ignored. Type is NONE or unsupported.") end
@@ -10195,7 +10196,7 @@ Function FireActualReplace(slotIdx : Integer, path : String, isManual : Boolean)
        OSC_IsWaitingForViewSwitch = true
        OSC_ViewSwitchTimeout = TimeSinceStartup() + 3000.0
        
-       Trace(">>> OSC-OUT: Sende Laser-Klick Signal an Python <<<")
+       Trace("OSC-OUT: Sende Laser-Klick Signal an Python")
        OSC_SendDoubleSpecific("/GP/PressCtrlG", 1.0, "127.0.0.1", 8000)
    else
        ContinueActualReplace(true, slotIdx, path, isManual)
@@ -10408,6 +10409,51 @@ End
 
 // Returns the enriched SYS-MODE title for the current mode.
 // Each mode appends contextual info: VST name, map name, channel, or timeline state.
+// Returns "MakroName [ON/OFF]" for the current Strip cell (theme x channel).
+// Used to feed LBL_MacroFeedback after any cursor move or toggle.
+Function GetStripCellLabel(themeIdx : Integer, ch : Integer) Returns String
+   var state : Integer
+   var stateStr : String
+   state = 0
+   stateStr = "OFF"
+
+   if ch < 0 or ch >= 16 or themeIdx < 3 or themeIdx >= Size(MacroGroup_Names) then
+      result = "--"
+   else
+      if themeIdx == 3 then state = Mem_SoloSmart[ch]
+      elsif themeIdx == 4 then state = Mem_SoloStrict[ch]
+      elsif themeIdx == 5 then state = Mem_UserMute[ch]
+      elsif themeIdx == 6 then state = Mem_NP_VelRangeActive[ch]
+      elsif themeIdx == 7 then state = Mem_NP_ChordMode[ch]
+      elsif themeIdx == 8 then state = Mem_NP_Octaver[ch]
+      elsif themeIdx == 9 then state = Mem_NP_HumanizeActive[ch]
+      elsif themeIdx == 10 then state = Mem_NP_QuantizeActive[ch]
+      elsif themeIdx == 11 then state = Mem_NP_AutoSustain[ch]
+      end
+      if state == 1 then stateStr = "ON" else stateStr = "OFF" end
+      result = MacroGroup_Names[themeIdx] + " [" + stateStr + "]"
+   end
+End
+
+// Initializes LBL_MacroFeedback with the "first cell" info of the current SYS-MODE.
+// Called on mode switch. For STRIP-CONTROL, ensures Strip_ChannelIdx is valid first.
+Function InitializeSystemModeMacroFeedback()
+   var ch : Integer
+   if GlobalSystemMode == 3 then
+      // STRIP-CONTROL: if cursor is out of scope, snap to default scope channel
+      if Strip_ChannelIdx < 0 or Strip_ChannelIdx > 15 or not OutputScope[Strip_ChannelIdx] then
+         ch = GetDefaultScopeChannel()
+         if ch >= 0 and ch < 16 then Strip_ChannelIdx = ch end
+      end
+      OSC_SendStringSpecific("/UI/SetMacroFeedback", GetStripCellLabel(Strip_ThemeIdx, Strip_ChannelIdx), Local_IP, Local_PORT)
+   else
+      // Other modes: blank for now (sticky labels to be added per mode)
+      OSC_SendStringSpecific("/UI/SetMacroFeedback", "", Local_IP, Local_PORT)
+   end
+   MacroFeedbackTimer = 0.0
+   MacroFeedbackRestoreSticky = false
+End
+
 Function SysModeFeedbackTitle() Returns String
    var ch : Integer
    var pName, chLabel, tlState : String
@@ -10434,8 +10480,12 @@ Function SysModeFeedbackTitle() Returns String
          result = SysModeNames[2] + ": " + GetWidgetLabel(LBL_CtrlConfig)
 
       GlobalSystemMode == 3 Do // STRIP-CONTROL
-         ch = GetDefaultScopeChannel()
-         result = SysModeNames[3] + ": " + ChannelUsage[ch] + " (" + IntToString(ch + 1) + ")"
+         ch = Strip_ChannelIdx
+         if ch >= 0 and ch < 16 then
+            result = SysModeNames[3] + ": " + ChannelUsage[ch] + " (" + IntToString(ch + 1) + ")"
+         else
+            result = SysModeNames[3]
+         end
 
       GlobalSystemMode == 4 Do // TIMELINE
          if TimelineCountInTimer > 0.0 and TimeSinceStartup() < TimelineCountInTimer then
@@ -10464,8 +10514,10 @@ Function CycleGlobalSystemMode()
    modeName = SysModeFeedbackTitle()
 
    Trace("SYS-MODE: Switched to " + modeName)
-   OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
-   SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
+   // Base-title persistent, no chevrons, no auto-expiry. Macro line gets mode's first cell info.
+   OSC_SendStringSpecific("/UI/SetSysModeFeedback", modeName, Local_IP, Local_PORT)
+   SysModeFeedbackTimer = 0.0
+   InitializeSystemModeMacroFeedback()
 End
 
 Function SelectGlobalSystemMode(targetMode : Integer)
@@ -10480,8 +10532,9 @@ Function SelectGlobalSystemMode(targetMode : Integer)
 
         modeName = SysModeFeedbackTitle()
         Trace("SYS-MODE: Selected " + modeName)
-        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SYS-MODE: " + modeName + " <<<", Local_IP, Local_PORT)
-        SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", modeName, Local_IP, Local_PORT)
+        SysModeFeedbackTimer = 0.0
+        InitializeSystemModeMacroFeedback()
     end
 End
 
@@ -10499,7 +10552,7 @@ Function StartTimelineRecording()
     end
 
     Trace("TIMELINE: Count-in started, expires in " + Round(GetCountInDurationMS()) + "ms")
-    OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> TIMELINE: Count-In... <<<", Local_IP, Local_PORT)
+    OSC_SendStringSpecific("/UI/SetSysModeFeedback", "TIMELINE: Count-In...", Local_IP, Local_PORT)
     SysModeFeedbackTimer = TimeSinceStartup() + GetCountInDurationMS() + 500.0
 End
 
@@ -10545,7 +10598,7 @@ Function DiscardTimelineRecording()
     TimelineCountInTimer = 0.0
 
     Trace("TIMELINE: Recording discarded.")
-    OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> RECORDING DISCARDED <<<", Local_IP, Local_PORT)
+    OSC_SendStringSpecific("/UI/SetSysModeFeedback", "RECORDING DISCARDED", Local_IP, Local_PORT)
     SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
 
     // Restart recording immediately so user can re-record
@@ -10565,7 +10618,7 @@ Function ExecuteRecSongpart()
         RecordTimelineEvent("Marker", 0)
         CommitTimelineRecording()
         TimelineSubMode = 0
-        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SONG RECORDED <<<", Local_IP, Local_PORT)
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", "SONG RECORDED", Local_IP, Local_PORT)
         SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
 
     // Last part already recorded — this press = END OF SONG
@@ -10574,7 +10627,7 @@ Function ExecuteRecSongpart()
         RecordTimelineEvent("Marker", TimelineCurrentPartIdx)
         CommitTimelineRecording()
         TimelineSubMode = 0
-        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SONG RECORDED <<<", Local_IP, Local_PORT)
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", "SONG RECORDED", Local_IP, Local_PORT)
         SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
         Trace("TIMELINE: END OF SONG at " + Round(RecordEndTimeMS) + "ms")
 
@@ -10583,7 +10636,7 @@ Function ExecuteRecSongpart()
         partName = Arr_SectionNames[TimelineCurrentPartIdx]
         RecordTimelineEvent("Marker", TimelineCurrentPartIdx)
 
-        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> PART: " + partName + " <<<", Local_IP, Local_PORT)
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", "PART: " + partName + "", Local_IP, Local_PORT)
         SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
 
         TimelineCurrentPartIdx = TimelineCurrentPartIdx + 1
@@ -10595,7 +10648,7 @@ Function PartJumpPreview(dir : Integer)
     var partName : String
 
     if Size(Arr_SectionNames) == 0 then
-        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> NO PARTS LOADED <<<", Local_IP, Local_PORT)
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", "NO PARTS LOADED", Local_IP, Local_PORT)
         SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
     else
         PreviewPartIdx = PreviewPartIdx + dir
@@ -10604,7 +10657,7 @@ Function PartJumpPreview(dir : Integer)
 
         partName = Arr_SectionNames[PreviewPartIdx]
 
-        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> " + partName + " <<<", Local_IP, Local_PORT)
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", "" + partName + "", Local_IP, Local_PORT)
         SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
 
         Trace("TIMELINE: Preview part " + PreviewPartIdx + " = " + partName)
@@ -10672,7 +10725,7 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
             Trace("TIMELINE: Auto-Switching Map to -> " + CtrlMapList[eventVal])
             LoadControllerMap(CtrlMapList[eventVal])
             HardwareSyncTimer = TimeSinceStartup() + 400.0
-            OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> TL-MAP: " + CtrlMapList[eventVal] + " <<<", Local_IP, Local_PORT)
+            OSC_SendStringSpecific("/UI/SetMacroFeedback", "TL-MAP: " + CtrlMapList[eventVal] + "", Local_IP, Local_PORT)
             MacroFeedbackTimer = TimeSinceStartup() + 2000.0
         end
     elsif eventType == "Style" then
@@ -10691,7 +10744,7 @@ Function FireTimelineEvent(eventType : String, eventVal : Integer)
     elsif eventType == "Marker" then
         if eventVal >= 0 and eventVal < Size(Arr_SectionNames) then
             PreviewPartIdx = eventVal
-            OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> " + Arr_SectionNames[eventVal] + " <<<", Local_IP, Local_PORT)
+            OSC_SendStringSpecific("/UI/SetSysModeFeedback", "" + Arr_SectionNames[eventVal] + "", Local_IP, Local_PORT)
             SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
             Trace("TIMELINE: Part -> " + Arr_SectionNames[eventVal])
         end
@@ -11045,7 +11098,7 @@ End
 Function InjectFilterToggle(paramName : String, uiVal : Double)
    var i, pIdx : Integer
    
-   Trace(">>> INJECT: Button '" + paramName + "' pressed (target: " + uiVal + ")")
+   Trace("INJECT: Button '" + paramName + "' pressed (target: " + uiVal + ")")
    
    For i = 0; i < 16; i = i + 1 Do
       if OutputScope[i] then
@@ -11069,7 +11122,7 @@ Function InjectTranspose(steps : Integer)
    var i, newVal, pIdx : Integer
    var paramVal : Double = 0.0
    
-   Trace(">>> INJECT: Transpose pressed (Steps: " + steps + ")")
+   Trace("INJECT: Transpose pressed (Steps: " + steps + ")")
    
    For i = 0; i < 16; i = i + 1 Do
       if OutputScope[i] then
@@ -11258,7 +11311,7 @@ Function CycleChannelScope(direction : Integer)
    ScrollToCurrentChannel()
    
    // HUD Feedback
-   OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SCOPE: CHANNEL " + (currentIdx + 1) + " <<<", Local_IP, Local_PORT)
+   OSC_SendStringSpecific("/UI/SetSysModeFeedback", "SCOPE: CHANNEL " + (currentIdx + 1) + "", Local_IP, Local_PORT)
    SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
 End
 
@@ -11776,7 +11829,7 @@ Function EvaluateAutoSysMode()
 
    // Skip auto-switch when user is actively navigating (sustain held) or in user-initiated modes
    if GlobalSystemMode == 3 or GlobalSystemMode == 4 or SystemModeActive then
-       if DebugMode then Trace(">>> SYSMODE-DIAG: AUTO-SWITCH skipped (" + SysModeNames[GlobalSystemMode] + " active=" + SystemModeActive + ")") end
+       if DebugMode then Trace("SYSMODE-DIAG: AUTO-SWITCH skipped (" + SysModeNames[GlobalSystemMode] + " active=" + SystemModeActive + ")") end
    else
 
    // Prio 1: Check if looper is waiting or recording (State 1, 3, 5, 6, 8)
@@ -11809,7 +11862,7 @@ Function EvaluateAutoSysMode()
             else SendDeviceSysEx(controllerDevIdx, "PROFILE_1") end
         end
         
-        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> SYS-MODE: " + SysModeFeedbackTitle() + " <<<", Local_IP, Local_PORT)
+        OSC_SendStringSpecific("/UI/SetSysModeFeedback", "SYS-MODE: " + SysModeFeedbackTitle() + "", Local_IP, Local_PORT)
         SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
     end
    end // outer guard: skip for STRIP-CONTROL/TIMELINE
@@ -12511,7 +12564,7 @@ Function ChangeVstScope(direction : Integer, directIdx : Integer)
    
    OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
    SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
-   ShowVSTOverlay(">>> SCOPE: " + pName + " <<<", 1500.0)
+   ShowVSTOverlay("SCOPE: " + pName + "", 1500.0)
    
    // --->  AUTO-SHOW GUI LOGIC <---
    if GetWidgetValue(BTN_AutoShow_GUI) > 0.5 then
@@ -13171,14 +13224,17 @@ Function CycleStripTheme(dir : Integer)
    if Strip_ThemeIdx < 3 then Strip_ThemeIdx = Size(MacroGroup_Names) - 1
    elsif Strip_ThemeIdx >= Size(MacroGroup_Names) then Strip_ThemeIdx = 3 end
 
-   OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> STRIP: " + MacroGroup_Names[Strip_ThemeIdx] + " <<<", Local_IP, Local_PORT)
-   SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
+   // Persistent macro status; no chevrons, no auto-expiry.
+   OSC_SendStringSpecific("/UI/SetMacroFeedback", GetStripCellLabel(Strip_ThemeIdx, Strip_ChannelIdx), Local_IP, Local_PORT)
+   MacroFeedbackTimer = 0.0
    Trace("STRIP: Theme -> " + MacroGroup_Names[Strip_ThemeIdx])
 End
 
 // Cycles to next/prev channel that has an active VST in OutputScope.
 Function CycleStripChannel(dir : Integer)
-   var i, attempts : Integer
+   var i, attempts, startIdx : Integer
+   var moved : Boolean
+   startIdx = Strip_ChannelIdx
    attempts = 0
    Strip_ChannelIdx = Strip_ChannelIdx + dir
    if Strip_ChannelIdx < 0 then Strip_ChannelIdx = 15
@@ -13196,8 +13252,19 @@ Function CycleStripChannel(dir : Integer)
       end
    End
 
-   OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> STRIP: Channel " + IntToString(Strip_ChannelIdx + 1) + " <<<", Local_IP, Local_PORT)
-   SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
+   moved = (Strip_ChannelIdx <> startIdx)
+   if moved then
+      // Refresh base-title with new cursor channel; no chevrons, no auto-expiry.
+      OSC_SendStringSpecific("/UI/SetSysModeFeedback", SysModeFeedbackTitle(), Local_IP, Local_PORT)
+      SysModeFeedbackTimer = 0.0
+      OSC_SendStringSpecific("/UI/SetMacroFeedback", GetStripCellLabel(Strip_ThemeIdx, Strip_ChannelIdx), Local_IP, Local_PORT)
+      MacroFeedbackTimer = 0.0
+   else
+      // No other scope-channel available → transient hint, revert to sticky cell label after 1.5s.
+      OSC_SendStringSpecific("/UI/SetMacroFeedback", "Nothing to cycle", Local_IP, Local_PORT)
+      MacroFeedbackTimer = TimeSinceStartup() + 1500.0
+      MacroFeedbackRestoreSticky = true
+   end
    Trace("STRIP: Channel -> " + IntToString(Strip_ChannelIdx + 1))
 End
 
@@ -13281,8 +13348,9 @@ Function ToggleStripMacro()
 
    if paramName != "" then
       if newVal > 0 then statusStr = "ON" else statusStr = "OFF" end
-      OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> Ch " + IntToString(ch + 1) + " | " + paramName + " [" + statusStr + "] <<<", Local_IP, Local_PORT)
-      SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
+      // Persistent macro status; no chevrons, no auto-expiry.
+      OSC_SendStringSpecific("/UI/SetMacroFeedback", paramName + " [" + statusStr + "]", Local_IP, Local_PORT)
+      MacroFeedbackTimer = 0.0
       Trace("STRIP TOGGLE: Ch " + IntToString(ch + 1) + " | " + paramName + " = " + statusStr)
       StripLiveDirty = true
       UpdateSoloMuteState()
@@ -13296,7 +13364,7 @@ Function RestoreInitialControllerMap()
    if ExpectedMapName != "" and ExpectedMapName != "-" then
       LoadControllerMap(ExpectedMapName)
       HardwareSyncTimer = TimeSinceStartup() + 2000.0
-      OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> MAP: " + ExpectedMapName + " <<<", Local_IP, Local_PORT)
+      OSC_SendStringSpecific("/UI/SetSysModeFeedback", "MAP: " + ExpectedMapName + "", Local_IP, Local_PORT)
       SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
    end
 End
@@ -13319,8 +13387,8 @@ Function FireSystemAction(actionIdx : Integer)
          SysAction_Names[actionIdx] == "VST_PRESET_DOWN"    Do TriggerVstPresetChange(-1)
          SysAction_Names[actionIdx] == "LOOPER_CH_UP"       Do CycleChannelScope(1)
          SysAction_Names[actionIdx] == "LOOPER_CH_DOWN"     Do CycleChannelScope(-1)
-         SysAction_Names[actionIdx] == "LOOPER_REC"         Do ClickWidget(BTN_Loop_Rec); OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> LOOPER: REC <<<", Local_IP, Local_PORT); SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
-         SysAction_Names[actionIdx] == "LOOPER_CLEAR"       Do ClickWidget(BTN_Loop_Clear); OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> LOOPER: CLEAR <<<", Local_IP, Local_PORT); SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
+         SysAction_Names[actionIdx] == "LOOPER_REC"         Do ClickWidget(BTN_Loop_Rec); OSC_SendStringSpecific("/UI/SetSysModeFeedback", "LOOPER: REC", Local_IP, Local_PORT); SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
+         SysAction_Names[actionIdx] == "LOOPER_CLEAR"       Do ClickWidget(BTN_Loop_Clear); OSC_SendStringSpecific("/UI/SetSysModeFeedback", "LOOPER: CLEAR", Local_IP, Local_PORT); SysModeFeedbackTimer = TimeSinceStartup() + 1500.0
          SysAction_Names[actionIdx] == "CTRLMAP_PREV"       Do PreviewActiveControllerMaps(-1)
          SysAction_Names[actionIdx] == "CTRLMAP_NEXT"       Do PreviewActiveControllerMaps(1)
          SysAction_Names[actionIdx] == "CTRLMAP_RESTORE"    Do RestoreInitialControllerMap()
@@ -13412,11 +13480,11 @@ Function ProcessHardwareCC(m : ControlChangeMessage)
 
        // --- SYSMODE MACROS ---
        elsif SYSMODE_CYCLE_CCIdx == cc and val > 0.5 then
-           if DebugMode then Trace(">>> SYSMODE-DIAG [B1] CYCLE via CC=" + cc + " (SYSMODE_CYCLE_CCIdx) in ProcessHardwareCC") end
+           if DebugMode then Trace("SYSMODE-DIAG [B1] CYCLE via CC=" + cc + " (SYSMODE_CYCLE_CCIdx) in ProcessHardwareCC") end
            CycleGlobalSystemMode()
            SystemModeActive = true
        elsif SYSMODE_SELECT_CCIdx == cc then
-           if DebugMode then Trace(">>> SYSMODE-DIAG [B2] SELECT via CC=" + cc + " target=" + Round(val * 4.0) + " in ProcessHardwareCC") end
+           if DebugMode then Trace("SYSMODE-DIAG [B2] SELECT via CC=" + cc + " target=" + Round(val * 4.0) + " in ProcessHardwareCC") end
            SelectGlobalSystemMode(Round(val * 4.0))  // val 0.0-1.0 maps to mode 0-4
 
        end
@@ -13526,12 +13594,12 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
                 TimelineSubMode = 1
                 TimelineRecState = 0  // Default to Replace
                 StartTimelineRecording()
-                OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> TIMELINE: REC (Replace) <<<", Local_IP, Local_PORT)
+                OSC_SendStringSpecific("/UI/SetSysModeFeedback", "TIMELINE: REC (Replace)", Local_IP, Local_PORT)
             else
                 // REC -> PLAY (commit recording)
                 if TimelineRecActive then CommitTimelineRecording() end
                 TimelineSubMode = 0
-                OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> TIMELINE: PLAY <<<", Local_IP, Local_PORT)
+                OSC_SendStringSpecific("/UI/SetSysModeFeedback", "TIMELINE: PLAY", Local_IP, Local_PORT)
             end
             SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
 
@@ -13551,9 +13619,9 @@ Function ProcessSystemNavigation(deviceID : Integer, actionType : String, dir : 
                     if TimelineRecState > 2 then TimelineRecState = 0 end
 
                     if TimelineRecState == 0 then
-                        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> REC: Replace <<<", Local_IP, Local_PORT)
+                        OSC_SendStringSpecific("/UI/SetSysModeFeedback", "REC: Replace", Local_IP, Local_PORT)
                     elsif TimelineRecState == 1 then
-                        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> REC: Overdub <<<", Local_IP, Local_PORT)
+                        OSC_SendStringSpecific("/UI/SetSysModeFeedback", "REC: Overdub", Local_IP, Local_PORT)
                     elsif TimelineRecState == 2 then
                         DiscardTimelineRecording()
                     end
@@ -13689,7 +13757,7 @@ End
 Function DispatchStyleTrigger(ctrlIdx : Integer)
    if TimeSinceStartup() >= StyleEchoBlockTimer then
       LastHardwarePulseTime = TimeSinceStartup()
-      if DebugMode then Trace(">>> STYLE-IN: Hardware CC" + IntToString(CTRL_CC[ctrlIdx]) + " detected (via router)") end
+      if DebugMode then Trace("STYLE-IN: Hardware CC" + IntToString(CTRL_CC[ctrlIdx]) + " detected (via router)") end
       if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
          IsCorrectingPlayhead = false
          EnablePlayhead(not PendingPlayheadState)
@@ -14483,7 +14551,7 @@ Function SaveSongSnapshot()
       Trace("Save ignored - already saving!")
    Elsif InSetlistMode() Then
        IsSaving = true
-       SetWidgetLabel(LBL_VSTConfiguration, NEW_LINE + NEW_LINE + "    >>> SAVING SNAPSHOT... <<<")
+       SetWidgetLabel(LBL_VSTConfiguration, NEW_LINE + NEW_LINE + "    >>> SAVING SNAPSHOT...")
        
        SyncKBSplitWatchdog() 
        
@@ -15030,7 +15098,7 @@ Function LoadSongSnapshot(songName : String, isManualRecovery : Boolean)
             if TimeSinceStartup() < 10000.0 then
                 Trace("SONG LOAD: Boot phase detected. GUI automation blocked. Waiting for manual start.")
                 IsPresetLocked = true
-                SetWidgetLabel(LBL_VSTConfiguration, NEW_LINE + NEW_LINE + "   >>> VST MISMATCH DETECTED <<<" + NEW_LINE + "   System is booting. Press REPLACE to fix.")
+                SetWidgetLabel(LBL_VSTConfiguration, NEW_LINE + NEW_LINE + "   >>> VST MISMATCH DETECTED" + NEW_LINE + "   System is booting. Press REPLACE to fix.")
             else
                 Trace("SONG LOAD: Script requires VST replacement(s). Starting Queue & GUI automation...")
                 TriggerNextQueueJob()
@@ -15476,7 +15544,7 @@ Function ProcessTopQueueJobResult(isBoot : Boolean)
                 SwitchToSetlistView()
                 Wait(100.0) // A short wait is enough here since we're aborting anyway
                 
-                SetWidgetLabel(LBL_VSTConfiguration, NEW_LINE + NEW_LINE + "   >>> --- PRESS REPLACE --- <<<" + NEW_LINE + "   To load: " + targetName + NEW_LINE + NEW_LINE + "   [!] NOT SUCCESSFUL [!]")
+                SetWidgetLabel(LBL_VSTConfiguration, NEW_LINE + NEW_LINE + "   >>> --- PRESS REPLACE ---" + NEW_LINE + "   To load: " + targetName + NEW_LINE + NEW_LINE + "   [!] NOT SUCCESSFUL [!]")
                 ShowVSTOverlay("FAILED: " + targetName, 4000.0)
                 RebuildBrowserStateAfterReboot()
             end
@@ -15511,7 +15579,7 @@ Function EvaluateTransportSync()
     var timeSinceHW : Double = TimeSinceStartup() - LastHardwarePulseTime
     var isHW : Boolean = (timeSinceHW < 800.0 and timeSinceHW >= 0.0) 
 
-    Trace(">>> EvaluateTransportSync: Play=" + playing + " | HW_Pulse=" + isHW)
+    Trace("EvaluateTransportSync: Play=" + playing + " | HW_Pulse=" + isHW)
 
     // ========================================================
     // TRANSPORT WATCHDOG (Only active on stop)
@@ -16264,7 +16332,7 @@ On WidgetValueChanged(val : Double) from BTN_ReplaceVST
     var realSlotIdx : Integer; var targetName, cleanPath, stateStr : String 
     if val > 0.5 and IsPresetLocked then
        if not InSetlistMode() then
-           SetWidgetLabel(LBL_VSTConfiguration, NEW_LINE + NEW_LINE + "   >>> ERROR: WRONG VIEW <<<" + NEW_LINE + "   Switch to Setlist View" + NEW_LINE + "   and press Replace again!")
+           SetWidgetLabel(LBL_VSTConfiguration, NEW_LINE + NEW_LINE + "   >>> ERROR: WRONG VIEW" + NEW_LINE + "   Switch to Setlist View" + NEW_LINE + "   and press Replace again!")
            ShowVSTOverlay("ERROR: NEED SETLIST VIEW!", 3000.0)
            SetWidgetValue(BTN_ReplaceVST, 0.0)
        else
@@ -16793,7 +16861,7 @@ On WidgetValueChanged(v : Double) from BTN_Export_Log
     if v > 0.5 then 
         ExportSmartConfig()
         SetWidgetValue(BTN_Export_Log, 0.0)
-        SetWidgetLabel(LBL_ControllerInfo, NEW_LINE + NEW_LINE + "       >>> SAVED TO FILE! <<<" + NEW_LINE + "       (" + CurrentCtrlMapName + ")")
+        SetWidgetLabel(LBL_ControllerInfo, NEW_LINE + NEW_LINE + "       >>> SAVED TO FILE!" + NEW_LINE + "       (" + CurrentCtrlMapName + ")")
         Wait(1500.0) 
         UpdateControllerInfoDisplay()
     end
@@ -17470,15 +17538,15 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_A
     // 1. Transport sync (Device 0 specific)
     if DeviceHasCap(0, CAP_TRANSPORT_SYNC) and IsNoteOn(m) and chan >= 9 and chan <= 16 then
         if CurrentSyncMode == 0 and IsPlayheadEnabled() then
-             Trace(">>> ON NOTE: [ISOLATED] ArrangerStyle started (Ch " + chan + ") Stoppe GP")
+             Trace("ON NOTE: [ISOLATED] ArrangerStyle started (Ch " + chan + ") Stoppe GP")
              EnablePlayhead(false)
         elsif CurrentSyncMode == 1 or CurrentSyncMode == 2 or CurrentSyncMode == 3 then
              if StartWatchdogTimer > 0.0 then
-                 Trace(">>> ON NOTE: Arranger already running (Ch " + chan + "). Aborting command.")
+                 Trace("ON NOTE: Arranger already running (Ch " + chan + "). Aborting command.")
                  StartWatchdogTimer = 0.0
              end
              if StopWatchdogTimer > 0.0 and not IsPlayheadEnabled() then
-                 Trace(">>> ON NOTE: Arranger still playing (Ch " + chan + ")! Sending stop.")
+                 Trace("ON NOTE: Arranger still playing (Ch " + chan + ")! Sending stop.")
                  FireDirectArrangerTransport()
                  StopWatchdogTimer = 0.0
              else
@@ -17502,7 +17570,7 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_A
           inTrigIdx = FindTriggerIdxByNote(GetNoteNumber(m))
           if inTrigIdx == TRIG_START_STOP then
              LastHardwarePulseTime = TimeSinceStartup()
-             if DebugMode then Trace(">>> STYLE-IN: Hardware Start/Stop (Note " + IntToString(GetNoteNumber(m)) + ")") end
+             if DebugMode then Trace("STYLE-IN: Hardware Start/Stop (Note " + IntToString(GetNoteNumber(m)) + ")") end
              if CurrentSyncMode == 2 and not IsPlayheadEnabled() then
                 Trace("   [X] STYLE-IN: Arranger started in isolation! Abort echo...")
                 TriggerStyleAction(TRIG_START_STOP)
@@ -17569,15 +17637,15 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_B
     // 1. Transport sync (Device 0 specific)
     if DeviceHasCap(0, CAP_TRANSPORT_SYNC) and IsNoteOn(m) and chan >= 9 and chan <= 16 then
         if CurrentSyncMode == 0 and IsPlayheadEnabled() then
-             Trace(">>> ON NOTE: [ISOLATED] ArrangerStyle started (Ch " + chan + ") Stoppe GP")
+             Trace("ON NOTE: [ISOLATED] ArrangerStyle started (Ch " + chan + ") Stoppe GP")
              EnablePlayhead(false)
         elsif CurrentSyncMode == 1 or CurrentSyncMode == 2 or CurrentSyncMode == 3 then
              if StartWatchdogTimer > 0.0 then
-                 Trace(">>> ON NOTE: Arranger already running (Ch " + chan + "). Aborting command.")
+                 Trace("ON NOTE: Arranger already running (Ch " + chan + "). Aborting command.")
                  StartWatchdogTimer = 0.0
              end
              if StopWatchdogTimer > 0.0 and not IsPlayheadEnabled() then
-                 Trace(">>> ON NOTE: Arranger still playing (Ch " + chan + ")! Sending stop.")
+                 Trace("ON NOTE: Arranger still playing (Ch " + chan + ")! Sending stop.")
                  FireDirectArrangerTransport()
                  StopWatchdogTimer = 0.0
              else
@@ -17601,7 +17669,7 @@ On NoteEvent(m : NoteMessage) from DeviceIn_0_B
           inTrigIdx = FindTriggerIdxByNote(GetNoteNumber(m))
           if inTrigIdx == TRIG_START_STOP then
              LastHardwarePulseTime = TimeSinceStartup()
-             if DebugMode then Trace(">>> STYLE-IN: Hardware Start/Stop (Note " + IntToString(GetNoteNumber(m)) + ")") end
+             if DebugMode then Trace("STYLE-IN: Hardware Start/Stop (Note " + IntToString(GetNoteNumber(m)) + ")") end
              if CurrentSyncMode == 2 and not IsPlayheadEnabled() then
                 Trace("   [X] STYLE-IN: Arranger started in isolation! Abort echo...")
                 TriggerStyleAction(TRIG_START_STOP)
@@ -17770,7 +17838,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
     
     if IsCorrectingPlayhead then
         IsCorrectingPlayhead = false 
-        if DebugMode then Trace(">>> SYSTEM EVENT: Ignoriere eigenes Echo (Korrektur).") end
+        if DebugMode then Trace("SYSTEM EVENT: Ignoriere eigenes Echo (Korrektur).") end
         UpdateSyncLabel()
     else
         if InSetlistMode() then
@@ -17782,7 +17850,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
             if CurrentSyncMode == 0 then
                 PendingPlayheadState = playing
                 if playing then PlayheadEvalTimer = TimeSinceStartup() + 150.0 else PlayheadEvalTimer = TimeSinceStartup() + 300.0 end
-                Trace(">>> SYS EVENT [ISOLATED]: Playhead=" + playing + ". Starte Analyse-Timer...")
+                Trace("SYS EVENT [ISOLATED]: Playhead=" + playing + ". Starte Analyse-Timer...")
             end
 
             // =========================================================
@@ -17797,7 +17865,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
                      // --- STOP LOGIC ---
                      timeSinceHW = TimeSinceStartup() - LastHardwarePulseTime
                      isArrangerPush = (timeSinceHW < 250.0 and timeSinceHW >= 0.0)
-                     Trace(">>> [ARRANGER LEADS]: TRANSPORT: GP STOP (Arranger). Suppressing.")
+                     Trace("[ARRANGER LEADS]: TRANSPORT: GP STOP (Arranger). Suppressing.")
                      StopWatchdogTimer = 0.0
                 end
                 PlayheadEvalTimer = TimeSinceStartup() + 80.0 
@@ -17809,7 +17877,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
             if CurrentSyncMode == 2 then
                 PendingPlayheadState = playing
                 if playing then PlayheadEvalTimer = TimeSinceStartup() + 150.0 else PlayheadEvalTimer = TimeSinceStartup() + 300.0 end
-                Trace(">>> SYS EVENT [GP LEADS]: Playhead=" + playing + ". Starte Analyse-Timer...")
+                Trace("SYS EVENT [GP LEADS]: Playhead=" + playing + ". Starte Analyse-Timer...")
             end
 
             // =========================================================
@@ -17824,17 +17892,17 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
                 if playing then
                     // --- START LOGIC ---
                     StartWatchdogTimer = TimeSinceStartup() + 200.0
-                    Trace(">>> TRANSPORT: GP START. Waiting for arranger confirmation (notes)...")
+                    Trace("TRANSPORT: GP START. Waiting for arranger confirmation (notes)...")
                 else
                     // --- STOP LOGIC ---
                     timeSinceHW = TimeSinceStartup() - LastHardwarePulseTime
                     isArrangerPush = (timeSinceHW < 250.0 and timeSinceHW >= 0.0)
 
                     if not isArrangerPush then
-                        Trace(">>> [FULL SYNC]: TRANSPORT: GP STOP (GUI). Sending command to arranger...")
+                        Trace("[FULL SYNC]: TRANSPORT: GP STOP (GUI). Sending command to arranger...")
                         FireDirectArrangerTransport()
                     else
-                        Trace(">>> [FULL SYNC]: TRANSPORT: GP STOP (Arranger). No command to arranger...")
+                        Trace("[FULL SYNC]: TRANSPORT: GP STOP (Arranger). No command to arranger...")
                     end
                     
                     StopWatchdogTimer = TimeSinceStartup() + 2500.0 
@@ -17849,7 +17917,7 @@ On SystemEvent(newValue : Double) Matching PlayheadStateChanged
             if CurrentSyncMode == 4 then
                 PendingPlayheadState = playing
                 if playing then PlayheadEvalTimer = TimeSinceStartup() + 150.0 else PlayheadEvalTimer = TimeSinceStartup() + 300.0 end
-                Trace(">>> SYS EVENT [INITIAL LATCH]: Playhead=" + playing + ". Starte Analyse-Timer...")
+                Trace("SYS EVENT [INITIAL LATCH]: Playhead=" + playing + ". Starte Analyse-Timer...")
             end
             
             CurrentTriggerSource = "NONE"
@@ -18205,10 +18273,10 @@ On OSCMessageReceived(m : OSCMessage) Matching "/Command/RequestUIUpdate"
 End
 
 On OSCMessageReceived(m : OSCMessage) Matching "/GP/ViewReady"
-    Trace("<<< OSC-IN: Message '/GP/ViewReady' RECEIVED from Python! <<<")
+    Trace("<<< OSC-IN: Message '/GP/ViewReady' RECEIVED from Python!")
     
     if OSC_IsWaitingForViewSwitch then
-        Trace("<<< OSC-IN: Status was 'Waiting'. Starting 3s stabilization timer... <<<")
+        Trace("<<< OSC-IN: Status was 'Waiting'. Starting 3s stabilization timer...")
         
         // End waiting for view switch
         OSC_IsWaitingForViewSwitch = false
@@ -18238,7 +18306,7 @@ Function ExecuteAnchorPartChange(newPartIdx : Integer)
 
    // 2. ALWAYS: HUD feedback
    if sectionName != "" then
-       OSC_SendStringSpecific("/UI/SetMacroFeedback", ">>> ANCHOR: " + sectionName + " <<<", Local_IP, Local_PORT)
+       OSC_SendStringSpecific("/UI/SetMacroFeedback", "ANCHOR: " + sectionName + "", Local_IP, Local_PORT)
        MacroFeedbackTimer = TimeSinceStartup() + 2000.0
    end
 
@@ -18455,11 +18523,11 @@ On TimerTick(ms : Double)
       if Joy_YDownArmTime[jtDev] > 0.0 and not Joy_YDownFired[jtDev] then
           if TimeSinceStartup() - Joy_YDownArmTime[jtDev] >= JOYSTICK_CROSSTALK_MS then
               if Joy_XFired[jtDev] == 0 and not Joy_YUpFired[jtDev] then
-                  if DebugMode then Trace(">>> SYSMODE-DIAG [D] CYCLE via Y-Down timer (" + JOYSTICK_CROSSTALK_MS + "ms, X+Y quiet) Dev" + jtDev) end
+                  if DebugMode then Trace("SYSMODE-DIAG [D] CYCLE via Y-Down timer (" + JOYSTICK_CROSSTALK_MS + "ms, X+Y quiet) Dev" + jtDev) end
                   Joy_YDownFired[jtDev] = true
                   CycleGlobalSystemMode()
               else
-                  if DebugMode then Trace(">>> SYSMODE-DIAG [D-BLOCKED] Y-Down suppressed (XFired=" + Joy_XFired[jtDev] + " YUp=" + Joy_YUpFired[jtDev] + ") cross-talk Dev" + jtDev) end
+                  if DebugMode then Trace("SYSMODE-DIAG [D-BLOCKED] Y-Down suppressed (XFired=" + Joy_XFired[jtDev] + " YUp=" + Joy_YUpFired[jtDev] + ") cross-talk Dev" + jtDev) end
               end
               Joy_YDownArmTime[jtDev] = 0.0
           end
@@ -18499,7 +18567,7 @@ On TimerTick(ms : Double)
                End
                
                Trace("HARD-FIRE: Command sent to GP.")
-               Trace(">>> SHADOW MODE: Would now replace VST " + (PendingReplaceSlotIdx + 1) + " with [" + PendingReplacePath + "]! <<<")
+               Trace("SHADOW MODE: Would now replace VST " + (PendingReplaceSlotIdx + 1) + " with [" + PendingReplacePath + "]!")
                
                SwitchToSetlistView()
                
@@ -18573,10 +18641,10 @@ On TimerTick(ms : Double)
         GPTransportEvaluationTimer = 0.0
             
         if TimeSinceStartup() < SyncLockTimer then
-            Trace(">>> ECHO SENDER: Bounce blocked (800ms protection active).")
+            Trace("ECHO SENDER: Bounce blocked (800ms protection active).")
         else
             SyncLockTimer = TimeSinceStartup() + 800.0
-            Trace(">>> ECHO SENDER: Sending START/STOP to arranger.")
+            Trace("ECHO SENDER: Sending START/STOP to arranger.")
             TriggerStyleAction(TRIG_START_STOP)
         end
      end
@@ -18728,7 +18796,7 @@ On TimerTick(ms : Double)
                RecordStartTimeMS = TimeSinceStartup()
 
                Trace("TIMELINE: Count-in expired. Recording started at " + Round(RecordStartTimeMS) + "ms")
-               OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> TIMELINE: REC <<<", Local_IP, Local_PORT)
+               OSC_SendStringSpecific("/UI/SetSysModeFeedback", "TIMELINE: REC", Local_IP, Local_PORT)
                SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
            end
        end
@@ -18803,7 +18871,17 @@ On TimerTick(ms : Double)
         // CLEAR MACRO FEEDBACK
         if MacroFeedbackTimer > 0.0 and TimeSinceStartup() > MacroFeedbackTimer then
             MacroFeedbackTimer = 0.0
-            OSC_SendStringSpecific("/UI/SetMacroFeedback", "", Local_IP, Local_PORT)
+            if MacroFeedbackRestoreSticky then
+               MacroFeedbackRestoreSticky = false
+               // STRIP-CONTROL sticky = current cell label. Other modes: blank (no sticky yet).
+               if SystemModeActive and GlobalSystemMode == 3 then
+                  OSC_SendStringSpecific("/UI/SetMacroFeedback", GetStripCellLabel(Strip_ThemeIdx, Strip_ChannelIdx), Local_IP, Local_PORT)
+               else
+                  OSC_SendStringSpecific("/UI/SetMacroFeedback", "", Local_IP, Local_PORT)
+               end
+            else
+               OSC_SendStringSpecific("/UI/SetMacroFeedback", "", Local_IP, Local_PORT)
+            end
         end
         if SysModeFeedbackTimer > 0.0 and TimeSinceStartup() > SysModeFeedbackTimer then
             SysModeFeedbackTimer = 0.0
@@ -18917,7 +18995,7 @@ On TimerTick(ms : Double)
                         LoadControllerMap(CurrentCtrlMapName)
                         StripLiveDirty = false
                         Trace("STRIP: Live changes restored via controller map reload.")
-                        OSC_SendStringSpecific("/UI/SetSysModeFeedback", ">>> STRIP RESTORED <<<", Local_IP, Local_PORT)
+                        OSC_SendStringSpecific("/UI/SetSysModeFeedback", "STRIP RESTORED", Local_IP, Local_PORT)
                         SysModeFeedbackTimer = TimeSinceStartup() + 2000.0
                     end
                 end
@@ -18970,7 +19048,7 @@ On TimerTick(ms : Double)
         if CurrentSyncMode == 2 or CurrentSyncMode == 3 then
             if StartWatchdogTimer > 0.0 and TimeSinceStartup() > StartWatchdogTimer then
                 StartWatchdogTimer = 0.0
-                Trace(">>> TRANSPORT: Arranger is silent. Sending start command (Note 14)!")
+                Trace("TRANSPORT: Arranger is silent. Sending start command (Note 14)!")
                 FireDirectArrangerTransport()
                 TriggerStyleAction(TRIG_START_STOP)
             end
