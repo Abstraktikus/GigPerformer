@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-18.009"
+   SCRIPT_VERSION : String = "2026-04-18.010"
 
    DebugMode : Boolean = true
 
@@ -502,6 +502,7 @@ Var
     AnchorHasNotesIdx     : Integer = -1    // Cached param index for p_HasNotes
 
    FirstRunDone, FactoryLearnDone : Boolean = false
+   FactEmptyTraceFired : Boolean = false      // one-shot flag: prevents CheckBlock/UpdateMetaColors from flooding Trace with "Reference Array is empty!" when FACT_NoteProcessor hasn't been populated yet
 
    InputSyncTimer, OutputSyncTimer, SnapshotPostLoadTimer : Double = 0.0
    MatrixSafetyTimer, LoopSafetyTimer, DelayedLoadTimer : Double = 0.0
@@ -1141,9 +1142,15 @@ Function ResolveControlChannel(devIdx : Integer, label : String) Returns Integer
 End
 
 Function Trace(msg : String)
+   // Build the timestamped line ONCE so all sinks (GP log, OSC, clipboard,
+   // death-loop blackbox) emit the same format — makes post-mortem triage
+   // possible by comparing timestamps across channels.
+   var tsMsg : String
+   tsMsg = "[" + DoubleToString(TimeSinceStartup(), 1) + "] GLB: " + msg
+
    // 1. Standard text output to GP's in-app log (DebugMode-gated, as before)
    if DebugMode then
-      Print("[" + DoubleToString(TimeSinceStartup(), 1) + "] GLB: " + msg)
+      Print(tsMsg)
    end
 
    // 2. CRASH-SAFE SINKS — survives a GP hard-crash because the sinks
@@ -1154,8 +1161,8 @@ Function Trace(msg : String)
    //    Gated by CrashDebugMode so production sessions don't flood the
    //    network or thrash the clipboard.
    if CrashDebugMode then
-      OSC_SendStringSpecific("/GP/Trace", msg, CrashOSCIP, CrashOSCPort)
-      SendToClipboard(msg)
+      OSC_SendStringSpecific("/GP/Trace", tsMsg, CrashOSCIP, CrashOSCPort)
+      SendToClipboard(tsMsg)
    end
 
    // 3. WATCHDOG (always active, independent of DebugMode)
@@ -1168,12 +1175,12 @@ Function Trace(msg : String)
 
    // Limit raised to 250 for the fast text parser
    if TraceLoopCount > 250 then
-      Print("!!! EMERGENCY: Infinite loop detected! Last trace: " + msg)
+      Print("!!! EMERGENCY: Infinite loop detected! Last trace: " + tsMsg)
 
       EmergencyKillSwitch = true
 
-      // BLACKBOX: Write the error directly to clipboard
-      SendToClipboard("GP DEATH LOOP TRACE:" + NEW_LINE + msg)
+      // BLACKBOX: Write the error directly to clipboard (same format).
+      SendToClipboard("GP DEATH LOOP TRACE:" + NEW_LINE + tsMsg)
 
       TraceLoopCount = 0
    end
@@ -2404,9 +2411,15 @@ Function CheckBlock(blk : PluginBlock, arr : Double Array, context : String) Ret
    var isMatch : Boolean = true 
    
    arrSize = Size(arr)
-   
-   if arrSize == 0 then 
-      if DebugMode then Trace("DIFF " + context + ": Reference Array is empty!") end
+
+   if arrSize == 0 then
+      // One-shot trace — prevents the 16× per-UpdateMetaColors call flooding
+      // the Trace watchdog when FACT_/DEF_NoteProcessor isn't populated yet.
+      // Flag is reset the next time CaptureFactoryDefaults completes successfully.
+      if DebugMode and not FactEmptyTraceFired then
+         Trace("DIFF " + context + ": Reference Array is empty! (suppressing further)")
+         FactEmptyTraceFired = true
+      end
       result = false
    else
       pCount = GetParameterCount(blk)
@@ -2489,9 +2502,18 @@ Function CaptureFactoryDefaults()
    
    if soloMuteIdx > -1 then FACT_NoteProcessor[soloMuteIdx] = 0.0; DEF_NoteProcessor[soloMuteIdx] = 0.0 end
    if userMuteIdx > -1 then FACT_NoteProcessor[userMuteIdx] = 0.0; DEF_NoteProcessor[userMuteIdx] = 0.0 end
-   
-   FactoryLearnDone = true
-   if DebugMode then Trace("INIT: " + pCount + " Factory Defaults requested and hardened.") end
+
+   // HARDEN: only mark as done if the probe actually yielded parameters. A
+   // 0-param read (plugin not yet initialised at this point in boot) would
+   // leave FACT_NoteProcessor empty and flip every subsequent AnalyzeChannel
+   // into a death-loop Trace ("Reference Array is empty!").
+   if Size(FACT_NoteProcessor) > 0 then
+      FactoryLearnDone = true
+      FactEmptyTraceFired = false    // reset one-shot — references are now valid
+      if DebugMode then Trace("INIT: " + pCount + " Factory Defaults requested and hardened.") end
+   else
+      if DebugMode then Trace("INIT: CaptureFactoryDefaults FAILED — probe returned 0 params (plugin not ready yet). FactoryLearnDone stays false; UpdateMetaColors will skip until retried.") end
+   end
 End
 
 // ---------------------------------------------------------
@@ -11121,10 +11143,20 @@ End
 // ---------------------------------------------------------
 Function UpdateMetaColors()
    var i, colorCode, inCh : Integer
-   var healed : Boolean = false 
-   
+   var healed : Boolean = false
+
    OutputSyncTimer = TimeSinceStartup() + 150.0
-   
+
+   // Hard gate: CheckBlock requires FACT_/DEF_NoteProcessor populated. Firing
+   // UpdateMetaColors before CaptureFactoryDefaults completes (or when the
+   // probe returned 0 params) would call AnalyzeChannel 16× with an empty
+   // reference and crash the Trace watchdog into EmergencyKillSwitch.
+   if Size(FACT_NoteProcessor) == 0 or Size(DEF_NoteProcessor) == 0 then
+      if DebugMode and not FactEmptyTraceFired then
+         Trace("META: Skipped UpdateMetaColors — factory defaults not ready (FACT=" + Size(FACT_NoteProcessor) + " DEF=" + Size(DEF_NoteProcessor) + ")")
+         FactEmptyTraceFired = true
+      end
+   else
    For i = 0; i < 16; i = i + 1 Do
       // ... (Auto-Healer stays) ...
       colorCode = AnalyzeChannel(i)
@@ -11133,10 +11165,11 @@ Function UpdateMetaColors()
     
    RefreshDiagDisplay()  
    // ---> ExecuteSmartBypass() WAS REMOVED HERE! <---
-   
-   if healed then 
-       UpdateInjectionLooperDisplay() 
+
+   if healed then
+       UpdateInjectionLooperDisplay()
    end
+   end // close "factory defaults ready" branch
 End
 
 
