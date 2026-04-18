@@ -33,7 +33,7 @@ Var
    // Enforcement: every assistant edit to this file MUST increment
    // SCRIPT_VERSION. See feedback_gpscript_script_version_bump memory
    // note for the enforcement rule.
-   SCRIPT_VERSION : String = "2026-04-18.010"
+   SCRIPT_VERSION : String = "2026-04-18.011"
 
    DebugMode : Boolean = true
 
@@ -12319,7 +12319,24 @@ Function UpdateSoloMuteState()
    var outCol, inRow, scopeIdx, pIdx_SoloMute : Integer
    var fedBySameInput, fedBySameInputAndZone, sameInput, sameZone : Boolean
    var anyStrict, anySmart, isFocusArmed, anyRecInScope, anyLooperMute : Boolean = false
-   var focusModeVal : Double = GetWidgetValue(BTN_Focus_Mode)
+   var focusModeVal : Double = 0.0
+
+   // INTERNAL GUARD — 11 call sites across the file invoke this function, some
+   // directly inside LoadSongSnapshot (~line 15379) where IsLoadingSnapshot=true
+   // and plugins are transient. Writing ~144 NP parameters into transient state
+   // crashes GP. Guard once here so every caller is safe. Dirty-flag is raised
+   // so the next safe TimerTick picks the call back up.
+   if IsLoadingSnapshot or TimeSinceStartup() <= FaderSafetyTimer then
+      SoloMuteStateDirty = true
+      if DebugMode then
+         if IsLoadingSnapshot then
+            Trace("SOLO-MUTE: deferred — IsLoadingSnapshot=true, dirty flag raised")
+         else
+            Trace("SOLO-MUTE: deferred — FaderSafetyTimer window, dirty flag raised")
+         end
+      end
+   else
+   focusModeVal = GetWidgetValue(BTN_Focus_Mode)
 
    DumpSoloState("UpdateSoloMute ENTRY")
 
@@ -12446,6 +12463,7 @@ Function UpdateSoloMuteState()
    RefreshLayerFeedback()
 
    DumpSoloState("UpdateSoloMute EXIT")
+   end // close "not IsLoadingSnapshot and past FaderSafetyTimer" branch
 End
 
 
